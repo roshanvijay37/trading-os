@@ -67,10 +67,10 @@ export function VisualBacktest() {
       console.log(`[VisualBacktest] Initializing ${name} chart, container size:`, container.clientWidth, container.clientHeight);
       
       try {
-        // Force container to be visible
-        container.style.border = "2px solid #3f3f46";
+        // Ensure container has proper sizing
+        container.style.width = "100%";
+        container.style.height = "420px";
         container.style.position = "relative";
-        container.style.minHeight = "420px";
         
         const chart = createChart(container, {
           layout: {
@@ -79,24 +79,36 @@ export function VisualBacktest() {
             fontSize: 11,
           },
           grid: {
-            vertLines: { color: "#1a1a1e" },
-            horzLines: { color: "#1a1a1e" },
+            vertLines: { color: "#27272a" },
+            horzLines: { color: "#27272a" },
           },
           rightPriceScale: { 
-            borderColor: "#27272a",
+            borderColor: "#3f3f46",
             scaleMargins: { top: 0.1, bottom: 0.1 },
           },
           timeScale: { 
-            borderColor: "#27272a", 
+            borderColor: "#3f3f46", 
             timeVisible: true,
             secondsVisible: false,
           },
           crosshair: {
             mode: 1,
-            vertLine: { color: "#3f3f46", width: 1, style: 2 },
-            horzLine: { color: "#3f3f46", width: 1, style: 2 },
+            vertLine: { color: "#52525b", width: 1, style: 2 },
+            horzLine: { color: "#52525b", width: 1, style: 2 },
           },
-          autoSize: true,
+          handleScale: {
+            axisPressedMouseMove: true,
+            mouseWheel: true,
+            pinch: true,
+          },
+          handleScroll: {
+            mouseWheel: true,
+            pressedMouseMove: true,
+            horzTouchDrag: true,
+            vertTouchDrag: false,
+          },
+          width: container.clientWidth,
+          height: 420,
         });
         
         // Inspect DOM after creation
@@ -249,10 +261,19 @@ export function VisualBacktest() {
             // }
             setTimeout(() => {
               try {
-                niftyChartApi.current?.timeScale().fitContent();
-                console.log("[VisualBacktest] Nifty chart fitted");
+                const ts = niftyChartApi.current?.timeScale();
+                if (ts && uniqueCandles.length > 200) {
+                  // Show last 200 candles so they're visible
+                  ts.setVisibleLogicalRange({ 
+                    from: uniqueCandles.length - 200, 
+                    to: uniqueCandles.length - 1 
+                  });
+                } else {
+                  ts?.fitContent();
+                }
+                console.log("[VisualBacktest] Nifty chart range set");
               } catch (e) {
-                console.error("[VisualBacktest] Nifty fitContent error:", e);
+                console.error("[VisualBacktest] Nifty range error:", e);
               }
             }, 100);
           }
@@ -308,10 +329,19 @@ export function VisualBacktest() {
             // }
             setTimeout(() => {
               try {
-                bankNiftyChartApi.current?.timeScale().fitContent();
-                console.log("[VisualBacktest] BankNifty chart fitted");
+                const ts = bankNiftyChartApi.current?.timeScale();
+                if (ts && uniqueCandles.length > 200) {
+                  // Show last 200 candles so they're visible
+                  ts.setVisibleLogicalRange({ 
+                    from: uniqueCandles.length - 200, 
+                    to: uniqueCandles.length - 1 
+                  });
+                } else {
+                  ts?.fitContent();
+                }
+                console.log("[VisualBacktest] BankNifty chart range set");
               } catch (e) {
-                console.error("[VisualBacktest] BankNifty fitContent error:", e);
+                console.error("[VisualBacktest] BankNifty range error:", e);
               }
             }, 100);
           }
