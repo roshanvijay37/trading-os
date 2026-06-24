@@ -1,7 +1,11 @@
 import "dotenv/config";
 
+import dns from "dns";
 import cors from "cors";
 import express from "express";
+
+// Force IPv4 for all outgoing connections (FYERS API needs IPv4)
+dns.setDefaultResultOrder("ipv4first");
 
 import accountRoutes from "./routes/account.js";
 import authRoutes from "./routes/auth.js";
