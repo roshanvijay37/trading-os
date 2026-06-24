@@ -140,8 +140,6 @@ export function Backtest() {
   const symbols = [
     { value: "NSE:NIFTYBANK-INDEX", label: "Bank Nifty" },
     { value: "NSE:NIFTY50-INDEX", label: "Nifty 50" },
-    { value: "NSE:FINNIFTY-INDEX", label: "Fin Nifty" },
-    { value: "BSE:SENSEX", label: "Sensex" },
   ];
 
   const timeframes = [
