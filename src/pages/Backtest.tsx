@@ -62,7 +62,8 @@ function parseNaturalLanguage(text: string) {
   else config.symbol = "NSE:NIFTYBANK-INDEX";
 
   // Strategy
-  if (t.includes("5 ema") || t.includes("ema 5") || t.includes("subhasish") || t.includes("pani")) config.strategy = "EMA5";
+  if (t.includes("option buying") || t.includes("ce buy") || t.includes("pe buy")) config.strategy = "EMA5_OPTION";
+  else if (t.includes("5 ema") || t.includes("ema 5") || t.includes("subhasish") || t.includes("pani")) config.strategy = "EMA5";
   else if (t.includes("traffic light") || t.includes("traffic")) config.strategy = "TRAFFIC_LIGHT";
   else if (t.includes("inside candle") || t.includes("mother candle")) config.strategy = "INSIDE_CANDLE";
   else config.strategy = "RSI";
@@ -139,7 +140,7 @@ export function Backtest() {
   const [resolution, setResolution] = useState("5");
   const [fromDate, setFromDate] = useState("2026-03-24");
   const [toDate, setToDate] = useState("2026-06-24");
-  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE">("RSI");
+  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "EMA5_OPTION" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE">("RSI");
   const [rsiPeriod, setRsiPeriod] = useState(2);
   const [oversold, setOversold] = useState(10);
   const [overbought, setOverbought] = useState(90);
@@ -164,6 +165,7 @@ export function Backtest() {
   const strategies = [
     { value: "RSI", label: "RSI 2-Period (Mean Reversion)" },
     { value: "EMA5", label: "5 EMA (Subhasish Pani)" },
+    { value: "EMA5_OPTION", label: "5 EMA Option Buying (Subhasish Pani)" },
     { value: "TRAFFIC_LIGHT", label: "Traffic Light (Subhasish Pani)" },
     { value: "INSIDE_CANDLE", label: "Inside Candle Breakout" },
   ];
@@ -311,7 +313,7 @@ export function Backtest() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Backtest Strategy</h1>
-        <p className="mt-1 text-sm text-zinc-500">Test RSI, 5 EMA, Traffic Light, or Inside Candle strategies</p>
+        <p className="mt-1 text-sm text-zinc-500">Test RSI, 5 EMA, Option Buying, Traffic Light, or Inside Candle strategies</p>
       </div>
 
       <div className="flex gap-2">
@@ -349,13 +351,13 @@ export function Backtest() {
               <textarea
                 value={nlpText}
                 onChange={(e) => setNlpText(e.target.value)}
-                placeholder="Example: Traffic light strategy on Bank Nifty 15 min, 1:3 risk reward, 10 lakh capital, last 3 months"
+                placeholder="Example: 5 EMA option buying on Bank Nifty 15 min, 1:3 risk reward, 10 lakh capital, last 3 months"
                 className="h-32 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-lime-400 resize-none"
               />
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
               <p className="text-xs text-zinc-500">
-                <strong className="text-zinc-400">Supported:</strong> RSI, 5 EMA, Traffic Light, Inside Candle, Stop Loss %, Risk:Reward, Capital (lakh), Timeframes (1m/5m/15m/1h/daily), Periods (1mo/3mo/6mo/1yr)
+                <strong className="text-zinc-400">Supported:</strong> RSI, 5 EMA, Option Buying, Traffic Light, Inside Candle, Stop Loss %, Risk:Reward, Capital (lakh), Timeframes (1m/5m/15m/1h/daily), Periods (1mo/3mo/6mo/1yr)
               </p>
               <p className="mt-1 text-xs text-amber-400">
                 <strong>Tip:</strong> 1 Hour timeframe works best — FYERS provides up to 1 year of 1h data!
@@ -368,7 +370,7 @@ export function Backtest() {
             <label className="mb-1.5 block text-xs text-zinc-500">Strategy</label>
             <select
               value={strategy}
-              onChange={(e) => setStrategy(e.target.value as "RSI" | "EMA5" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE")}
+              onChange={(e) => setStrategy(e.target.value as "RSI" | "EMA5" | "EMA5_OPTION" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE")}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
             >
               {strategies.map((s) => (
@@ -485,6 +487,19 @@ export function Backtest() {
               <li>CE Buy: Candle closes completely BELOW 5 EMA → Break above Alert Candle high</li>
               <li>PE Buy: Candle closes completely ABOVE 5 EMA → Break below Alert Candle low</li>
               <li>SL = Alert Candle high/low | Target = 1:3 R:R minimum</li>
+            </ul>
+          </div>
+          )}
+
+          {strategy === "EMA5_OPTION" && (
+          <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+            <p className="text-xs text-zinc-400">
+              <strong className="text-lime-300">5 EMA Option Buying (Subhasish Pani):</strong>
+            </p>
+            <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
+              <li>LONG (CE): 15-min trend bullish (price {'>'} 20 EMA) + Alert Candle below 5 EMA → Break high</li>
+              <li>SHORT (PE): 5-min trend bearish (price {'<'} 20 EMA) + Alert Candle above 5 EMA → Break low</li>
+              <li>Risk only 1% of capital | Trail stop using previous candle highs/lows</li>
             </ul>
           </div>
           )}

@@ -426,6 +426,86 @@ function runBacktest(candles, config) {
       }
     }
 
+    // ── 5 EMA Option Buying (Subhasish Pani) ─────────────────────
+    else if (strategy === "EMA5_OPTION" && ema !== null) {
+      // Calculate higher timeframe trend (20 EMA)
+      const ema20 = calculateEMA(closes.slice(0, i + 1), 20);
+      const trendEMA20 = ema20[ema20.length - 1];
+
+      // LONG (CE Buy): 15-min bullish trend + Alert Candle setup
+      if (prevCandle.close > trendEMA20) {
+        // Trend is bullish - look for CE buy setup
+        if (prevCandle.close < ema && prevCandle.high < ema) {
+          alertCandle = { candle: prevCandle, type: "BULLISH", index: i - 1 };
+        }
+      }
+      // SHORT (PE Buy): 5-min bearish trend + Alert Candle setup
+      else if (prevCandle.close < trendEMA20) {
+        // Trend is bearish - look for PE buy setup
+        if (prevCandle.close > ema && prevCandle.low > ema) {
+          alertCandle = { candle: prevCandle, type: "BEARISH", index: i - 1 };
+        }
+      }
+
+      if (alertCandle) {
+        const ac = alertCandle.candle;
+        const riskAmount = currentCapital * (riskPercent / 100);
+
+        // CE Entry: Break above Alert Candle high
+        if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
+          const entryPrice = ac.high;
+          const sl = ac.low;
+          const stopDistance = entryPrice - sl;
+
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * targetMultiplier;
+              const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+              position = {
+                side: "LONG",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+                trailSL: true, // Enable trailing stop
+              };
+              alertCandle = null;
+            }
+          }
+        }
+        // PE Entry: Break below Alert Candle low
+        else if (alertCandle.type === "BEARISH" && candle.low < ac.low) {
+          const entryPrice = ac.low;
+          const sl = ac.high;
+          const stopDistance = sl - entryPrice;
+
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * targetMultiplier;
+              const target = Math.round((entryPrice - targetDistance) * 100) / 100;
+
+              position = {
+                side: "SHORT",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+                trailSL: true, // Enable trailing stop
+              };
+              alertCandle = null;
+            }
+          }
+        }
+      }
+    }
+
     // ── Traffic Light Strategy (Subhasish Pani) ──────────────────
     else if (strategy === "TRAFFIC_LIGHT" && ema !== null) {
       // Calculate trend using 20 EMA and 50 EMA
