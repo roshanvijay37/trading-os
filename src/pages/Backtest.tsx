@@ -154,6 +154,7 @@ export function Backtest() {
   const [capital, setCapital] = useState(1000000);
   const [riskPercent, setRiskPercent] = useState(1);
   const [targetMult, setTargetMult] = useState(2);
+  const [slippage, setSlippage] = useState(0.02);
 
   const symbols = [
     { value: "NSE:NIFTYBANK-INDEX", label: "Bank Nifty" },
@@ -237,7 +238,7 @@ export function Backtest() {
           riskPercent,
           targetMultiplier: targetMult,
         };
-        const data = await backtestApi.runMulti(params);
+        const data = await backtestApi.runMulti({ ...params, slippage });
         setMultiResult(data);
         setLoading(false);
         return;
@@ -254,6 +255,7 @@ export function Backtest() {
           capital,
           riskPercent,
           targetMultiplier: targetMult,
+          slippage,
         };
       }
       
@@ -631,6 +633,22 @@ export function Backtest() {
               step={0.5}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
             />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs text-zinc-500">Slippage (%)</label>
+            <input
+              type="number"
+              value={slippage}
+              onChange={(e) => setSlippage(Number(e.target.value))}
+              min={0}
+              max={1}
+              step={0.01}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
+            />
+            <p className="mt-1 text-[10px] text-zinc-600">
+              {slippage}% = ~{Math.round(50000 * slippage / 100)} pts on BANKNIFTY
+            </p>
           </div>
         </div>
         )}

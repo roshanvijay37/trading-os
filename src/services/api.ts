@@ -118,6 +118,7 @@ export const backtestApi = {
     slBuffer?: number;
     targetMultiplier?: number;
     maxHoldBars?: number;
+    slippage?: number;
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",
