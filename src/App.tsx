@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { storage } from "./services/storage";
+import { AutoTrade } from "./pages/AutoTrade";
 import { Constitution } from "./pages/Constitution";
 import { Dashboard } from "./pages/Dashboard";
 import { Journal } from "./pages/Journal";
@@ -21,6 +22,7 @@ export default function App() {
       <Route element={<DailyGate />}>
         <Route index element={<Dashboard />} />
         <Route path="/live-trade" element={<LiveTrade />} />
+        <Route path="/auto-trade" element={<AutoTrade />} />
         <Route path="/journal" element={<Journal />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />

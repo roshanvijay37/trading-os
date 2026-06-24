@@ -94,6 +94,14 @@ export const orderApi = {
   getTrades: () => fetchWithAuth("/orders/trades/today"),
 };
 
+// Auto Trading
+export const autoTradeApi = {
+  start: () => fetchWithAuth("/auto-trade/start", { method: "POST" }),
+  stop: () => fetchWithAuth("/auto-trade/stop", { method: "POST" }),
+  getStatus: () => fetchWithAuth("/auto-trade/status"),
+  getPerformance: () => fetchWithAuth("/auto-trade/performance"),
+};
+
 export const backtestApi = {
   getSymbols: () => fetchWithAuth("/backtest/symbols"),
   run: (params: {
