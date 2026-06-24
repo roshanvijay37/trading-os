@@ -23,10 +23,18 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
   }
 
   const response = await fetch(url, options);
-  const data = await response.json();
+  const responseText = await response.text();
+  
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    console.error("FYERS non-JSON response:", responseText.slice(0, 500));
+    throw new Error(`FYERS returned non-JSON response: ${responseText.slice(0, 200)}`);
+  }
 
   if (data.s !== "ok") {
-    throw new Error(data.message || "FYERS API error");
+    throw new Error(data.message || `FYERS error: ${JSON.stringify(data)}`);
   }
 
   return data;
