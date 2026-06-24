@@ -199,16 +199,28 @@ router.get("/option-chain", requireAuth, async (req, res) => {
   }
 
   try {
-    // Try FYERS API v3 option-chain endpoint
-    const response = await fyersApiCall(
-      `/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`,
-      req.fyers.accessToken,
-      req.fyers.appId,
-    );
+    // FYERS v3 option chain endpoint
+    const url = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `${req.fyers.appId}:${req.fyers.accessToken}`,
+      },
+    });
 
-    console.log("Option chain response:", JSON.stringify(response).slice(0, 500));
+    const data = await response.json();
+    console.log("Option chain response code:", data.code, "status:", data.s);
 
-    res.json({ optionChain: response.data || [] });
+    if (data.s !== "ok") {
+      throw new Error(data.message || "FYERS option chain error");
+    }
+
+    // Return optionsChain array and expiry data
+    res.json({
+      optionChain: data.data?.optionsChain || [],
+      expiryData: data.data?.expiryData || [],
+      indiavix: data.data?.indiavixData || null,
+    });
   } catch (error) {
     console.error("Get option chain error:", error);
     res.status(400).json({
