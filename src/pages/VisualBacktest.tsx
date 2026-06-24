@@ -67,10 +67,15 @@ export function VisualBacktest() {
       console.log(`[VisualBacktest] Initializing ${name} chart, container size:`, container.clientWidth, container.clientHeight);
       
       try {
+        // Force container to be visible
+        container.style.border = "2px solid #3f3f46";
+        container.style.position = "relative";
+        container.style.minHeight = "420px";
+        
         const chart = createChart(container, {
           layout: {
-            background: { type: ColorType.Solid, color: "#0c0c0e" },
-            textColor: "#71717a",
+            background: { type: ColorType.Solid, color: "#18181b" },
+            textColor: "#a1a1aa",
             fontSize: 11,
           },
           grid: {
