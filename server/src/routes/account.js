@@ -204,7 +204,7 @@ router.get("/option-chain", requireAuth, async (req, res) => {
     
     const response = await fetch(url, {
       headers: {
-        Authorization: `${appId}:${req.fyers.accessToken}`,
+        Authorization: `${req.fyers.appId}:${req.fyers.accessToken}`,
       },
     });
 
