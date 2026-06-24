@@ -157,11 +157,11 @@ export function Backtest() {
   ];
 
   const timeframes = [
-    { value: "1", label: "1 Minute", maxDays: 30 },
-    { value: "5", label: "5 Minutes", maxDays: 90 },
-    { value: "15", label: "15 Minutes", maxDays: 180 },
-    { value: "30", label: "30 Minutes", maxDays: 180 },
-    { value: "60", label: "1 Hour", maxDays: 365 },
+    { value: "1", label: "1 Minute", maxDays: 1825 },
+    { value: "5", label: "5 Minutes", maxDays: 1825 },
+    { value: "15", label: "15 Minutes", maxDays: 1825 },
+    { value: "30", label: "30 Minutes", maxDays: 1825 },
+    { value: "60", label: "1 Hour", maxDays: 1825 },
     { value: "D", label: "Daily", maxDays: 1825 },
   ];
 
