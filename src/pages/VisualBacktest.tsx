@@ -26,10 +26,209 @@ const timeframes = [
   { value: "D", label: "Daily" },
 ];
 
-interface ChartState {
-  result: any;
-  loading: boolean;
-  error: string;
+interface ChartResult {
+  summary: any;
+  candles: any[];
+  trades: any[];
+}
+
+function ChartPanel({ title, symbol, result, loading }: { title: string; symbol: string; result: ChartResult | null; loading: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+
+  // Create chart once on mount
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Clean up any previous chart
+    if (chartRef.current) {
+      chartRef.current.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    }
+
+    const chart = createChart(container, {
+      layout: {
+        background: { type: ColorType.Solid, color: "#18181b" },
+        textColor: "#a1a1aa",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: "#27272a" },
+        horzLines: { color: "#27272a" },
+      },
+      rightPriceScale: { 
+        borderColor: "#3f3f46",
+        scaleMargins: { top: 0.1, bottom: 0.1 },
+      },
+      timeScale: { 
+        borderColor: "#3f3f46", 
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: { color: "#52525b", width: 1, style: 2 },
+        horzLine: { color: "#52525b", width: 1, style: 2 },
+      },
+      width: container.clientWidth,
+      height: 420,
+    });
+
+    const series = chart.addCandlestickSeries({
+      upColor: "#22c55e",
+      downColor: "#ef4444",
+      borderUpColor: "#22c55e",
+      borderDownColor: "#ef4444",
+      wickUpColor: "#22c55e",
+      wickDownColor: "#ef4444",
+    });
+
+    chartRef.current = chart;
+    seriesRef.current = series;
+
+    const handleResize = () => {
+      if (container && chartRef.current) {
+        chartRef.current.applyOptions({ width: container.clientWidth });
+      }
+    };
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
+  }, []);
+
+  // Update data when result changes
+  useEffect(() => {
+    const series = seriesRef.current;
+    const chart = chartRef.current;
+    if (!series || !chart || !result?.candles?.length) return;
+
+    try {
+      const candles: CandlestickData[] = result.candles
+        .filter((c: any) => 
+          c != null && c.open != null && c.high != null && c.low != null && c.close != null && c.datetime &&
+          !isNaN(Number(c.open)) && !isNaN(Number(c.high)) && !isNaN(Number(c.low)) && !isNaN(Number(c.close))
+        )
+        .map((c: any) => ({
+          time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
+          open: Number(c.open),
+          high: Number(c.high),
+          low: Number(c.low),
+          close: Number(c.close),
+        }))
+        .sort((a: any, b: any) => (a.time as number) - (b.time as number));
+
+      // Remove duplicates
+      const uniqueCandles = candles.filter((c: any, i: number, arr: any[]) => 
+        i === 0 || (arr[i - 1].time as number) !== (c.time as number)
+      );
+
+      if (uniqueCandles.length > 0) {
+        series.setData(uniqueCandles);
+        
+        // Show last 200 candles
+        if (uniqueCandles.length > 200) {
+          chart.timeScale().setVisibleLogicalRange({ 
+            from: uniqueCandles.length - 200, 
+            to: uniqueCandles.length - 1 
+          });
+        } else {
+          chart.timeScale().fitContent();
+        }
+
+        // Add trade markers
+        if (result.trades?.length > 0) {
+          const markers = result.trades.flatMap((t: any) => {
+            const entryTime = Math.floor(new Date(t.entryTime).getTime() / 1000) as Time;
+            const exitTime = Math.floor(new Date(t.exitTime).getTime() / 1000) as Time;
+            return [
+              {
+                time: entryTime,
+                position: t.side === "LONG" ? "belowBar" : "aboveBar",
+                color: t.side === "LONG" ? "#22c55e" : "#ef4444",
+                shape: t.side === "LONG" ? "arrowUp" : "arrowDown",
+                text: `${t.side}`,
+                size: 2,
+              },
+              {
+                time: exitTime,
+                position: t.pnl >= 0 ? "aboveBar" : "belowBar",
+                color: t.pnl >= 0 ? "#22c55e" : "#ef4444",
+                shape: "square",
+                text: `${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(0)}`,
+                size: 1,
+              },
+            ];
+          });
+          // @ts-ignore
+          series.setMarkers(markers);
+        }
+      }
+    } catch (err) {
+      console.error(`[VisualBacktest] ${title} render error:`, err);
+    }
+  }, [result, title]);
+
+  const s = result?.summary;
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-[#0c0c0e] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-lime-400" />
+          <h2 className="text-sm font-semibold text-white">{title}</h2>
+          <span className="text-xs text-zinc-500">{symbol}</span>
+        </div>
+        {loading && (
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <div className="w-3 h-3 border-2 border-zinc-600 border-t-lime-400 rounded-full animate-spin" />
+            Loading...
+          </div>
+        )}
+      </div>
+
+      <div ref={containerRef} style={{ width: "100%", height: 420 }} />
+
+      {s && (
+        <div className="px-4 py-3 border-t border-zinc-800 bg-zinc-950/50">
+          <div className="grid grid-cols-5 gap-2">
+            <MetricCard icon={<TrendingUp size={14} />} label="Return" value={`${s.totalReturn >= 0 ? "+" : ""}${s.totalReturn.toFixed(1)}%`} color={s.totalReturn >= 0 ? "green" : "red"} />
+            <MetricCard icon={<Target size={14} />} label="Win Rate" value={`${s.winRate.toFixed(0)}%`} color="blue" />
+            <MetricCard icon={<Activity size={14} />} label="Trades" value={`${s.totalTrades}`} color="zinc" />
+            <MetricCard icon={<BarChart3 size={14} />} label="Profit Factor" value={s.profitFactor.toFixed(2)} color={s.profitFactor >= 1 ? "green" : "red"} />
+            <MetricCard icon={<Shield size={14} />} label="Expectancy" value={`₹${s.expectancy?.toFixed(0) || 0}`} color="amber" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricCard({ icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
+  const colorMap: Record<string, string> = {
+    green: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    red: "text-rose-400 bg-rose-500/10 border-rose-500/20",
+    blue: "text-sky-400 bg-sky-500/10 border-sky-500/20",
+    amber: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    zinc: "text-zinc-400 bg-zinc-800 border-zinc-700",
+  };
+  
+  return (
+    <div className={`rounded-lg border p-3 ${colorMap[color] || colorMap.zinc}`}>
+      <div className="flex items-center gap-2 mb-1">
+        {icon}
+        <span className="text-[10px] font-medium opacity-70 uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="text-lg font-bold">{value}</div>
+    </div>
+  );
 }
 
 export function VisualBacktest() {
@@ -42,152 +241,17 @@ export function VisualBacktest() {
   const [targetMult, setTargetMult] = useState(2);
   const [running, setRunning] = useState(false);
 
-  const [nifty, setNifty] = useState<ChartState>({ result: null, loading: false, error: "" });
-  const [bankNifty, setBankNifty] = useState<ChartState>({ result: null, loading: false, error: "" });
-
-  const niftyChartRef = useRef<HTMLDivElement>(null);
-  const bankNiftyChartRef = useRef<HTMLDivElement>(null);
-  const niftyChartApi = useRef<IChartApi | null>(null);
-  const bankNiftyChartApi = useRef<IChartApi | null>(null);
-  const niftySeries = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const bankNiftySeries = useRef<ISeriesApi<"Candlestick"> | null>(null);
-
-  // Initialize charts
-  useEffect(() => {
-    const initChart = (container: HTMLDivElement, chartRef: React.MutableRefObject<IChartApi | null>, seriesRef: React.MutableRefObject<ISeriesApi<"Candlestick"> | null>, name: string) => {
-      if (!container) {
-        console.log(`[VisualBacktest] ${name} container not found`);
-        return;
-      }
-      if (chartRef.current) {
-        console.log(`[VisualBacktest] ${name} chart already initialized`);
-        return;
-      }
-      
-      console.log(`[VisualBacktest] Initializing ${name} chart, container size:`, container.clientWidth, container.clientHeight);
-      
-      try {
-        // Ensure container has proper sizing
-        container.style.width = "100%";
-        container.style.height = "420px";
-        container.style.position = "relative";
-        
-        const chart = createChart(container, {
-          layout: {
-            background: { type: ColorType.Solid, color: "#18181b" },
-            textColor: "#a1a1aa",
-            fontSize: 11,
-          },
-          grid: {
-            vertLines: { color: "#27272a" },
-            horzLines: { color: "#27272a" },
-          },
-          rightPriceScale: { 
-            borderColor: "#3f3f46",
-            scaleMargins: { top: 0.1, bottom: 0.1 },
-          },
-          timeScale: { 
-            borderColor: "#3f3f46", 
-            timeVisible: true,
-            secondsVisible: false,
-          },
-          crosshair: {
-            mode: 1,
-            vertLine: { color: "#52525b", width: 1, style: 2 },
-            horzLine: { color: "#52525b", width: 1, style: 2 },
-          },
-          handleScale: {
-            axisPressedMouseMove: true,
-            mouseWheel: true,
-            pinch: true,
-          },
-          handleScroll: {
-            mouseWheel: true,
-            pressedMouseMove: true,
-            horzTouchDrag: true,
-            vertTouchDrag: false,
-          },
-          width: container.clientWidth,
-          height: 420,
-        });
-        
-        // Inspect DOM after creation
-        setTimeout(() => {
-          const canvas = container.querySelector('canvas');
-          console.log(`[VisualBacktest] ${name} canvas found:`, !!canvas, 'size:', canvas?.clientWidth, canvas?.clientHeight);
-        }, 200);
-        
-        chartRef.current = chart;
-        seriesRef.current = chart.addCandlestickSeries({
-          upColor: "#22c55e",
-          downColor: "#ef4444",
-          borderUpColor: "#22c55e",
-          borderDownColor: "#ef4444",
-          wickUpColor: "#22c55e",
-          wickDownColor: "#ef4444",
-        });
-        console.log(`[VisualBacktest] ${name} chart initialized successfully`);
-      } catch (err) {
-        console.error(`[VisualBacktest] ${name} chart init failed:`, err);
-      }
-    };
-
-    // Delay initialization to ensure DOM is ready
-    const timer = setTimeout(() => {
-      if (niftyChartRef.current) initChart(niftyChartRef.current, niftyChartApi, niftySeries, "Nifty");
-      if (bankNiftyChartRef.current) initChart(bankNiftyChartRef.current, bankNiftyChartApi, bankNiftySeries, "BankNifty");
-    }, 100);
-
-    const handleResize = () => {
-      if (niftyChartRef.current && niftyChartApi.current) {
-        niftyChartApi.current.applyOptions({ width: niftyChartRef.current.clientWidth });
-      }
-      if (bankNiftyChartRef.current && bankNiftyChartApi.current) {
-        bankNiftyChartApi.current.applyOptions({ width: bankNiftyChartRef.current.clientWidth });
-      }
-    };
-    
-    window.addEventListener("resize", handleResize);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
-
-  const renderTradesOnChart = (series: ISeriesApi<"Candlestick">, trades: any[]) => {
-    if (!trades?.length) return;
-
-    const markers = trades.flatMap((t: any) => {
-      const entryTime = Math.floor(new Date(t.entryTime).getTime() / 1000) as Time;
-      const exitTime = Math.floor(new Date(t.exitTime).getTime() / 1000) as Time;
-      return [
-        {
-          time: entryTime,
-          position: t.side === "LONG" ? "belowBar" : "aboveBar",
-          color: t.side === "LONG" ? "#22c55e" : "#ef4444",
-          shape: t.side === "LONG" ? "arrowUp" : "arrowDown",
-          text: `${t.side}`,
-          size: 2,
-        },
-        {
-          time: exitTime,
-          position: t.pnl >= 0 ? "aboveBar" : "belowBar",
-          color: t.pnl >= 0 ? "#22c55e" : "#ef4444",
-          shape: "square",
-          text: `${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(0)}`,
-          size: 1,
-        },
-      ];
-    });
-
-    // @ts-ignore
-    series.setMarkers(markers);
-  };
+  const [niftyResult, setNiftyResult] = useState<ChartResult | null>(null);
+  const [bankNiftyResult, setBankNiftyResult] = useState<ChartResult | null>(null);
+  const [niftyLoading, setNiftyLoading] = useState(false);
+  const [bankNiftyLoading, setBankNiftyLoading] = useState(false);
 
   const runBacktest = async () => {
     setRunning(true);
-    setNifty({ result: null, loading: true, error: "" });
-    setBankNifty({ result: null, loading: true, error: "" });
+    setNiftyLoading(true);
+    setBankNiftyLoading(true);
+    setNiftyResult(null);
+    setBankNiftyResult(null);
 
     try {
       const [niftyData, bankNiftyData] = await Promise.all([
@@ -213,252 +277,19 @@ export function VisualBacktest() {
         }),
       ]);
 
-      setNifty({ result: niftyData, loading: false, error: "" });
-      setBankNifty({ result: bankNiftyData, loading: false, error: "" });
-
-      // Render Nifty
-      console.log("[VisualBacktest] Nifty data:", niftyData.candles?.length, "candles,", niftyData.trades?.length, "trades");
-      if (niftySeries.current && niftyData.candles?.length > 0) {
-        try {
-          const candles: CandlestickData[] = niftyData.candles
-            .filter((c: any) => {
-              const valid = c != null && c.open != null && c.high != null && c.low != null && c.close != null && c.datetime &&
-                !isNaN(Number(c.open)) && !isNaN(Number(c.high)) && !isNaN(Number(c.low)) && !isNaN(Number(c.close)) &&
-                Number(c.high) >= Number(c.low) && Number(c.high) >= Number(c.open) && Number(c.high) >= Number(c.close) &&
-                Number(c.low) <= Number(c.open) && Number(c.low) <= Number(c.close);
-              if (!valid) console.log("[VisualBacktest] Filtered out invalid Nifty candle:", c);
-              return valid;
-            })
-            .map((c: any) => ({
-              time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
-              open: Number(c.open),
-              high: Number(c.high),
-              low: Number(c.low),
-              close: Number(c.close),
-            }))
-            .sort((a: any, b: any) => (a.time as number) - (b.time as number));
-          
-          // Remove duplicates by time
-          const uniqueCandles = candles.filter((c: any, i: number, arr: any[]) => 
-            i === 0 || (arr[i - 1].time as number) !== (c.time as number)
-          );
-          
-          console.log("[VisualBacktest] Setting Nifty data, first:", uniqueCandles[0], "last:", uniqueCandles[uniqueCandles.length - 1], "total:", uniqueCandles.length);
-          
-          // Check for any remaining null/undefined in the data
-          const badCandle = uniqueCandles.find((c: any) => !c.time || c.open == null || c.high == null || c.low == null || c.close == null);
-          if (badCandle) {
-            console.error("[VisualBacktest] BAD Nifty candle found:", badCandle);
-          }
-          
-          if (uniqueCandles.length > 0 && !badCandle) {
-            console.log("[VisualBacktest] Calling setData for Nifty...");
-            niftySeries.current.setData(uniqueCandles);
-            console.log("[VisualBacktest] Nifty setData succeeded");
-            // Temporarily skip markers to test
-            // if (niftyData.trades?.length > 0) {
-            //   renderTradesOnChart(niftySeries.current, niftyData.trades);
-            // }
-            setTimeout(() => {
-              try {
-                const ts = niftyChartApi.current?.timeScale();
-                if (ts && uniqueCandles.length > 200) {
-                  // Show last 200 candles so they're visible
-                  ts.setVisibleLogicalRange({ 
-                    from: uniqueCandles.length - 200, 
-                    to: uniqueCandles.length - 1 
-                  });
-                } else {
-                  ts?.fitContent();
-                }
-                console.log("[VisualBacktest] Nifty chart range set");
-              } catch (e) {
-                console.error("[VisualBacktest] Nifty range error:", e);
-              }
-            }, 100);
-          }
-        } catch (err) {
-          console.error("[VisualBacktest] Nifty render error:", err);
-        }
-      } else {
-        console.log("[VisualBacktest] Nifty series not ready or no candles, series:", !!niftySeries.current);
-      }
-
-      // Render Bank Nifty
-      console.log("[VisualBacktest] BankNifty data:", bankNiftyData.candles?.length, "candles,", bankNiftyData.trades?.length, "trades");
-      if (bankNiftySeries.current && bankNiftyData.candles?.length > 0) {
-        try {
-          const candles: CandlestickData[] = bankNiftyData.candles
-            .filter((c: any) => {
-              const valid = c != null && c.open != null && c.high != null && c.low != null && c.close != null && c.datetime &&
-                !isNaN(Number(c.open)) && !isNaN(Number(c.high)) && !isNaN(Number(c.low)) && !isNaN(Number(c.close)) &&
-                Number(c.high) >= Number(c.low) && Number(c.high) >= Number(c.open) && Number(c.high) >= Number(c.close) &&
-                Number(c.low) <= Number(c.open) && Number(c.low) <= Number(c.close);
-              if (!valid) console.log("[VisualBacktest] Filtered out invalid BankNifty candle:", c);
-              return valid;
-            })
-            .map((c: any) => ({
-              time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
-              open: Number(c.open),
-              high: Number(c.high),
-              low: Number(c.low),
-              close: Number(c.close),
-            }))
-            .sort((a: any, b: any) => (a.time as number) - (b.time as number));
-          
-          // Remove duplicates by time
-          const uniqueCandles = candles.filter((c: any, i: number, arr: any[]) => 
-            i === 0 || (arr[i - 1].time as number) !== (c.time as number)
-          );
-          
-          console.log("[VisualBacktest] Setting BankNifty data, first:", uniqueCandles[0], "last:", uniqueCandles[uniqueCandles.length - 1], "total:", uniqueCandles.length);
-          
-          // Check for any remaining null/undefined in the data
-          const badCandle = uniqueCandles.find((c: any) => !c.time || c.open == null || c.high == null || c.low == null || c.close == null);
-          if (badCandle) {
-            console.error("[VisualBacktest] BAD BankNifty candle found:", badCandle);
-          }
-          
-          if (uniqueCandles.length > 0 && !badCandle) {
-            console.log("[VisualBacktest] Calling setData for BankNifty...");
-            bankNiftySeries.current.setData(uniqueCandles);
-            console.log("[VisualBacktest] BankNifty setData succeeded");
-            // Temporarily skip markers to test
-            // if (bankNiftyData.trades?.length > 0) {
-            //   renderTradesOnChart(bankNiftySeries.current, bankNiftyData.trades);
-            // }
-            setTimeout(() => {
-              try {
-                const ts = bankNiftyChartApi.current?.timeScale();
-                if (ts && uniqueCandles.length > 200) {
-                  // Show last 200 candles so they're visible
-                  ts.setVisibleLogicalRange({ 
-                    from: uniqueCandles.length - 200, 
-                    to: uniqueCandles.length - 1 
-                  });
-                } else {
-                  ts?.fitContent();
-                }
-                console.log("[VisualBacktest] BankNifty chart range set");
-              } catch (e) {
-                console.error("[VisualBacktest] BankNifty range error:", e);
-              }
-            }, 100);
-          }
-        } catch (err) {
-          console.error("[VisualBacktest] BankNifty render error:", err);
-        }
-      } else {
-        console.log("[VisualBacktest] BankNifty series not ready or no candles, series:", !!bankNiftySeries.current);
-      }
+      setNiftyResult(niftyData as ChartResult);
+      setBankNiftyResult(bankNiftyData as ChartResult);
     } catch (err: any) {
-      setNifty({ result: null, loading: false, error: err.message });
-      setBankNifty({ result: null, loading: false, error: err.message });
+      console.error("Backtest error:", err);
     } finally {
       setRunning(false);
+      setNiftyLoading(false);
+      setBankNiftyLoading(false);
     }
-  };
-
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(n);
-
-  const MetricCard = ({ icon, label, value, color }: { icon: any; label: string; value: string; color: string }) => {
-    const colorMap: Record<string, string> = {
-      green: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-      red: "text-rose-400 bg-rose-500/10 border-rose-500/20",
-      blue: "text-sky-400 bg-sky-500/10 border-sky-500/20",
-      amber: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-      zinc: "text-zinc-400 bg-zinc-800 border-zinc-700",
-    };
-    
-    return (
-      <div className={`rounded-lg border p-3 ${colorMap[color] || colorMap.zinc}`}>
-        <div className="flex items-center gap-2 mb-1">
-          {icon}
-          <span className="text-[10px] font-medium opacity-70 uppercase tracking-wide">{label}</span>
-        </div>
-        <div className="text-lg font-bold">{value}</div>
-      </div>
-    );
-  };
-
-  const ChartPanel = ({ title, symbol, state, chartRef }: { title: string; symbol: string; state: ChartState; chartRef: React.RefObject<HTMLDivElement | null> }) => {
-    const s = state.result?.summary;
-    
-    return (
-      <div className="rounded-xl border border-zinc-800 bg-[#0c0c0e] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-lime-400" />
-            <h2 className="text-sm font-semibold text-white">{title}</h2>
-            <span className="text-xs text-zinc-500">{symbol}</span>
-          </div>
-          {state.loading && (
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
-              <div className="w-3 h-3 border-2 border-zinc-600 border-t-lime-400 rounded-full animate-spin" />
-              Loading...
-            </div>
-          )}
-        </div>
-
-        {/* Chart */}
-        <div ref={chartRef} className="w-full" style={{ height: 420 }} />
-
-        {/* Stats */}
-        {s && (
-          <div className="px-4 py-3 border-t border-zinc-800 bg-zinc-950/50">
-            <div className="grid grid-cols-5 gap-2">
-              <MetricCard 
-                icon={<TrendingUp size={14} />} 
-                label="Return" 
-                value={`${s.totalReturn >= 0 ? "+" : ""}${s.totalReturn.toFixed(1)}%`} 
-                color={s.totalReturn >= 0 ? "green" : "red"} 
-              />
-              <MetricCard 
-                icon={<Target size={14} />} 
-                label="Win Rate" 
-                value={`${s.winRate.toFixed(0)}%`} 
-                color="blue" 
-              />
-              <MetricCard 
-                icon={<Activity size={14} />} 
-                label="Trades" 
-                value={`${s.totalTrades}`} 
-                color="zinc" 
-              />
-              <MetricCard 
-                icon={<BarChart3 size={14} />} 
-                label="Profit Factor" 
-                value={s.profitFactor.toFixed(2)} 
-                color={s.profitFactor >= 1 ? "green" : "red"} 
-              />
-              <MetricCard 
-                icon={<Shield size={14} />} 
-                label="Expectancy" 
-                value={`₹${s.expectancy?.toFixed(0) || 0}`} 
-                color="amber" 
-              />
-            </div>
-          </div>
-        )}
-
-        {state.error && (
-          <div className="px-4 py-3 border-t border-rose-500/20 bg-rose-500/5 text-xs text-rose-300">
-            {state.error}
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -471,10 +302,8 @@ export function VisualBacktest() {
         </div>
       </div>
 
-      {/* Control Panel */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
         <div className="flex flex-wrap items-end gap-4">
-          {/* Strategy */}
           <div className="min-w-[200px]">
             <label className="flex items-center gap-1.5 mb-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wide">
               <Layers size={12} />
@@ -486,17 +315,11 @@ export function VisualBacktest() {
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white outline-none focus:border-lime-400 transition"
             >
               {strategies.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
+                <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
-            <p className="mt-1 text-[10px] text-zinc-600">
-              {strategies.find(s => s.value === strategy)?.desc}
-            </p>
           </div>
 
-          {/* Timeframe */}
           <div>
             <label className="flex items-center gap-1.5 mb-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wide">
               <Clock size={12} />
@@ -519,116 +342,45 @@ export function VisualBacktest() {
             </div>
           </div>
 
-          {/* Date Range */}
           <div>
             <label className="flex items-center gap-1.5 mb-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wide">
               <Calendar size={12} />
               Period
             </label>
             <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400"
-              />
+              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400" />
               <span className="text-zinc-600">→</span>
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400"
-              />
+              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400" />
             </div>
           </div>
 
-          {/* Capital */}
           <div>
             <label className="mb-1.5 block text-[11px] font-medium text-zinc-400 uppercase tracking-wide">Capital</label>
-            <input
-              type="number"
-              value={capital}
-              onChange={(e) => setCapital(Number(e.target.value))}
-              step={100000}
-              className="w-28 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400"
-            />
+            <input type="number" value={capital} onChange={(e) => setCapital(Number(e.target.value))} step={100000} className="w-28 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400" />
           </div>
 
-          {/* R:R */}
           <div>
             <label className="mb-1.5 block text-[11px] font-medium text-zinc-400 uppercase tracking-wide">R:R</label>
-            <input
-              type="number"
-              value={targetMult}
-              onChange={(e) => setTargetMult(Number(e.target.value))}
-              step={0.5}
-              className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400"
-            />
+            <input type="number" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} step={0.5} className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-lime-400" />
           </div>
 
-          {/* Run Button */}
           <button
             onClick={runBacktest}
             disabled={running}
-            className="ml-auto flex items-center gap-2 rounded-lg bg-lime-400 px-6 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-lime-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ml-auto flex items-center gap-2 rounded-lg bg-lime-400 px-6 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-lime-300 disabled:opacity-50"
           >
             {running ? (
-              <>
-                <div className="w-4 h-4 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin" />
-                Running...
-              </>
+              <><div className="w-4 h-4 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin" />Running...</>
             ) : (
-              <>
-                <Play size={16} fill="currentColor" />
-                Run Backtest
-              </>
+              <><Play size={16} fill="currentColor" />Run Backtest</>
             )}
           </button>
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-6 text-xs text-zinc-500">
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-emerald-500" />
-          Bullish candle
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-red-500" />
-          Bearish candle
-        </span>
-        <span className="flex items-center gap-1.5">
-          <TrendingUp size={12} className="text-emerald-400" />
-          LONG entry
-        </span>
-        <span className="flex items-center gap-1.5">
-          <TrendingDown size={12} className="text-red-400" />
-          SHORT entry
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 bg-emerald-400" />
-          Win exit
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 bg-red-400" />
-          Loss exit
-        </span>
-      </div>
-
-      {/* Charts */}
       <div className="space-y-4">
-        <ChartPanel 
-          title="Nifty 50" 
-          symbol="NSE:NIFTY50-INDEX" 
-          state={nifty} 
-          chartRef={niftyChartRef} 
-        />
-        <ChartPanel 
-          title="Bank Nifty" 
-          symbol="NSE:NIFTYBANK-INDEX" 
-          state={bankNifty} 
-          chartRef={bankNiftyChartRef} 
-        />
+        <ChartPanel title="Nifty 50" symbol="NSE:NIFTY50-INDEX" result={niftyResult} loading={niftyLoading} />
+        <ChartPanel title="Bank Nifty" symbol="NSE:NIFTYBANK-INDEX" result={bankNiftyResult} loading={bankNiftyLoading} />
       </div>
     </div>
   );
