@@ -61,7 +61,7 @@ export function AutoTrade() {
   const [status, setStatus] = useState<AutoTradeStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [refreshInterval, setRefreshInterval] = useState<number | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = async () => {
     try {
