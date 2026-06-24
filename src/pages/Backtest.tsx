@@ -107,8 +107,11 @@ function parseNaturalLanguage(text: string) {
   const rsiExitMatch = text.match(/(?:sell|exit).*rsi\s*(?:>|above)\s*(\d+)/i);
   config.overboughtThreshold = rsiExitMatch ? parseInt(rsiExitMatch[1]) : 90;
 
-  // Target / R:R
-  const rrMatch = text.match(/risk[:\s]*reward\s*(?:ratio)?\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*[:\-]\s*(\d+(?:\.\d+)?)/i);
+  // Target / R:R - supports "1:2 risk reward" OR "risk reward 1:2" OR "risk:reward 1:2"
+  let rrMatch = text.match(/(\d+(?:\.\d+)?)\s*[:\-]\s*(\d+(?:\.\d+)?)\s*(?:r[:\s]?r|risk\s*reward)/i);
+  if (!rrMatch) {
+    rrMatch = text.match(/risk[:\s]*reward\s*(?:ratio)?\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*[:\-]\s*(\d+(?:\.\d+)?)/i);
+  }
   if (rrMatch) {
     config.targetMultiplier = parseFloat(rrMatch[2]) / parseFloat(rrMatch[1]);
   } else {
