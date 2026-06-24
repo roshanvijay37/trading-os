@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, LockKeyhole, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowRight, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../components/Card";
@@ -42,7 +42,7 @@ export function LiveTrade() {
   const [placedOrder, setPlacedOrder] = useState<any>(null);
 
   const today = toLocalDateKey();
-  const locked = trades.filter((trade) => trade.date === today).length >= settings.maxTradesPerDay;
+  const todayTrades = trades.filter((trade) => trade.date === today).length;
 
   // Check FYERS connection
   useEffect(() => {
@@ -107,14 +107,9 @@ export function LiveTrade() {
       return;
     }
 
+    // Emotion check is advisory only - trader decides
     if (emotionResult.status !== "SAFE") {
-      setError(
-        emotionResult.status === "COOLDOWN"
-          ? "This setup requires a cooldown. Reset the emotional warnings before continuing."
-          : "Trade denied by the emotion engine.",
-      );
-      setPlacing(false);
-      return;
+      console.warn("Emotion check warning:", emotionResult.status);
     }
 
     try {
@@ -127,6 +122,7 @@ export function LiveTrade() {
       );
       engine.validateQuantity(quantity, calculation);
 
+      // Trade rules are advisory - log warnings but don't block
       const validation = new TradeRules().validate(
         { quantity, entryPrice, stopLossPrice },
         trades,
@@ -134,7 +130,9 @@ export function LiveTrade() {
         calculation.maxQuantity,
         today,
       );
-      if (!validation.valid) throw new Error(validation.errors.join(" "));
+      if (!validation.valid) {
+        console.warn("Trade rule warnings:", validation.errors);
+      }
 
       // Determine correct symbol format
       // Options (CE/PE) should NOT have -EQ suffix, equities should
@@ -199,20 +197,6 @@ export function LiveTrade() {
     );
   }
 
-  if (locked) {
-    return (
-      <div className="mx-auto max-w-xl py-20 text-center">
-        <span className="inline-flex rounded-2xl bg-rose-400/10 p-4 text-rose-300">
-          <LockKeyhole size={32} />
-        </span>
-        <h1 className="mt-6 text-3xl font-semibold text-white">Trading Locked.</h1>
-        <p className="mt-3 text-zinc-400">Come back tomorrow.</p>
-        <p className="mt-2 text-sm text-zinc-600">
-          One trade is enough. More action does not create more edge.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -430,9 +414,19 @@ export function LiveTrade() {
                 {error}
               </p>
             )}
+            {todayTrades >= settings.maxTradesPerDay && (
+              <p className="mb-2 text-center text-xs text-amber-400">
+                You've placed {todayTrades} trades today. Trade responsibly.
+              </p>
+            )}
+            {emotionResult.status !== "SAFE" && (
+              <p className="mb-2 text-center text-xs text-amber-400">
+                Emotion check: {emotionResult.status}. Take a breath if needed.
+              </p>
+            )}
             <button
               onClick={handlePlaceOrder}
-              disabled={!risk || emotionResult.status !== "SAFE" || placing}
+              disabled={!risk || placing}
               className="w-full rounded-xl bg-amber-400 px-5 py-3 font-semibold text-zinc-950 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-30"
             >
               {placing ? (
