@@ -190,4 +190,29 @@ router.get("/search", requireAuth, async (req, res) => {
   }
 });
 
+// Get option chain for a symbol
+router.get("/option-chain", requireAuth, async (req, res) => {
+  const { symbol, strikecount = 10 } = req.query;
+
+  if (!symbol) {
+    return res.status(400).json({ error: "symbol is required" });
+  }
+
+  try {
+    const response = await fyersApiCall(
+      `/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`,
+      req.fyers.accessToken,
+      req.fyers.appId,
+    );
+
+    res.json({ optionChain: response.d || [] });
+  } catch (error) {
+    console.error("Get option chain error:", error);
+    res.status(400).json({
+      error: "Failed to fetch option chain",
+      message: error.message,
+    });
+  }
+});
+
 export default router;

@@ -26,6 +26,9 @@ export function LiveTrade() {
   const [funds, setFunds] = useState<any>(null);
   const [symbol, setSymbol] = useState("");
   const [side, setSide] = useState<"LONG" | "SHORT">("LONG");
+  const [underlying, setUnderlying] = useState<"NIFTY" | "BANKNIFTY">("BANKNIFTY");
+  const [optionChain, setOptionChain] = useState<any[]>([]);
+  const [loadingChain, setLoadingChain] = useState(false);
   const [entryPrice, setEntryPrice] = useState(0);
   const [stopLossPrice, setStopLossPrice] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -58,6 +61,24 @@ export function LiveTrade() {
         .catch(() => setFunds(null));
     }
   }, [connected]);
+
+  // Fetch option chain when underlying changes
+  useEffect(() => {
+    if (!connected) return;
+    setLoadingChain(true);
+    const symbolMap = { NIFTY: "NSE:NIFTY50-INDEX", BANKNIFTY: "NSE:NIFTYBANK-INDEX" };
+    accountApi
+      .getOptionChain(symbolMap[underlying], 20)
+      .then((data) => {
+        setOptionChain(data.optionChain || []);
+        setLoadingChain(false);
+      })
+      .catch((err) => {
+        console.error("Option chain error:", err);
+        setOptionChain([]);
+        setLoadingChain(false);
+      });
+  }, [connected, underlying]);
 
   const risk = useMemo(() => {
     try {
@@ -239,12 +260,24 @@ export function LiveTrade() {
             </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="text-sm text-zinc-400">
-                Symbol
+                Underlying
+                <select
+                  value={underlying}
+                  onChange={(e) => setUnderlying(e.target.value as "NIFTY" | "BANKNIFTY")}
+                  className={fieldClass}
+                >
+                  <option value="BANKNIFTY">Bank Nifty</option>
+                  <option value="NIFTY">Nifty 50</option>
+                </select>
+              </label>
+              <label className="text-sm text-zinc-400">
+                Symbol (auto-filled from option chain)
                 <input
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
-                  placeholder="RELIANCE"
+                  placeholder="Select from option chain below"
                   className={fieldClass}
+                  readOnly
                 />
               </label>
               <label className="text-sm text-zinc-400">
@@ -313,6 +346,68 @@ export function LiveTrade() {
                 className={fieldClass}
               />
             </label>
+          </Card>
+
+          {/* Option Chain */}
+          <Card className="xl:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-medium text-white">
+                Option Chain — {underlying === "BANKNIFTY" ? "Bank Nifty" : "Nifty 50"}
+              </p>
+              {loadingChain && <p className="text-xs text-zinc-500">Loading...</p>}
+            </div>
+            {optionChain.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-zinc-500">
+                      <th className="pb-2 text-left">Strike</th>
+                      <th className="pb-2 text-left">Type</th>
+                      <th className="pb-2 text-right">LTP</th>
+                      <th className="pb-2 text-right">Change</th>
+                      <th className="pb-2 text-right">OI</th>
+                      <th className="pb-2 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800">
+                    {optionChain.slice(0, 20).map((opt: any, idx: number) => (
+                      <tr key={idx} className="text-zinc-300 hover:bg-zinc-900/50">
+                        <td className="py-2">₹{opt.strike_price || opt.strike}</td>
+                        <td className="py-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                            opt.option_type === "CE" || opt.optionType === "CE"
+                              ? "bg-lime-400/10 text-lime-300"
+                              : "bg-rose-500/10 text-rose-300"
+                          }`}>
+                            {opt.option_type || opt.optionType}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right">₹{opt.lp || opt.last_price || 0}</td>
+                        <td className={`py-2 text-right ${(opt.ch || opt.chp || 0) >= 0 ? "text-lime-400" : "text-rose-400"}`}>
+                          {opt.chp || opt.change_percent || 0}%
+                        </td>
+                        <td className="py-2 text-right">{(opt.oi || opt.open_interest || 0).toLocaleString()}</td>
+                        <td className="py-2 text-center">
+                          <button
+                            onClick={() => {
+                              setSymbol(opt.symbol || opt.tradingSymbol || opt.ts);
+                              setEntryPrice(opt.lp || opt.last_price || 0);
+                            }}
+                            className="rounded bg-lime-400/10 px-2 py-1 text-[10px] text-lime-300 hover:bg-lime-400/20"
+                          >
+                            Select
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500">
+                {loadingChain ? "Fetching option chain..." : "No options data available. Connect FYERS to load."}
+              </p>
+            )}
           </Card>
 
           <EmotionEvaluation

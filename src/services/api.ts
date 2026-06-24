@@ -67,6 +67,8 @@ export const accountApi = {
     }),
   searchInstruments: (query: string, exchange = "NSE") =>
     fetchWithAuth(`/account/search?q=${encodeURIComponent(query)}&exchange=${exchange}`),
+  getOptionChain: (symbol: string, strikecount = 10) =>
+    fetchWithAuth(`/account/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`),
 };
 
 // Orders
