@@ -75,13 +75,15 @@ router.post("/place", requireAuth, async (req, res) => {
       takeProfit: 0,
     };
 
+    console.log("Placing order to FYERS:", JSON.stringify(orderBody));
     const response = await fyersApiCall(
-      "/orders",
+      "/orders/async",
       req.fyers.accessToken,
       req.fyers.appId,
       orderBody,
       "POST",
     );
+    console.log("FYERS order response:", JSON.stringify(response));
 
     res.json({
       success: true,
