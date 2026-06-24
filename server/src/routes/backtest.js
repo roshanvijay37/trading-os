@@ -228,16 +228,20 @@ function runBacktest(candles, config) {
       let exitReason = "";
 
       if (position.side === "LONG" && candle.low <= position.sl) {
-        exitPrice = Math.max(candle.open, position.sl);
+        const rawExit = Math.max(candle.open, position.sl);
+        exitPrice = Math.round(rawExit * (1 - slippage) * 100) / 100;
         exitReason = "SL";
       } else if (position.side === "SHORT" && candle.high >= position.sl) {
-        exitPrice = Math.min(candle.open, position.sl);
+        const rawExit = Math.min(candle.open, position.sl);
+        exitPrice = Math.round(rawExit * (1 + slippage) * 100) / 100;
         exitReason = "SL";
       } else if (position.side === "LONG" && candle.high >= position.target) {
-        exitPrice = Math.min(candle.open, position.target);
+        const rawExit = Math.min(candle.open, position.target);
+        exitPrice = Math.round(rawExit * (1 - slippage) * 100) / 100;
         exitReason = "TARGET";
       } else if (position.side === "SHORT" && candle.low <= position.target) {
-        exitPrice = Math.max(candle.open, position.target);
+        const rawExit = Math.max(candle.open, position.target);
+        exitPrice = Math.round(rawExit * (1 + slippage) * 100) / 100;
         exitReason = "TARGET";
       } else if (barsHeld >= maxHoldBars) {
         exitPrice = candle.close;
@@ -381,7 +385,8 @@ function runBacktest(candles, config) {
 
         // Bullish Entry: Break above Alert Candle high
         if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
-          const entryPrice = ac.high;
+          const rawEntry = ac.high;
+          const entryPrice = Math.round(rawEntry * (1 + slippage) * 100) / 100;
           const sl = ac.low;
           const stopDistance = entryPrice - sl;
           
@@ -406,7 +411,8 @@ function runBacktest(candles, config) {
         }
         // Bearish Entry: Break below Alert Candle low
         else if (alertCandle.type === "BEARISH" && candle.low < ac.low) {
-          const entryPrice = ac.low;
+          const rawEntry = ac.low;
+          const entryPrice = Math.round(rawEntry * (1 - slippage) * 100) / 100;
           const sl = ac.high;
           const stopDistance = sl - entryPrice;
 
