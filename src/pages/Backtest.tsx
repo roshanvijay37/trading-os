@@ -140,7 +140,10 @@ export function Backtest() {
   const [resolution, setResolution] = useState("5");
   const [fromDate, setFromDate] = useState("2026-03-24");
   const [toDate, setToDate] = useState("2026-06-24");
-  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "EMA5_OPTION" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE">("RSI");
+  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "EMA5_OPTION" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE" | "VWAP_REVERSAL" | "ORB" | "CPR_BREAKOUT" | "EMA9_20" | "FAILED_BREAKOUT" | "OPENING_MOMENTUM">("RSI");
+  const [selectedStrategies, setSelectedStrategies] = useState<string[]>(["EMA5"]);
+  const [multiMode, setMultiMode] = useState(false);
+  const [multiResult, setMultiResult] = useState<any>(null);
   const [rsiPeriod, setRsiPeriod] = useState(2);
   const [oversold, setOversold] = useState(10);
   const [overbought, setOverbought] = useState(90);
@@ -189,6 +192,7 @@ export function Backtest() {
     setLoading(true);
     setError("");
     setResult(null);
+    setMultiResult(null);
 
     if (mode === "manual") {
       const warning = validateDateRange();
@@ -207,6 +211,26 @@ export function Backtest() {
           return;
         }
         params = parseNaturalLanguage(nlpText);
+      } else if (multiMode) {
+        if (selectedStrategies.length === 0) {
+          setError("Select at least one strategy");
+          setLoading(false);
+          return;
+        }
+        params = {
+          symbol,
+          resolution,
+          fromDate,
+          toDate,
+          strategies: selectedStrategies,
+          capital,
+          riskPercent,
+          targetMultiplier: targetMult,
+        };
+        const data = await backtestApi.runMulti(params);
+        setMultiResult(data);
+        setLoading(false);
+        return;
       } else {
         params = {
           symbol,
@@ -366,19 +390,49 @@ export function Backtest() {
           </div>
         ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className="mb-1.5 block text-xs text-zinc-500">Strategy</label>
-            <select
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value as "RSI" | "EMA5" | "EMA5_OPTION" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE")}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
-            >
-              {strategies.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+          <div className="col-span-2">
+            <div className="flex items-center gap-3 mb-2">
+              <label className="text-xs text-zinc-500">Strategy</label>
+              <button
+                onClick={() => setMultiMode(!multiMode)}
+                className={`text-[10px] px-2 py-0.5 rounded transition ${
+                  multiMode ? "bg-lime-400 text-zinc-950" : "bg-zinc-800 text-zinc-400"
+                }`}
+              >
+                {multiMode ? "Multi ON" : "Multi"}
+              </button>
+            </div>
+            {multiMode ? (
+              <div className="grid grid-cols-2 gap-2">
+                {strategies.map((s) => (
+                  <label key={s.value} className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedStrategies.includes(s.value)}
+                      onChange={() => {
+                        setSelectedStrategies(prev =>
+                          prev.includes(s.value)
+                            ? prev.filter(x => x !== s.value)
+                            : [...prev, s.value]
+                        );
+                      }}
+                      className="rounded border-zinc-600"
+                    />
+                    {s.label}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <select
+                value={strategy}
+                onChange={(e) => setStrategy(e.target.value as any)}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
+              >
+                {strategies.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>
@@ -596,6 +650,68 @@ export function Backtest() {
           </div>
         )}
       </div>
+
+      {multiResult && (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-lime-500/30 bg-lime-500/5 p-5">
+            <h3 className="mb-3 text-sm font-medium text-lime-300">
+              Combined Results — {multiResult.strategies.join(", ")}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5 text-xs">
+              <div className="rounded bg-zinc-900 p-2">
+                <p className="text-zinc-500">Total Trades</p>
+                <p className="font-bold text-white">{multiResult.combined.totalTrades}</p>
+              </div>
+              <div className="rounded bg-zinc-900 p-2">
+                <p className="text-zinc-500">Win Rate</p>
+                <p className="font-bold text-sky-400">{multiResult.combined.winRate.toFixed(1)}%</p>
+              </div>
+              <div className="rounded bg-zinc-900 p-2">
+                <p className="text-zinc-500">Total P&L</p>
+                <p className={`font-bold ${multiResult.combined.totalPnL >= 0 ? "text-lime-400" : "text-rose-400"}`}>
+                  {formatCurrency(multiResult.combined.totalPnL)}
+                </p>
+              </div>
+              <div className="rounded bg-zinc-900 p-2">
+                <p className="text-zinc-500">Return</p>
+                <p className={`font-bold ${multiResult.combined.totalReturn >= 0 ? "text-lime-400" : "text-rose-400"}`}>
+                  {multiResult.combined.totalReturn.toFixed(2)}%
+                </p>
+              </div>
+              <div className="rounded bg-zinc-900 p-2">
+                <p className="text-zinc-500">Final Capital</p>
+                <p className="font-bold text-white">{formatCurrency(multiResult.combined.finalCapital)}</p>
+              </div>
+            </div>
+          </div>
+
+          {multiResult.results.map((r: any) => (
+            <div key={r.strategy} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+              <h4 className="text-sm font-medium text-zinc-300 mb-2">{r.strategy}</h4>
+              <div className="grid gap-3 sm:grid-cols-4 text-xs">
+                <div className="rounded bg-zinc-900 p-2">
+                  <p className="text-zinc-500">Trades</p>
+                  <p className="font-bold text-white">{r.summary.totalTrades}</p>
+                </div>
+                <div className="rounded bg-zinc-900 p-2">
+                  <p className="text-zinc-500">Win Rate</p>
+                  <p className="font-bold text-sky-400">{r.summary.winRate.toFixed(1)}%</p>
+                </div>
+                <div className="rounded bg-zinc-900 p-2">
+                  <p className="text-zinc-500">P&L</p>
+                  <p className={`font-bold ${r.summary.totalPnL >= 0 ? "text-lime-400" : "text-rose-400"}`}>
+                    {formatCurrency(r.summary.totalPnL)}
+                  </p>
+                </div>
+                <div className="rounded bg-zinc-900 p-2">
+                  <p className="text-zinc-500">Profit Factor</p>
+                  <p className="font-bold text-amber-400">{r.summary.profitFactor.toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {result && (
         <div className="space-y-6">
