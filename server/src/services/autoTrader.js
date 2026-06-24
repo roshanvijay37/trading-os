@@ -29,10 +29,10 @@ const CONFIG = {
   ],
   CAPITAL: 100000,
   RISK_PERCENT: 1, // 1% per trade
-  MAX_TRADES_PER_DAY: 2,
+  MAX_TRADES_PER_DAY: 999, // Unlimited trades
   TARGET_MULTIPLIER: 2, // 1:2 Risk:Reward
-  TRAILING_SL_ENABLED: true,
-  TRAILING_SL_POINTS: 10, // Trail by 10 points
+      TRAILING_SL_ENABLED: false, // Disabled - not backtested
+      TRAILING_SL_POINTS: 0,
 };
 
 // State management
@@ -302,16 +302,9 @@ function canTakeTrade() {
     return false;
   }
 
-  // Check max trades
-  if (todayTrades >= CONFIG.MAX_TRADES_PER_DAY) {
-    return false;
-  }
+      // Max trades check removed - unlimited trading
 
-  // Check if we already have max positions open
-  const openCount = openPositions.filter(p => p.status === "OPEN").length;
-  if (openCount >= CONFIG.MAX_TRADES_PER_DAY) {
-    return false;
-  }
+      // No position limit per day
 
   return true;
 }
