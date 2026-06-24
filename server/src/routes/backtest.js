@@ -1182,6 +1182,49 @@ router.post("/run-multi", async (req, res) => {
   }
 });
 
+// ─── API Endpoint: Test FYERS data availability ───────────────────
+router.post("/test-range", async (req, res) => {
+  const { symbol = "NSE:NIFTYBANK-INDEX", resolution = "5", daysBack = 30 } = req.body;
+
+  let sessionId = req.headers["x-session-id"];
+  let session = sessionId ? getSession(sessionId) : null;
+  if (!session) {
+    const sessions = getAllSessions();
+    if (sessions.length > 0) session = sessions[0];
+  }
+
+  if (!session) {
+    return res.status(401).json({ error: "No active FYERS session" });
+  }
+
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const fromTs = now - (daysBack * 86400);
+    
+    const rawCandles = await fetchSingleRange(symbol, resolution, fromTs, now, session.accessToken);
+    
+    res.json({
+      success: true,
+      symbol,
+      resolution,
+      daysBack,
+      candlesReturned: rawCandles.length,
+      firstCandleDate: rawCandles.length > 0 ? new Date(rawCandles[0][0] * 1000).toISOString() : null,
+      lastCandleDate: rawCandles.length > 0 ? new Date(rawCandles[rawCandles.length - 1][0] * 1000).toISOString() : null,
+      sampleFirst: rawCandles.slice(0, 2),
+      sampleLast: rawCandles.slice(-2),
+    });
+  } catch (error) {
+    console.error("Test range error:", error);
+    res.status(500).json({ 
+      error: error.message || "Test failed",
+      symbol,
+      resolution,
+      daysBack,
+    });
+  }
+});
+
 // ─── API Endpoint: Get available symbols ──────────────────────────
 router.get("/symbols", (_req, res) => {
   res.json({
