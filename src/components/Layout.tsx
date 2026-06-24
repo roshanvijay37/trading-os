@@ -1,6 +1,7 @@
 import {
   BarChart3,
   BookOpen,
+  Eye,
   LayoutDashboard,
   Menu,
   Settings,
@@ -18,6 +19,7 @@ const navigation = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/live-trade", label: "Live Trade", icon: Zap },
   { to: "/backtest", label: "Backtest", icon: TestTube },
+  { to: "/visual-backtest", label: "Visual", icon: Eye },
   { to: "/journal", label: "Journal", icon: BookOpen },
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },

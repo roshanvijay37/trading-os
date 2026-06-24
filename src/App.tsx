@@ -8,6 +8,7 @@ import { LiveTrade } from "./pages/LiveTrade";
 import { Reports } from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { Backtest } from "./pages/Backtest";
+import { VisualBacktest } from "./pages/VisualBacktest";
 
 function DailyGate() {
   return storage.hasAcceptedConstitution() ? <Layout /> : <Navigate to="/constitution" replace />;
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/backtest" element={<Backtest />} />
+        <Route path="/visual-backtest" element={<VisualBacktest />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
