@@ -240,7 +240,7 @@ export function VisualBacktest() {
     );
   };
 
-  const ChartPanel = ({ title, symbol, state, chartRef }: { title: string; symbol: string; state: ChartState; chartRef: React.RefObject<HTMLDivElement> }) => {
+  const ChartPanel = ({ title, symbol, state, chartRef }: { title: string; symbol: string; state: ChartState; chartRef: React.RefObject<HTMLDivElement | null> }) => {
     const s = state.result?.summary;
     
     return (
