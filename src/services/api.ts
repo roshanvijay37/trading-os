@@ -101,6 +101,7 @@ export const backtestApi = {
     resolution: string;
     fromDate: string;
     toDate: string;
+    strategy?: string;
     rsiPeriod?: number;
     oversoldThreshold?: number;
     overboughtThreshold?: number;
@@ -111,6 +112,20 @@ export const backtestApi = {
     maxHoldBars?: number;
   }) =>
     fetchWithAuth("/backtest/run", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+  runMulti: (params: {
+    symbol: string;
+    resolution: string;
+    fromDate: string;
+    toDate: string;
+    strategies: string[];
+    capital?: number;
+    riskPercent?: number;
+    targetMultiplier?: number;
+  }) =>
+    fetchWithAuth("/backtest/run-multi", {
       method: "POST",
       body: JSON.stringify(params),
     }),

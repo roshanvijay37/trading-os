@@ -588,7 +588,6 @@ function runBacktest(candles, config) {
 
     // ── Inside Candle Breakout Strategy ──────────────────────────
     else if (strategy === "INSIDE_CANDLE") {
-      // Check if previous candle is Inside Candle of the one before it
       if (isInsideCandle(prev2Candle, prevCandle)) {
         motherCandle = prev2Candle;
         insideCandle = prevCandle;
@@ -617,6 +616,248 @@ function runBacktest(candles, config) {
             };
             motherCandle = null;
             insideCandle = null;
+          }
+        }
+      }
+    }
+
+    // ── VWAP Reversal (Anant Ladha) ──────────────────────────────
+    else if (strategy === "VWAP_REVERSAL") {
+      const vwap = calculateVWAP(candles.slice(0, i + 1));
+      const currentVWAP = vwap[vwap.length - 1];
+      const prevVWAP = vwap[vwap.length - 2];
+
+      // Price below VWAP then reclaims it with volume
+      if (prevCandle.close < prevVWAP && candle.close > currentVWAP && candle.volume > prevCandle.volume) {
+        const entryPrice = candle.close;
+        const sl = candle.low;
+        const stopDistance = entryPrice - sl;
+        const riskAmount = currentCapital * (riskPercent / 100);
+
+        if (stopDistance > 0) {
+          const qty = Math.floor(riskAmount / stopDistance);
+          if (qty > 0) {
+            const targetDistance = stopDistance * targetMultiplier;
+            const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+            position = {
+              side: "LONG",
+              entryPrice,
+              qty,
+              sl: Math.round(sl * 100) / 100,
+              target,
+              entryBar: i,
+              entryTime: candle.datetime,
+            };
+          }
+        }
+      }
+    }
+
+    // ── Opening Range Breakout (ORB) ─────────────────────────────
+    else if (strategy === "ORB") {
+      // First 15-min candle of the day
+      const currentDate = new Date(candle.datetime).toDateString();
+      const prevDate = new Date(prevCandle.datetime).toDateString();
+      
+      // New day detected - mark ORB candle
+      if (currentDate !== prevDate) {
+        // Store the first candle of the day as ORB
+        alertCandle = { candle: candle, type: "ORB", index: i };
+      }
+
+      if (alertCandle && alertCandle.type === "ORB") {
+        const orb = alertCandle.candle;
+        const riskAmount = currentCapital * (riskPercent / 100);
+
+        // Break above ORB high
+        if (candle.high > orb.high) {
+          const entryPrice = orb.high;
+          const sl = orb.low;
+          const stopDistance = entryPrice - sl;
+
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * targetMultiplier;
+              const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+              position = {
+                side: "LONG",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+              };
+            }
+          }
+        }
+        // Break below ORB low
+        else if (candle.low < orb.low) {
+          const entryPrice = orb.low;
+          const sl = orb.high;
+          const stopDistance = sl - entryPrice;
+
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * targetMultiplier;
+              const target = Math.round((entryPrice - targetDistance) * 100) / 100;
+
+              position = {
+                side: "SHORT",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // ── CPR Breakout (Vivek Bajaj) ───────────────────────────────
+    else if (strategy === "CPR_BREAKOUT") {
+      // Simple pivot-based breakout (using previous day high/low)
+      const ema20 = calculateEMA(closes.slice(0, i + 1), 20);
+      const currentEMA20 = ema20[ema20.length - 1];
+
+      // Above CPR (EMA20 as proxy) and breaking prev day high
+      if (candle.close > currentEMA20 && candle.high > prevCandle.high && candle.volume > prevCandle.volume * 1.2) {
+        const entryPrice = candle.close;
+        const sl = currentEMA20;
+        const stopDistance = entryPrice - sl;
+        const riskAmount = currentCapital * (riskPercent / 100);
+
+        if (stopDistance > 0) {
+          const qty = Math.floor(riskAmount / stopDistance);
+          if (qty > 0) {
+            const targetDistance = stopDistance * targetMultiplier;
+            const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+            position = {
+              side: "LONG",
+              entryPrice,
+              qty,
+              sl: Math.round(sl * 100) / 100,
+              target,
+              entryBar: i,
+              entryTime: candle.datetime,
+            };
+          }
+        }
+      }
+    }
+
+    // ── 9/20 EMA Crossover (Power of Stocks) ─────────────────────
+    else if (strategy === "EMA9_20") {
+      const ema9 = calculateEMA(closes.slice(0, i + 1), 9);
+      const ema20 = calculateEMA(closes.slice(0, i + 1), 20);
+      const currentEMA9 = ema9[ema9.length - 1];
+      const currentEMA20 = ema20[ema20.length - 1];
+      const prevEMA9 = ema9.length > 1 ? ema9[ema9.length - 2] : currentEMA9;
+      const prevEMA20 = ema20.length > 1 ? ema20[ema20.length - 2] : currentEMA20;
+
+      // 9 EMA > 20 EMA (bullish trend)
+      if (currentEMA9 > currentEMA20) {
+        // Pullback to 9 EMA + bullish candle
+        if (prevCandle.low <= currentEMA9 && candle.close > prevCandle.close) {
+          const entryPrice = candle.close;
+          const sl = currentEMA20;
+          const stopDistance = entryPrice - sl;
+          const riskAmount = currentCapital * (riskPercent / 100);
+
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * targetMultiplier;
+              const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+              position = {
+                side: "LONG",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // ── Failed Breakout (Al Brooks) ──────────────────────────────
+    else if (strategy === "FAILED_BREAKOUT") {
+      // Failed breakdown: Price breaks below support then comes back
+      if (prevCandle.low < prev2Candle.low && candle.close > prev2Candle.close) {
+        const entryPrice = candle.close;
+        const sl = prevCandle.low;
+        const stopDistance = entryPrice - sl;
+        const riskAmount = currentCapital * (riskPercent / 100);
+
+        if (stopDistance > 0) {
+          const qty = Math.floor(riskAmount / stopDistance);
+          if (qty > 0) {
+            const targetDistance = stopDistance * targetMultiplier;
+            const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+            position = {
+              side: "LONG",
+              entryPrice,
+              qty,
+              sl: Math.round(sl * 100) / 100,
+              target,
+              entryBar: i,
+              entryTime: candle.datetime,
+            };
+          }
+        }
+      }
+    }
+
+    // ── Opening Momentum ─────────────────────────────────────────
+    else if (strategy === "OPENING_MOMENTUM") {
+      // First 20 minutes of the day
+      const currentDate = new Date(candle.datetime).toDateString();
+      const prevDate = new Date(prevCandle.datetime).toDateString();
+      const currentHour = new Date(candle.datetime).getHours();
+      const currentMin = new Date(candle.datetime).getMinutes();
+      const isOpening = currentHour === 9 && currentMin >= 15 && currentMin <= 35;
+
+      if (isOpening && currentDate === prevDate) {
+        // Opening range high/low
+        const atr = calculateATR(candles.slice(0, i + 1), 14);
+        const currentATR = atr.length > 0 ? atr[atr.length - 1] : candle.high - candle.low;
+
+        if (candle.close > prevCandle.high + currentATR * 0.3) {
+          const entryPrice = candle.close;
+          const sl = prevCandle.low;
+          const stopDistance = entryPrice - sl;
+          const riskAmount = currentCapital * (riskPercent / 100);
+
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * 1.5; // 1.5x ATR target
+              const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+              position = {
+                side: "LONG",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+              };
+            }
           }
         }
       }
@@ -656,6 +897,11 @@ function runBacktest(candles, config) {
   const avgWin = wins > 0 ? trades.filter((t) => t.pnl > 0).reduce((s, t) => s + t.pnl, 0) / wins : 0;
   const avgLoss = losses > 0 ? trades.filter((t) => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0) / losses : 0;
   const profitFactor = avgLoss !== 0 ? Math.abs(avgWin / avgLoss) : 0;
+  const expectancy = totalTrades > 0 ? (totalPnL / totalTrades) : 0;
+  const winPct = totalTrades > 0 ? wins / totalTrades : 0;
+  const lossPct = totalTrades > 0 ? losses / totalTrades : 0;
+  const avgLossAbs = Math.abs(avgLoss);
+  const expectancyRatio = avgLossAbs > 0 ? ((winPct * avgWin) - (lossPct * avgLossAbs)) / avgLossAbs : 0;
 
   return {
     summary: {
@@ -669,6 +915,8 @@ function runBacktest(candles, config) {
       profitFactor: Math.round(profitFactor * 100) / 100,
       avgWin: Math.round(avgWin * 100) / 100,
       avgLoss: Math.round(avgLoss * 100) / 100,
+      expectancy: Math.round(expectancy * 100) / 100,
+      expectancyRatio: Math.round(expectancyRatio * 100) / 100,
       finalCapital: Math.round(currentCapital * 100) / 100,
       maxConsecutiveLosses,
     },
@@ -796,6 +1044,143 @@ router.post("/data", async (req, res) => {
   }
 });
 
+// ─── VWAP Calculation ─────────────────────────────────────────────
+function calculateVWAP(candles) {
+  let cumulativeTPV = 0;
+  let cumulativeVol = 0;
+  const vwap = [];
+  for (const c of candles) {
+    const tp = (c.high + c.low + c.close) / 3;
+    cumulativeTPV += tp * c.volume;
+    cumulativeVol += c.volume;
+    vwap.push(cumulativeVol > 0 ? cumulativeTPV / cumulativeVol : tp);
+  }
+  return vwap;
+}
+
+// ─── ATR Calculation ──────────────────────────────────────────────
+function calculateATR(candles, period = 14) {
+  const atr = [];
+  if (candles.length < period + 1) return atr;
+  
+  let sum = 0;
+  for (let i = 1; i <= period; i++) {
+    const tr = Math.max(
+      candles[i].high - candles[i].low,
+      Math.abs(candles[i].high - candles[i - 1].close),
+      Math.abs(candles[i].low - candles[i - 1].close)
+    );
+    sum += tr;
+  }
+  atr.push(sum / period);
+  
+  for (let i = period + 1; i < candles.length; i++) {
+    const tr = Math.max(
+      candles[i].high - candles[i].low,
+      Math.abs(candles[i].high - candles[i - 1].close),
+      Math.abs(candles[i].low - candles[i - 1].close)
+    );
+    atr.push((atr[atr.length - 1] * (period - 1) + tr) / period);
+  }
+  return atr;
+}
+
+// ─── API Endpoint: Run Multiple Strategies ────────────────────────
+router.post("/run-multi", async (req, res) => {
+  const {
+    symbol = "NSE:NIFTYBANK-INDEX",
+    resolution = "5",
+    fromDate,
+    toDate,
+    strategies = ["RSI"],
+    rsiPeriod = 2,
+    oversoldThreshold = 10,
+    overboughtThreshold = 90,
+    emaPeriod = 5,
+    capital = 1000000,
+    riskPercent = 1,
+    slBuffer = 0.005,
+    targetMultiplier = 2,
+    maxHoldBars = 12,
+  } = req.body;
+
+  if (!fromDate || !toDate) {
+    return res.status(400).json({ error: "fromDate and toDate are required" });
+  }
+
+  const sessionId = req.headers["x-session-id"];
+  if (!sessionId) {
+    return res.status(401).json({ error: "FYERS session required" });
+  }
+
+  const session = getSession(sessionId);
+  if (!session) {
+    return res.status(401).json({ error: "Invalid or expired FYERS session" });
+  }
+
+  try {
+    const fromTs = Math.floor(new Date(fromDate).getTime() / 1000);
+    const toTs = Math.floor(new Date(toDate).getTime() / 1000) + 86400;
+
+    const rawCandles = await fetchHistoricalData(symbol, resolution, fromTs, toTs, session.accessToken);
+    const candles = parseCandles(rawCandles);
+
+    if (candles.length < 20) {
+      return res.status(400).json({ error: "Insufficient data for backtest" });
+    }
+
+    const results = [];
+    for (const strat of strategies) {
+      const result = runBacktest(candles, {
+        strategy: strat,
+        rsiPeriod,
+        oversoldThreshold,
+        overboughtThreshold,
+        emaPeriod,
+        capital,
+        riskPercent,
+        slBuffer,
+        targetMultiplier,
+        maxHoldBars,
+      });
+      results.push({
+        strategy: strat,
+        ...result,
+      });
+    }
+
+    // Combined summary
+    const allTrades = results.flatMap(r => r.trades);
+    const combinedPnL = allTrades.reduce((s, t) => s + t.pnl, 0);
+    const combinedWins = allTrades.filter(t => t.pnl > 0).length;
+    const combinedLosses = allTrades.filter(t => t.pnl <= 0).length;
+    const combinedTotal = allTrades.length;
+
+    res.json({
+      success: true,
+      symbol,
+      resolution,
+      strategies,
+      fromDate,
+      toDate,
+      totalCandles: candles.length,
+      results,
+      combined: {
+        totalTrades: combinedTotal,
+        wins: combinedWins,
+        losses: combinedLosses,
+        winRate: combinedTotal > 0 ? Math.round((combinedWins / combinedTotal) * 10000) / 100 : 0,
+        totalPnL: Math.round(combinedPnL * 100) / 100,
+        totalReturn: Math.round(((capital + combinedPnL - capital) / capital) * 10000) / 100,
+        finalCapital: Math.round((capital + combinedPnL) * 100) / 100,
+      },
+    });
+  } catch (error) {
+    console.error("Multi backtest error:", error);
+    res.status(500).json({ error: error.message || "Multi backtest failed" });
+  }
+});
+
 // ─── API Endpoint: Get available symbols ──────────────────────────
 router.get("/symbols", (_req, res) => {
   res.json({
@@ -812,6 +1197,19 @@ router.get("/symbols", (_req, res) => {
       { value: "30", label: "30 Minutes" },
       { value: "60", label: "1 Hour" },
       { value: "D", label: "Daily" },
+    ],
+    strategies: [
+      { value: "RSI", label: "RSI 2-Period (Mean Reversion)" },
+      { value: "EMA5", label: "5 EMA (Subhasish Pani)" },
+      { value: "EMA5_OPTION", label: "5 EMA Option Buying" },
+      { value: "TRAFFIC_LIGHT", label: "Traffic Light" },
+      { value: "INSIDE_CANDLE", label: "Inside Candle Breakout" },
+      { value: "VWAP_REVERSAL", label: "VWAP Reversal (Anant Ladha)" },
+      { value: "ORB", label: "Opening Range Breakout" },
+      { value: "CPR_BREAKOUT", label: "CPR Breakout (Vivek Bajaj)" },
+      { value: "EMA9_20", label: "9/20 EMA Crossover" },
+      { value: "FAILED_BREAKOUT", label: "Failed Breakout (Al Brooks)" },
+      { value: "OPENING_MOMENTUM", label: "Opening Momentum" },
     ],
   });
 });
