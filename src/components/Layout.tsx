@@ -3,7 +3,6 @@ import {
   BookOpen,
   LayoutDashboard,
   Menu,
-  PlusCircle,
   Settings,
   ShieldCheck,
   TestTube,
@@ -17,7 +16,6 @@ import { FyersConnect } from "./FyersConnect";
 
 const navigation = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/new-trade", label: "New Trade", icon: PlusCircle },
   { to: "/live-trade", label: "Live Trade", icon: Zap },
   { to: "/backtest", label: "Backtest", icon: TestTube },
   { to: "/journal", label: "Journal", icon: BookOpen },
@@ -58,11 +56,6 @@ export function Layout() {
               <Icon size={18} />
               {label}
             </span>
-            {label === "New Trade" && tradeLocked && (
-              <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] text-rose-300">
-                LOCKED
-              </span>
-            )}
           </NavLink>
         ))}
       </nav>

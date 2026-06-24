@@ -5,7 +5,6 @@ import { Constitution } from "./pages/Constitution";
 import { Dashboard } from "./pages/Dashboard";
 import { Journal } from "./pages/Journal";
 import { LiveTrade } from "./pages/LiveTrade";
-import { NewTrade } from "./pages/NewTrade";
 import { Reports } from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { Backtest } from "./pages/Backtest";
@@ -20,7 +19,6 @@ export default function App() {
       <Route path="/constitution" element={<Constitution />} />
       <Route element={<DailyGate />}>
         <Route index element={<Dashboard />} />
-        <Route path="/new-trade" element={<NewTrade />} />
         <Route path="/live-trade" element={<LiveTrade />} />
         <Route path="/journal" element={<Journal />} />
         <Route path="/reports" element={<Reports />} />
