@@ -96,6 +96,11 @@ async function fetchHistoricalData(symbol, resolution, fromTs, toTs, accessToken
       const chunk = await fetchSingleRange(symbol, resolution, currentFrom, currentTo, accessToken);
       allCandles = allCandles.concat(chunk);
 
+      // Rate limit: wait 600ms between requests to avoid FYERS limit
+      if (currentTo < toTs) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+
       currentFrom = currentTo + 1;
     }
 
