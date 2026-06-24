@@ -171,6 +171,12 @@ export function Backtest() {
     { value: "EMA5_OPTION", label: "5 EMA Option Buying (Subhasish Pani)" },
     { value: "TRAFFIC_LIGHT", label: "Traffic Light (Subhasish Pani)" },
     { value: "INSIDE_CANDLE", label: "Inside Candle Breakout" },
+    { value: "VWAP_REVERSAL", label: "VWAP Reversal (Anant Ladha)" },
+    { value: "ORB", label: "Opening Range Breakout" },
+    { value: "CPR_BREAKOUT", label: "CPR Breakout (Vivek Bajaj)" },
+    { value: "EMA9_20", label: "9/20 EMA Crossover" },
+    { value: "FAILED_BREAKOUT", label: "Failed Breakout (Al Brooks)" },
+    { value: "OPENING_MOMENTUM", label: "Opening Momentum" },
   ];
 
   const getMaxDays = (res: string) => timeframes.find((t) => t.value === res)?.maxDays || 90;
