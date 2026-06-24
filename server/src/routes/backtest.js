@@ -1217,13 +1217,15 @@ router.post("/test-range", async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
     const fromTs = now - (daysBack * 86400);
     
-    const rawCandles = await fetchSingleRange(symbol, resolution, fromTs, now, session.accessToken);
+    // Use fetchHistoricalData which supports chunking for >100 days
+    const rawCandles = await fetchHistoricalData(symbol, resolution, fromTs, now, session.accessToken);
     
     res.json({
       success: true,
       symbol,
       resolution,
       daysBack,
+      chunksMade: Math.ceil(daysBack / 100),
       candlesReturned: rawCandles.length,
       firstCandleDate: rawCandles.length > 0 ? new Date(rawCandles[0][0] * 1000).toISOString() : null,
       lastCandleDate: rawCandles.length > 0 ? new Date(rawCandles[rawCandles.length - 1][0] * 1000).toISOString() : null,
