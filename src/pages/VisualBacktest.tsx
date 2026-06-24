@@ -153,7 +153,7 @@ function ChartPanel({ title, symbol, result, loading, theme }: { title: string; 
       borderUpColor: theme.upColor,
       borderDownColor: theme.downColor,
       wickUpColor: theme.wickUp,
-      wickDown: theme.wickDown,
+      wickDownColor: theme.wickDown,
     });
 
     chartRef.current = chart;
