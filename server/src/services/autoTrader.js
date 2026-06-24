@@ -31,19 +31,66 @@ const CONFIG = {
   RISK_PERCENT: 1, // 1% per trade
   MAX_TRADES_PER_DAY: 999, // Unlimited trades
   TARGET_MULTIPLIER: 2, // 1:2 Risk:Reward
-      TRAILING_SL_ENABLED: false, // Disabled - not backtested
-      TRAILING_SL_POINTS: 0,
+  TRAILING_SL_ENABLED: false, // Disabled - not backtested
+  TRAILING_SL_POINTS: 0,
+  ORDER_TYPE: "LIMIT", // Use limit orders to avoid spread
+  SLIPPAGE_BUFFER_PCT: 0.5, // 0.5% slippage buffer on entry
+  BROKERAGE_PER_ORDER: 20, // ₹20 per order (approximate)
+  STT_PCT: 0.05, // STT on sell side
+  EXCHANGE_CHARGES_PCT: 0.003, // Exchange charges
+  GST_PCT: 18, // GST on brokerage + charges
+  SEBI_CHARGES_PCT: 0.0001, // SEBI charges
+  STAMP_DUTY_PCT: 0.003, // Stamp duty
 };
 
 // State management
 let isRunning = false;
 let pollInterval = null;
-let activeAlert = null; // Current alert candle being watched
+const activeAlerts = new Map(); // Per-underlying alert tracking: { "NIFTY": alert, "BANKNIFTY": alert }
 let openPositions = []; // Currently open trades
 let todayTrades = 0; // Count of trades today
 let lastTradeDate = null;
 let marketStatus = "CLOSED"; // OPEN, CLOSED, PRE_OPEN
 let latestData = {}; // Latest candle data per underlying
+let processedSignals = new Set(); // Track processed signals to prevent duplicates
+
+// Server restart recovery - persist positions to file
+import fs from "fs";
+import path from "path";
+
+const STATE_FILE = path.join(process.cwd(), "auto-trade-state.json");
+
+function saveState() {
+  try {
+    const state = {
+      openPositions,
+      todayTrades,
+      lastTradeDate,
+      processedSignals: Array.from(processedSignals),
+    };
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  } catch (err) {
+    console.error("[AUTO-TRADER] Failed to save state:", err.message);
+  }
+}
+
+function loadState() {
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+      openPositions = state.openPositions || [];
+      todayTrades = state.todayTrades || 0;
+      lastTradeDate = state.lastTradeDate || null;
+      processedSignals = new Set(state.processedSignals || []);
+      console.log(`[AUTO-TRADER] 📂 Loaded state: ${openPositions.length} positions, ${todayTrades} trades today`);
+    }
+  } catch (err) {
+    console.error("[AUTO-TRADER] Failed to load state:", err.message);
+  }
+}
+
+// Load state on module init
+loadState();
 
 // FYERS API helper
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
@@ -180,27 +227,37 @@ async function processCandles(underlying, session) {
     
     if (alert) {
       console.log(`[AUTO-TRADER] 🚨 ${underlying.name} ${alert.type} detected at ${new Date(alert.timestamp * 1000).toLocaleTimeString()}`);
-      activeAlert = {
+      activeAlerts.set(underlying.name, {
         ...alert,
         underlying: underlying.name,
         symbol: underlying.symbol,
         detectedAt: new Date().toISOString(),
-      };
+      });
     }
 
     // Step 2: Check for breakout from active alert
-    if (activeAlert && activeAlert.underlying === underlying.name) {
-      const signal = detectBreakout(candles, activeAlert);
+    const currentAlert = activeAlerts.get(underlying.name);
+    if (currentAlert) {
+      const signal = detectBreakout(candles, currentAlert);
       
       if (signal) {
         console.log(`[AUTO-TRADER] ✅ ${underlying.name} ${signal.type} BREAKOUT detected!`);
         
         // Check if we can take this trade
         if (!canTakeTrade()) {
-          console.log(`[AUTO-TRADER] ⚠️ Cannot take trade - limit reached or invalid time`);
-          activeAlert = null;
+          console.log(`[AUTO-TRADER] ⚠️ Cannot take trade - outside market hours`);
+          activeAlerts.delete(underlying.name);
           return;
         }
+
+        // Create unique signal ID to prevent duplicates
+        const signalId = `${underlying.name}-${signal.timestamp}-${signal.type}`;
+        if (processedSignals.has(signalId)) {
+          console.log(`[AUTO-TRADER] ⚠️ Signal already processed: ${signalId}`);
+          activeAlerts.delete(underlying.name);
+          return;
+        }
+        processedSignals.add(signalId);
 
         // Fetch option chain to get ATM option
         const optionChain = await fetchOptionChain(
@@ -219,7 +276,7 @@ async function processCandles(underlying, session) {
 
         if (!optionSymbol) {
           console.log(`[AUTO-TRADER] ❌ Could not find ATM ${optionType} option`);
-          activeAlert = null;
+          activeAlerts.delete(underlying.name);
           return;
         }
 
@@ -265,6 +322,7 @@ async function processCandles(underlying, session) {
 
           openPositions.push(position);
           todayTrades++;
+          saveState(); // Persist state after trade
           
           storeSignal({
             ...tradeSignal,
@@ -285,7 +343,7 @@ async function processCandles(underlying, session) {
         }
 
         // Clear the alert after processing
-        activeAlert = null;
+        activeAlerts.delete(underlying.name);
       }
     }
   } catch (error) {

@@ -173,6 +173,7 @@ function runBacktest(candles, config) {
     slBuffer = 0.005,
     targetMultiplier = 2,
     maxHoldBars = 12,
+    slippage = 0.001, // 0.1% slippage on entry and exit
   } = config;
 
   // Pre-calculate indicators
