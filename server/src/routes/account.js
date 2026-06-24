@@ -199,36 +199,16 @@ router.get("/option-chain", requireAuth, async (req, res) => {
   }
 
   try {
-    // FYERS option-chain is on the DATA API, not API v3
-    const url = `https://api-t1.fyers.in/data/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`;
-    
-    console.log("Fetching option chain from:", url);
-    console.log("Auth header:", `${req.fyers.appId}:${req.fyers.accessToken.slice(0, 10)}...`);
+    // Try FYERS API v3 option-chain endpoint
+    const response = await fyersApiCall(
+      `/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`,
+      req.fyers.accessToken,
+      req.fyers.appId,
+    );
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `${req.fyers.appId}:${req.fyers.accessToken}`,
-      },
-    });
+    console.log("Option chain response:", JSON.stringify(response).slice(0, 500));
 
-    const responseText = await response.text();
-    console.log("Option chain raw response:", responseText.slice(0, 500));
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error("Failed to parse option chain response:", parseError.message);
-      throw new Error(`FYERS returned invalid JSON: ${responseText.slice(0, 200)}`);
-    }
-
-    console.log("Option chain parsed:", JSON.stringify(data).slice(0, 500));
-
-    if (data.s !== "ok") {
-      throw new Error(data.message || `FYERS error: ${JSON.stringify(data)}`);
-    }
-
-    res.json({ optionChain: data.data || [] });
+    res.json({ optionChain: response.data || [] });
   } catch (error) {
     console.error("Get option chain error:", error);
     res.status(400).json({
