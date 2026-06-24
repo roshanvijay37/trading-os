@@ -54,50 +54,67 @@ export function VisualBacktest() {
 
   // Initialize charts
   useEffect(() => {
-    const initChart = (container: HTMLDivElement, chartRef: React.MutableRefObject<IChartApi | null>, seriesRef: React.MutableRefObject<ISeriesApi<"Candlestick"> | null>) => {
-      if (!container || chartRef.current) return;
+    const initChart = (container: HTMLDivElement, chartRef: React.MutableRefObject<IChartApi | null>, seriesRef: React.MutableRefObject<ISeriesApi<"Candlestick"> | null>, name: string) => {
+      if (!container) {
+        console.log(`[VisualBacktest] ${name} container not found`);
+        return;
+      }
+      if (chartRef.current) {
+        console.log(`[VisualBacktest] ${name} chart already initialized`);
+        return;
+      }
       
-      const chart = createChart(container, {
-        layout: {
-          background: { type: ColorType.Solid, color: "#0c0c0e" },
-          textColor: "#71717a",
-          fontSize: 11,
-        },
-        grid: {
-          vertLines: { color: "#1a1a1e" },
-          horzLines: { color: "#1a1a1e" },
-        },
-        rightPriceScale: { 
-          borderColor: "#27272a",
-          scaleMargins: { top: 0.1, bottom: 0.1 },
-        },
-        timeScale: { 
-          borderColor: "#27272a", 
-          timeVisible: true,
-          secondsVisible: false,
-        },
-        crosshair: {
-          mode: 1,
-          vertLine: { color: "#3f3f46", width: 1, style: 2 },
-          horzLine: { color: "#3f3f46", width: 1, style: 2 },
-        },
-        width: container.clientWidth,
-        height: 420,
-      });
+      console.log(`[VisualBacktest] Initializing ${name} chart, container size:`, container.clientWidth, container.clientHeight);
       
-      chartRef.current = chart;
-      seriesRef.current = chart.addCandlestickSeries({
-        upColor: "#22c55e",
-        downColor: "#ef4444",
-        borderUpColor: "#22c55e",
-        borderDownColor: "#ef4444",
-        wickUpColor: "#22c55e",
-        wickDownColor: "#ef4444",
-      });
+      try {
+        const chart = createChart(container, {
+          layout: {
+            background: { type: ColorType.Solid, color: "#0c0c0e" },
+            textColor: "#71717a",
+            fontSize: 11,
+          },
+          grid: {
+            vertLines: { color: "#1a1a1e" },
+            horzLines: { color: "#1a1a1e" },
+          },
+          rightPriceScale: { 
+            borderColor: "#27272a",
+            scaleMargins: { top: 0.1, bottom: 0.1 },
+          },
+          timeScale: { 
+            borderColor: "#27272a", 
+            timeVisible: true,
+            secondsVisible: false,
+          },
+          crosshair: {
+            mode: 1,
+            vertLine: { color: "#3f3f46", width: 1, style: 2 },
+            horzLine: { color: "#3f3f46", width: 1, style: 2 },
+          },
+          width: container.clientWidth || 800,
+          height: 420,
+        });
+        
+        chartRef.current = chart;
+        seriesRef.current = chart.addCandlestickSeries({
+          upColor: "#22c55e",
+          downColor: "#ef4444",
+          borderUpColor: "#22c55e",
+          borderDownColor: "#ef4444",
+          wickUpColor: "#22c55e",
+          wickDownColor: "#ef4444",
+        });
+        console.log(`[VisualBacktest] ${name} chart initialized successfully`);
+      } catch (err) {
+        console.error(`[VisualBacktest] ${name} chart init failed:`, err);
+      }
     };
 
-    if (niftyChartRef.current) initChart(niftyChartRef.current, niftyChartApi, niftySeries);
-    if (bankNiftyChartRef.current) initChart(bankNiftyChartRef.current, bankNiftyChartApi, bankNiftySeries);
+    // Delay initialization to ensure DOM is ready
+    const timer = setTimeout(() => {
+      if (niftyChartRef.current) initChart(niftyChartRef.current, niftyChartApi, niftySeries, "Nifty");
+      if (bankNiftyChartRef.current) initChart(bankNiftyChartRef.current, bankNiftyChartApi, bankNiftySeries, "BankNifty");
+    }, 100);
 
     const handleResize = () => {
       if (niftyChartRef.current && niftyChartApi.current) {
@@ -109,7 +126,10 @@ export function VisualBacktest() {
     };
     
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   const renderTradesOnChart = (series: ISeriesApi<"Candlestick">, trades: any[]) => {
@@ -175,35 +195,57 @@ export function VisualBacktest() {
       setBankNifty({ result: bankNiftyData, loading: false, error: "" });
 
       // Render Nifty
+      console.log("[VisualBacktest] Nifty data:", niftyData.candles?.length, "candles,", niftyData.trades?.length, "trades");
       if (niftySeries.current && niftyData.candles?.length > 0) {
-        const candles: CandlestickData[] = niftyData.candles.map((c: any) => ({
-          time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-        }));
-        niftySeries.current.setData(candles);
-        if (niftyData.trades?.length > 0) {
-          renderTradesOnChart(niftySeries.current, niftyData.trades);
+        try {
+          const candles: CandlestickData[] = niftyData.candles.map((c: any) => ({
+            time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+          }));
+          console.log("[VisualBacktest] Setting Nifty data, first candle:", candles[0]);
+          niftySeries.current.setData(candles);
+          if (niftyData.trades?.length > 0) {
+            renderTradesOnChart(niftySeries.current, niftyData.trades);
+          }
+          setTimeout(() => {
+            niftyChartApi.current?.timeScale().fitContent();
+            console.log("[VisualBacktest] Nifty chart fitted");
+          }, 100);
+        } catch (err) {
+          console.error("[VisualBacktest] Nifty render error:", err);
         }
-        setTimeout(() => niftyChartApi.current?.timeScale().fitContent(), 100);
+      } else {
+        console.log("[VisualBacktest] Nifty series not ready or no candles");
       }
 
       // Render Bank Nifty
+      console.log("[VisualBacktest] BankNifty data:", bankNiftyData.candles?.length, "candles,", bankNiftyData.trades?.length, "trades");
       if (bankNiftySeries.current && bankNiftyData.candles?.length > 0) {
-        const candles: CandlestickData[] = bankNiftyData.candles.map((c: any) => ({
-          time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-        }));
-        bankNiftySeries.current.setData(candles);
-        if (bankNiftyData.trades?.length > 0) {
-          renderTradesOnChart(bankNiftySeries.current, bankNiftyData.trades);
+        try {
+          const candles: CandlestickData[] = bankNiftyData.candles.map((c: any) => ({
+            time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+          }));
+          console.log("[VisualBacktest] Setting BankNifty data, first candle:", candles[0]);
+          bankNiftySeries.current.setData(candles);
+          if (bankNiftyData.trades?.length > 0) {
+            renderTradesOnChart(bankNiftySeries.current, bankNiftyData.trades);
+          }
+          setTimeout(() => {
+            bankNiftyChartApi.current?.timeScale().fitContent();
+            console.log("[VisualBacktest] BankNifty chart fitted");
+          }, 100);
+        } catch (err) {
+          console.error("[VisualBacktest] BankNifty render error:", err);
         }
-        setTimeout(() => bankNiftyChartApi.current?.timeScale().fitContent(), 100);
+      } else {
+        console.log("[VisualBacktest] BankNifty series not ready or no candles");
       }
     } catch (err: any) {
       setNifty({ result: null, loading: false, error: err.message });
