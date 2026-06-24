@@ -91,9 +91,14 @@ export function VisualBacktest() {
             vertLine: { color: "#3f3f46", width: 1, style: 2 },
             horzLine: { color: "#3f3f46", width: 1, style: 2 },
           },
-          width: container.clientWidth || 800,
-          height: 420,
+          autoSize: true,
         });
+        
+        // Inspect DOM after creation
+        setTimeout(() => {
+          const canvas = container.querySelector('canvas');
+          console.log(`[VisualBacktest] ${name} canvas found:`, !!canvas, 'size:', canvas?.clientWidth, canvas?.clientHeight);
+        }, 200);
         
         chartRef.current = chart;
         seriesRef.current = chart.addCandlestickSeries({
