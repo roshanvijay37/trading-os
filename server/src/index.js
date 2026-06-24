@@ -9,6 +9,7 @@ dns.setDefaultResultOrder("ipv4first");
 
 import accountRoutes from "./routes/account.js";
 import authRoutes from "./routes/auth.js";
+import autoTradeRoutes from "./routes/autoTrade.js";
 import backtestRoutes from "./routes/backtest.js";
 import orderRoutes from "./routes/orders.js";
 
@@ -37,6 +38,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/account", accountRoutes);
+app.use("/api/auto-trade", autoTradeRoutes);
 app.use("/api/backtest", backtestRoutes);
 
 // Global error handler
