@@ -211,8 +211,18 @@ router.get("/option-chain", requireAuth, async (req, res) => {
       },
     });
 
-    const data = await response.json();
-    console.log("Option chain FYERS response:", JSON.stringify(data).slice(0, 500));
+    const responseText = await response.text();
+    console.log("Option chain raw response:", responseText.slice(0, 500));
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("Failed to parse option chain response:", parseError.message);
+      throw new Error(`FYERS returned invalid JSON: ${responseText.slice(0, 200)}`);
+    }
+
+    console.log("Option chain parsed:", JSON.stringify(data).slice(0, 500));
 
     if (data.s !== "ok") {
       throw new Error(data.message || `FYERS error: ${JSON.stringify(data)}`);
