@@ -398,7 +398,14 @@ export function Backtest() {
             <label className="mb-1.5 block text-xs text-zinc-500">Timeframe</label>
             <select
               value={resolution}
-              onChange={(e) => setResolution(e.target.value)}
+              onChange={(e) => {
+                const newRes = e.target.value;
+                setResolution(newRes);
+                // Auto-adjust fromDate to max available data for this timeframe
+                const maxDays = timeframes.find((t) => t.value === newRes)?.maxDays || 90;
+                const newFrom = new Date(Date.now() - maxDays * 86400000).toISOString().split("T")[0];
+                setFromDate(newFrom);
+              }}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
             >
               {timeframes.map((t) => (
