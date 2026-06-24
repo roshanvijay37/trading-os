@@ -1182,6 +1182,19 @@ router.post("/run-multi", async (req, res) => {
   }
 });
 
+// ─── API Endpoint: List active sessions (debug) ───────────────────
+router.get("/sessions", (_req, res) => {
+  const sessions = getAllSessions();
+  res.json({
+    activeSessions: sessions.length,
+    sessions: sessions.map(s => ({
+      userId: s.userId,
+      sessionId: s.sessionId,
+      createdAt: s.createdAt,
+    })),
+  });
+});
+
 // ─── API Endpoint: Test FYERS data availability ───────────────────
 router.post("/test-range", async (req, res) => {
   const { symbol = "NSE:NIFTYBANK-INDEX", resolution = "5", daysBack = 30 } = req.body;
@@ -1194,7 +1207,10 @@ router.post("/test-range", async (req, res) => {
   }
 
   if (!session) {
-    return res.status(401).json({ error: "No active FYERS session" });
+    return res.status(401).json({ 
+      error: "No active FYERS session",
+      hint: "Login at https://roshanvijay.com first, or use GET /api/backtest/sessions to see active sessions"
+    });
   }
 
   try {
