@@ -199,13 +199,23 @@ router.get("/option-chain", requireAuth, async (req, res) => {
   }
 
   try {
-    const response = await fyersApiCall(
-      `/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`,
-      req.fyers.accessToken,
-      req.fyers.appId,
-    );
+    // FYERS option-chain is on the DATA API, not API v3
+    const url = `https://api-t1.fyers.in/data/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `${appId}:${req.fyers.accessToken}`,
+      },
+    });
 
-    res.json({ optionChain: response.d || [] });
+    const data = await response.json();
+    console.log("Option chain response:", JSON.stringify(data).slice(0, 300));
+
+    if (data.s !== "ok") {
+      throw new Error(data.message || "FYERS option chain error");
+    }
+
+    res.json({ optionChain: data.data || [] });
   } catch (error) {
     console.error("Get option chain error:", error);
     res.status(400).json({
