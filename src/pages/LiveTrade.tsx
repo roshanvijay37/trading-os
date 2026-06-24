@@ -136,9 +136,17 @@ export function LiveTrade() {
       );
       if (!validation.valid) throw new Error(validation.errors.join(" "));
 
+      // Determine correct symbol format
+      // Options (CE/PE) should NOT have -EQ suffix, equities should
+      const rawSymbol = symbol.trim().toUpperCase();
+      const isOption = rawSymbol.includes("CE") || rawSymbol.includes("PE");
+      const formattedSymbol = isOption 
+        ? (rawSymbol.startsWith("NSE:") ? rawSymbol : `NSE:${rawSymbol}`)
+        : (rawSymbol.startsWith("NSE:") ? rawSymbol : `NSE:${rawSymbol}-EQ`);
+
       // Place real order through FYERS
       const orderResponse = await orderApi.place({
-        symbol: `NSE:${symbol.trim().toUpperCase()}-EQ`,
+        symbol: formattedSymbol,
         side: side === "LONG" ? 1 : -1,
         qty: quantity,
         type: 2, // Market order
