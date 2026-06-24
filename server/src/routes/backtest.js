@@ -43,7 +43,52 @@ function calculateRSI(closes, period = 2) {
 }
 
 // ─── Fetch Historical Data from FYERS ─────────────────────────────
+// FYERS limits: max 100 days for intraday resolutions (1,2,3,5,10,15,20,30,45,60,120,180,240)
+const INTRADAY_RESOLUTIONS = ["1", "2", "3", "5", "10", "15", "20", "30", "45", "60", "120", "180", "240"];
+const MAX_DAYS_PER_REQUEST = 100;
+const DAY_IN_SECONDS = 86400;
+
 async function fetchHistoricalData(symbol, resolution, fromTs, toTs, accessToken) {
+  const cacheKey = `${symbol}_${resolution}_${fromTs}_${toTs}`;
+  if (dataCache.has(cacheKey)) return dataCache.get(cacheKey);
+
+  const isIntraday = INTRADAY_RESOLUTIONS.includes(resolution);
+  const totalDays = (toTs - fromTs) / DAY_IN_SECONDS;
+
+  // If intraday and more than 100 days, chunk the requests
+  if (isIntraday && totalDays > MAX_DAYS_PER_REQUEST) {
+    console.log(`FYERS limit: ${resolution}m max ${MAX_DAYS_PER_REQUEST} days. Chunking ${totalDays} days...`);
+    let allCandles = [];
+    let currentFrom = fromTs;
+
+    while (currentFrom < toTs) {
+      let currentTo = currentFrom + (MAX_DAYS_PER_REQUEST * DAY_IN_SECONDS);
+      if (currentTo > toTs) currentTo = toTs;
+
+      const chunk = await fetchSingleRange(symbol, resolution, currentFrom, currentTo, accessToken);
+      allCandles = allCandles.concat(chunk);
+
+      currentFrom = currentTo + 1;
+    }
+
+    // Remove duplicates (FYERS may overlap)
+    const seen = new Set();
+    const unique = allCandles.filter(c => {
+      const key = c[0];
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    dataCache.set(cacheKey, unique);
+    return unique;
+  }
+
+  // Single request for daily or < 100 days
+  return fetchSingleRange(symbol, resolution, fromTs, toTs, accessToken);
+}
+
+async function fetchSingleRange(symbol, resolution, fromTs, toTs, accessToken) {
   const cacheKey = `${symbol}_${resolution}_${fromTs}_${toTs}`;
   if (dataCache.has(cacheKey)) return dataCache.get(cacheKey);
 
