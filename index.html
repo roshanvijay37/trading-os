@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#09090b" />
+    <meta
+      name="description"
+      content="TradingOS — a discipline-first risk manager and trading journal."
+    />
+    <title>TradingOS</title>
+    <script>
+      // Redirect direct paths to hash-based routing for SPA
+      (function() {
+        var path = window.location.pathname;
+        var hash = window.location.hash;
+        var search = window.location.search;
+        
+        // If we have an auth_code in the URL but no hash, redirect to hash
+        if (search.includes('auth_code=') && !hash) {
+          window.location.replace('/#' + search);
+          return;
+        }
+        
+        // Handle direct paths like /live-trade
+        if (path !== '/' && path !== '' && !hash) {
+          window.location.replace('/#' + path + search);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
