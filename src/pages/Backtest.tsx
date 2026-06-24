@@ -174,9 +174,12 @@ export function Backtest() {
     setError("");
     setResult(null);
 
-    const warning = validateDateRange();
-    if (warning) {
-      setError(warning);
+    // Only validate date range in manual mode (NLP mode uses server-side chunking)
+    if (mode === "manual") {
+      const warning = validateDateRange();
+      if (warning) {
+        setError(warning);
+      }
     }
 
     try {
