@@ -143,18 +143,38 @@ export function Backtest() {
   ];
 
   const timeframes = [
-    { value: "1", label: "1 Minute" },
-    { value: "5", label: "5 Minutes" },
-    { value: "15", label: "15 Minutes" },
-    { value: "30", label: "30 Minutes" },
-    { value: "60", label: "1 Hour" },
-    { value: "D", label: "Daily" },
+    { value: "1", label: "1 Minute", maxDays: 30 },
+    { value: "5", label: "5 Minutes", maxDays: 90 },
+    { value: "15", label: "15 Minutes", maxDays: 180 },
+    { value: "30", label: "30 Minutes", maxDays: 180 },
+    { value: "60", label: "1 Hour", maxDays: 365 },
+    { value: "D", label: "Daily", maxDays: 1825 },
   ];
+
+  const getMaxDays = (res: string) => timeframes.find((t) => t.value === res)?.maxDays || 90;
+
+  const validateDateRange = () => {
+    const maxDays = getMaxDays(resolution);
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    const diffDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    if (diffDays > maxDays) {
+      const newStart = new Date(end.getTime() - maxDays * 86400000);
+      setFromDate(newStart.toISOString().split("T")[0]);
+      return `FYERS limits ${timeframes.find((t) => t.value === resolution)?.label} data to ~${maxDays} days. Adjusted start date.`;
+    }
+    return null;
+  };
 
   const runBacktest = async () => {
     setLoading(true);
     setError("");
     setResult(null);
+
+    const warning = validateDateRange();
+    if (warning) {
+      setError(warning);
+    }
 
     try {
       let params: any;
@@ -323,6 +343,9 @@ export function Backtest() {
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
               <p className="text-xs text-zinc-500">
                 <strong className="text-zinc-400">Supported:</strong> RSI, Golden Cross, Bollinger, Stop Loss %, Risk:Reward, Capital (lakh), Timeframes (1m/5m/15m/1h/daily), Periods (1mo/3mo/6mo/1yr)
+              </p>
+              <p className="mt-1 text-xs text-amber-400">
+                <strong>Tip:</strong> 1 Hour timeframe works best — FYERS provides up to 1 year of 1h data!
               </p>
             </div>
           </div>
