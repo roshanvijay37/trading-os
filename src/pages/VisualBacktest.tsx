@@ -199,23 +199,51 @@ export function VisualBacktest() {
       if (niftySeries.current && niftyData.candles?.length > 0) {
         try {
           const candles: CandlestickData[] = niftyData.candles
-            .filter((c: any) => c.open != null && c.high != null && c.low != null && c.close != null && c.datetime)
+            .filter((c: any) => {
+              const valid = c != null && c.open != null && c.high != null && c.low != null && c.close != null && c.datetime &&
+                !isNaN(Number(c.open)) && !isNaN(Number(c.high)) && !isNaN(Number(c.low)) && !isNaN(Number(c.close)) &&
+                Number(c.high) >= Number(c.low) && Number(c.high) >= Number(c.open) && Number(c.high) >= Number(c.close) &&
+                Number(c.low) <= Number(c.open) && Number(c.low) <= Number(c.close);
+              if (!valid) console.log("[VisualBacktest] Filtered out invalid Nifty candle:", c);
+              return valid;
+            })
             .map((c: any) => ({
               time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
               open: Number(c.open),
               high: Number(c.high),
               low: Number(c.low),
               close: Number(c.close),
-            }));
-          console.log("[VisualBacktest] Setting Nifty data, first candle:", candles[0], "total:", candles.length);
-          if (candles.length > 0) {
-            niftySeries.current.setData(candles);
-            if (niftyData.trades?.length > 0) {
-              renderTradesOnChart(niftySeries.current, niftyData.trades);
-            }
+            }))
+            .sort((a: any, b: any) => (a.time as number) - (b.time as number));
+          
+          // Remove duplicates by time
+          const uniqueCandles = candles.filter((c: any, i: number, arr: any[]) => 
+            i === 0 || (arr[i - 1].time as number) !== (c.time as number)
+          );
+          
+          console.log("[VisualBacktest] Setting Nifty data, first:", uniqueCandles[0], "last:", uniqueCandles[uniqueCandles.length - 1], "total:", uniqueCandles.length);
+          
+          // Check for any remaining null/undefined in the data
+          const badCandle = uniqueCandles.find((c: any) => !c.time || c.open == null || c.high == null || c.low == null || c.close == null);
+          if (badCandle) {
+            console.error("[VisualBacktest] BAD Nifty candle found:", badCandle);
+          }
+          
+          if (uniqueCandles.length > 0 && !badCandle) {
+            console.log("[VisualBacktest] Calling setData for Nifty...");
+            niftySeries.current.setData(uniqueCandles);
+            console.log("[VisualBacktest] Nifty setData succeeded");
+            // Temporarily skip markers to test
+            // if (niftyData.trades?.length > 0) {
+            //   renderTradesOnChart(niftySeries.current, niftyData.trades);
+            // }
             setTimeout(() => {
-              niftyChartApi.current?.timeScale().fitContent();
-              console.log("[VisualBacktest] Nifty chart fitted");
+              try {
+                niftyChartApi.current?.timeScale().fitContent();
+                console.log("[VisualBacktest] Nifty chart fitted");
+              } catch (e) {
+                console.error("[VisualBacktest] Nifty fitContent error:", e);
+              }
             }, 100);
           }
         } catch (err) {
@@ -230,23 +258,51 @@ export function VisualBacktest() {
       if (bankNiftySeries.current && bankNiftyData.candles?.length > 0) {
         try {
           const candles: CandlestickData[] = bankNiftyData.candles
-            .filter((c: any) => c.open != null && c.high != null && c.low != null && c.close != null && c.datetime)
+            .filter((c: any) => {
+              const valid = c != null && c.open != null && c.high != null && c.low != null && c.close != null && c.datetime &&
+                !isNaN(Number(c.open)) && !isNaN(Number(c.high)) && !isNaN(Number(c.low)) && !isNaN(Number(c.close)) &&
+                Number(c.high) >= Number(c.low) && Number(c.high) >= Number(c.open) && Number(c.high) >= Number(c.close) &&
+                Number(c.low) <= Number(c.open) && Number(c.low) <= Number(c.close);
+              if (!valid) console.log("[VisualBacktest] Filtered out invalid BankNifty candle:", c);
+              return valid;
+            })
             .map((c: any) => ({
               time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
               open: Number(c.open),
               high: Number(c.high),
               low: Number(c.low),
               close: Number(c.close),
-            }));
-          console.log("[VisualBacktest] Setting BankNifty data, first candle:", candles[0], "total:", candles.length);
-          if (candles.length > 0) {
-            bankNiftySeries.current.setData(candles);
-            if (bankNiftyData.trades?.length > 0) {
-              renderTradesOnChart(bankNiftySeries.current, bankNiftyData.trades);
-            }
+            }))
+            .sort((a: any, b: any) => (a.time as number) - (b.time as number));
+          
+          // Remove duplicates by time
+          const uniqueCandles = candles.filter((c: any, i: number, arr: any[]) => 
+            i === 0 || (arr[i - 1].time as number) !== (c.time as number)
+          );
+          
+          console.log("[VisualBacktest] Setting BankNifty data, first:", uniqueCandles[0], "last:", uniqueCandles[uniqueCandles.length - 1], "total:", uniqueCandles.length);
+          
+          // Check for any remaining null/undefined in the data
+          const badCandle = uniqueCandles.find((c: any) => !c.time || c.open == null || c.high == null || c.low == null || c.close == null);
+          if (badCandle) {
+            console.error("[VisualBacktest] BAD BankNifty candle found:", badCandle);
+          }
+          
+          if (uniqueCandles.length > 0 && !badCandle) {
+            console.log("[VisualBacktest] Calling setData for BankNifty...");
+            bankNiftySeries.current.setData(uniqueCandles);
+            console.log("[VisualBacktest] BankNifty setData succeeded");
+            // Temporarily skip markers to test
+            // if (bankNiftyData.trades?.length > 0) {
+            //   renderTradesOnChart(bankNiftySeries.current, bankNiftyData.trades);
+            // }
             setTimeout(() => {
-              bankNiftyChartApi.current?.timeScale().fitContent();
-              console.log("[VisualBacktest] BankNifty chart fitted");
+              try {
+                bankNiftyChartApi.current?.timeScale().fitContent();
+                console.log("[VisualBacktest] BankNifty chart fitted");
+              } catch (e) {
+                console.error("[VisualBacktest] BankNifty fitContent error:", e);
+              }
             }, 100);
           }
         } catch (err) {
