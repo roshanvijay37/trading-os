@@ -990,6 +990,7 @@ router.post("/run", async (req, res) => {
       fromDate,
       toDate,
       totalCandles: candles.length,
+      candles, // Include raw candles for chart rendering
       ...result,
     });
   } catch (error) {
