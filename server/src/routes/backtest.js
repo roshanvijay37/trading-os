@@ -42,6 +42,34 @@ function calculateRSI(closes, period = 2) {
   return rsi;
 }
 
+// ─── EMA Calculation ──────────────────────────────────────────────
+function calculateEMA(closes, period) {
+  const ema = [];
+  if (closes.length < period) return ema;
+
+  // Start with SMA
+  let sum = 0;
+  for (let i = 0; i < period; i++) {
+    sum += closes[i];
+  }
+  let prevEMA = sum / period;
+  ema.push(prevEMA);
+
+  const multiplier = 2 / (period + 1);
+
+  for (let i = period; i < closes.length; i++) {
+    prevEMA = (closes[i] - prevEMA) * multiplier + prevEMA;
+    ema.push(prevEMA);
+  }
+
+  return ema;
+}
+
+// ─── Inside Candle Detection ──────────────────────────────────────
+function isInsideCandle(prev, current) {
+  return current.high < prev.high && current.low > prev.low;
+}
+
 // ─── Fetch Historical Data from FYERS ─────────────────────────────
 // FYERS limits: max 100 days for intraday resolutions (1,2,3,5,10,15,20,30,45,60,120,180,240)
 const INTRADAY_RESOLUTIONS = ["1", "2", "3", "5", "10", "15", "20", "30", "45", "60", "120", "180", "240"];
@@ -130,9 +158,11 @@ function parseCandles(rawCandles) {
 // ─── Backtest Engine ──────────────────────────────────────────────
 function runBacktest(candles, config) {
   const {
+    strategy = "RSI",
     rsiPeriod = 2,
     oversoldThreshold = 10,
     overboughtThreshold = 90,
+    emaPeriod = 5,
     capital = 1000000,
     riskPercent = 1,
     slBuffer = 0.005,
@@ -140,9 +170,12 @@ function runBacktest(candles, config) {
     maxHoldBars = 12,
   } = config;
 
+  // Pre-calculate indicators
   const closes = candles.map((c) => c.close);
   const rsiValues = calculateRSI(closes, rsiPeriod);
+  const emaValues = calculateEMA(closes, emaPeriod);
   const rsiOffset = candles.length - rsiValues.length;
+  const emaOffset = candles.length - emaValues.length;
 
   const trades = [];
   const equityCurve = [{ date: candles[0].datetime, equity: capital }];
@@ -157,18 +190,28 @@ function runBacktest(candles, config) {
   let maxConsecutiveLosses = 0;
   let currentConsecutiveLosses = 0;
 
-  for (let i = Math.max(rsiOffset, 1); i < candles.length; i++) {
+  // Alert Candle tracking for 5 EMA strategy
+  let alertCandle = null;
+
+  // Inside Candle tracking
+  let motherCandle = null;
+  let insideCandle = null;
+
+  const warmup = Math.max(rsiOffset, emaOffset, 5);
+
+  for (let i = warmup; i < candles.length; i++) {
     const candle = candles[i];
+    const prevCandle = candles[i - 1];
+    const prev2Candle = candles[i - 2];
     const rsi = i >= rsiOffset ? rsiValues[i - rsiOffset] : null;
     const prevRsi = i - 1 >= rsiOffset ? rsiValues[i - 1 - rsiOffset] : null;
-
-    if (rsi === null || prevRsi === null) continue;
+    const ema = i >= emaOffset ? emaValues[i - emaOffset] : null;
 
     if (currentCapital > peakEquity) peakEquity = currentCapital;
     const drawdown = ((peakEquity - currentCapital) / peakEquity) * 100;
     if (drawdown > maxDrawdown) maxDrawdown = drawdown;
 
-    // ── Exit Logic ─────────────────────────────────────────────
+    // ── Exit Logic (common for all strategies) ────────────────────
     if (position) {
       const barsHeld = i - position.entryBar;
       let exitPrice = null;
@@ -189,12 +232,17 @@ function runBacktest(candles, config) {
       } else if (barsHeld >= maxHoldBars) {
         exitPrice = candle.close;
         exitReason = "TIME";
-      } else if (position.side === "LONG" && rsi > overboughtThreshold) {
-        exitPrice = candle.close;
-        exitReason = "RSI_REVERSE";
-      } else if (position.side === "SHORT" && rsi < oversoldThreshold) {
-        exitPrice = candle.close;
-        exitReason = "RSI_REVERSE";
+      }
+
+      // RSI-specific exits
+      if (strategy === "RSI" && exitPrice === null) {
+        if (position.side === "LONG" && rsi > overboughtThreshold) {
+          exitPrice = candle.close;
+          exitReason = "RSI_REVERSE";
+        } else if (position.side === "SHORT" && rsi < oversoldThreshold) {
+          exitPrice = candle.close;
+          exitReason = "RSI_REVERSE";
+        }
       }
 
       if (exitPrice !== null) {
@@ -240,52 +288,173 @@ function runBacktest(candles, config) {
         });
 
         position = null;
+        alertCandle = null;
       }
       continue;
     }
 
-    // ── Entry Logic ──────────────────────────────────────────────
-    if (prevRsi > oversoldThreshold && rsi <= oversoldThreshold) {
-      const entryPrice = candle.open;
-      const stopDistance = entryPrice * slBuffer;
-      const sl = Math.round((entryPrice - stopDistance) * 100) / 100;
-      const riskAmount = currentCapital * (riskPercent / 100);
-      const qty = Math.floor(riskAmount / stopDistance);
+    // ════════════════════════════════════════════════════════════════
+    // ENTRY LOGIC — Strategy Selection
+    // ════════════════════════════════════════════════════════════════
 
-      if (qty > 0) {
-        const targetDistance = stopDistance * targetMultiplier;
-        const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+    // ── RSI 2-Period Strategy ────────────────────────────────────
+    if (strategy === "RSI" && rsi !== null && prevRsi !== null) {
+      if (prevRsi > oversoldThreshold && rsi <= oversoldThreshold) {
+        const entryPrice = candle.open;
+        const stopDistance = entryPrice * slBuffer;
+        const sl = Math.round((entryPrice - stopDistance) * 100) / 100;
+        const riskAmount = currentCapital * (riskPercent / 100);
+        const qty = Math.floor(riskAmount / stopDistance);
 
-        position = {
-          side: "LONG",
-          entryPrice,
-          qty,
-          sl,
-          target,
-          entryBar: i,
-          entryTime: candle.datetime,
+        if (qty > 0) {
+          const targetDistance = stopDistance * targetMultiplier;
+          const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+          position = {
+            side: "LONG",
+            entryPrice,
+            qty,
+            sl,
+            target,
+            entryBar: i,
+            entryTime: candle.datetime,
+          };
+        }
+      } else if (prevRsi < overboughtThreshold && rsi >= overboughtThreshold) {
+        const entryPrice = candle.open;
+        const stopDistance = entryPrice * slBuffer;
+        const sl = Math.round((entryPrice + stopDistance) * 100) / 100;
+        const riskAmount = currentCapital * (riskPercent / 100);
+        const qty = Math.floor(riskAmount / stopDistance);
+
+        if (qty > 0) {
+          const targetDistance = stopDistance * targetMultiplier;
+          const target = Math.round((entryPrice - targetDistance) * 100) / 100;
+
+          position = {
+            side: "SHORT",
+            entryPrice,
+            qty,
+            sl,
+            target,
+            entryBar: i,
+            entryTime: candle.datetime,
+          };
+        }
+      }
+    }
+
+    // ── 5 EMA Strategy (Subhasish Pani) ──────────────────────────
+    else if (strategy === "EMA5" && ema !== null) {
+      // Bullish Setup: Candle closes COMPLETELY BELOW 5 EMA
+      if (prevCandle.close < ema && prevCandle.high < ema) {
+        // New Alert Candle
+        alertCandle = {
+          candle: prevCandle,
+          type: "BULLISH",
+          index: i - 1,
         };
       }
-    } else if (prevRsi < overboughtThreshold && rsi >= overboughtThreshold) {
-      const entryPrice = candle.open;
-      const stopDistance = entryPrice * slBuffer;
-      const sl = Math.round((entryPrice + stopDistance) * 100) / 100;
-      const riskAmount = currentCapital * (riskPercent / 100);
-      const qty = Math.floor(riskAmount / stopDistance);
-
-      if (qty > 0) {
-        const targetDistance = stopDistance * targetMultiplier;
-        const target = Math.round((entryPrice - targetDistance) * 100) / 100;
-
-        position = {
-          side: "SHORT",
-          entryPrice,
-          qty,
-          sl,
-          target,
-          entryBar: i,
-          entryTime: candle.datetime,
+      // Bearish Setup: Candle closes COMPLETELY ABOVE 5 EMA
+      else if (prevCandle.close > ema && prevCandle.low > ema) {
+        alertCandle = {
+          candle: prevCandle,
+          type: "BEARISH",
+          index: i - 1,
         };
+      }
+
+      // Check for entry on current candle
+      if (alertCandle) {
+        const ac = alertCandle.candle;
+        const riskAmount = currentCapital * (riskPercent / 100);
+
+        // Bullish Entry: Break above Alert Candle high
+        if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
+          const entryPrice = ac.high;
+          const sl = ac.low;
+          const stopDistance = entryPrice - sl;
+          
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * targetMultiplier;
+              const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+              position = {
+                side: "LONG",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+              };
+              alertCandle = null;
+            }
+          }
+        }
+        // Bearish Entry: Break below Alert Candle low
+        else if (alertCandle.type === "BEARISH" && candle.low < ac.low) {
+          const entryPrice = ac.low;
+          const sl = ac.high;
+          const stopDistance = sl - entryPrice;
+
+          if (stopDistance > 0) {
+            const qty = Math.floor(riskAmount / stopDistance);
+            if (qty > 0) {
+              const targetDistance = stopDistance * targetMultiplier;
+              const target = Math.round((entryPrice - targetDistance) * 100) / 100;
+
+              position = {
+                side: "SHORT",
+                entryPrice,
+                qty,
+                sl: Math.round(sl * 100) / 100,
+                target,
+                entryBar: i,
+                entryTime: candle.datetime,
+              };
+              alertCandle = null;
+            }
+          }
+        }
+      }
+    }
+
+    // ── Inside Candle Breakout Strategy ──────────────────────────
+    else if (strategy === "INSIDE_CANDLE") {
+      // Check if previous candle is Inside Candle of the one before it
+      if (isInsideCandle(prev2Candle, prevCandle)) {
+        motherCandle = prev2Candle;
+        insideCandle = prevCandle;
+      }
+
+      if (motherCandle && insideCandle) {
+        const riskAmount = currentCapital * (riskPercent / 100);
+        const entryPrice = insideCandle.high;
+        const sl = insideCandle.low;
+        const stopDistance = entryPrice - sl;
+
+        if (stopDistance > 0 && candle.high > insideCandle.high) {
+          const qty = Math.floor(riskAmount / stopDistance);
+          if (qty > 0) {
+            const targetDistance = stopDistance * targetMultiplier;
+            const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+            position = {
+              side: "LONG",
+              entryPrice,
+              qty,
+              sl: Math.round(sl * 100) / 100,
+              target,
+              entryBar: i,
+              entryTime: candle.datetime,
+            };
+            motherCandle = null;
+            insideCandle = null;
+          }
+        }
       }
     }
   }
@@ -351,9 +520,11 @@ router.post("/run", async (req, res) => {
     resolution = "5",
     fromDate,
     toDate,
+    strategy = "RSI",
     rsiPeriod = 2,
     oversoldThreshold = 10,
     overboughtThreshold = 90,
+    emaPeriod = 5,
     capital = 1000000,
     riskPercent = 1,
     slBuffer = 0.005,
@@ -382,14 +553,16 @@ router.post("/run", async (req, res) => {
     const rawCandles = await fetchHistoricalData(symbol, resolution, fromTs, toTs, session.accessToken);
     const candles = parseCandles(rawCandles);
 
-    if (candles.length < rsiPeriod + 10) {
+    if (candles.length < 20) {
       return res.status(400).json({ error: "Insufficient data for backtest" });
     }
 
     const result = runBacktest(candles, {
+      strategy,
       rsiPeriod,
       oversoldThreshold,
       overboughtThreshold,
+      emaPeriod,
       capital,
       riskPercent,
       slBuffer,
@@ -401,6 +574,7 @@ router.post("/run", async (req, res) => {
       success: true,
       symbol,
       resolution,
+      strategy,
       fromDate,
       toDate,
       totalCandles: candles.length,

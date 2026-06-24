@@ -61,6 +61,11 @@ function parseNaturalLanguage(text: string) {
   else if (t.includes("sensex")) config.symbol = "BSE:SENSEX";
   else config.symbol = "NSE:NIFTYBANK-INDEX";
 
+  // Strategy
+  if (t.includes("5 ema") || t.includes("ema 5") || t.includes("subhasish") || t.includes("pani")) config.strategy = "EMA5";
+  else if (t.includes("inside candle") || t.includes("mother candle")) config.strategy = "INSIDE_CANDLE";
+  else config.strategy = "RSI";
+
   // Timeframe
   if (t.includes("1 min")) config.resolution = "1";
   else if (t.includes("5 min")) config.resolution = "5";
@@ -133,6 +138,7 @@ export function Backtest() {
   const [resolution, setResolution] = useState("5");
   const [fromDate, setFromDate] = useState("2026-03-24");
   const [toDate, setToDate] = useState("2026-06-24");
+  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "INSIDE_CANDLE">("RSI");
   const [rsiPeriod, setRsiPeriod] = useState(2);
   const [oversold, setOversold] = useState(10);
   const [overbought, setOverbought] = useState(90);
@@ -152,6 +158,12 @@ export function Backtest() {
     { value: "30", label: "30 Minutes", maxDays: 180 },
     { value: "60", label: "1 Hour", maxDays: 365 },
     { value: "D", label: "Daily", maxDays: 1825 },
+  ];
+
+  const strategies = [
+    { value: "RSI", label: "RSI 2-Period (Mean Reversion)" },
+    { value: "EMA5", label: "5 EMA (Subhasish Pani)" },
+    { value: "INSIDE_CANDLE", label: "Inside Candle Breakout" },
   ];
 
   const getMaxDays = (res: string) => timeframes.find((t) => t.value === res)?.maxDays || 90;
@@ -198,6 +210,7 @@ export function Backtest() {
           resolution,
           fromDate,
           toDate,
+          strategy,
           rsiPeriod,
           oversoldThreshold: oversold,
           overboughtThreshold: overbought,
@@ -302,7 +315,7 @@ export function Backtest() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Backtest Strategy</h1>
-        <p className="mt-1 text-sm text-zinc-500">Test your 2-Period RSI strategy on historical data</p>
+        <p className="mt-1 text-sm text-zinc-500">Test RSI, 5 EMA (Subhasish Pani), or Inside Candle strategies</p>
       </div>
 
       {/* Mode Toggle */}
@@ -358,6 +371,21 @@ export function Backtest() {
         ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
+            <label className="mb-1.5 block text-xs text-zinc-500">Strategy</label>
+            <select
+              value={strategy}
+              onChange={(e) => setStrategy(e.target.value as "RSI" | "EMA5" | "INSIDE_CANDLE")}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
+            >
+              {strategies.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="mb-1.5 block text-xs text-zinc-500">Symbol</label>
             <select
               value={symbol}
@@ -407,6 +435,8 @@ export function Backtest() {
             />
           </div>
 
+          {strategy === "RSI" && (
+          <>
           <div>
             <label className="mb-1.5 block text-xs text-zinc-500">RSI Period</label>
             <input
@@ -442,6 +472,34 @@ export function Backtest() {
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
             />
           </div>
+          </>
+          )}
+
+          {strategy === "EMA5" && (
+          <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+            <p className="text-xs text-zinc-400">
+              <strong className="text-lime-300">5 EMA Strategy (Subhasish Pani):</strong>
+            </p>
+            <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
+              <li>CE Buy: Candle closes completely BELOW 5 EMA → Break above Alert Candle high</li>
+              <li>PE Buy: Candle closes completely ABOVE 5 EMA → Break below Alert Candle low</li>
+              <li>SL = Alert Candle high/low | Target = 1:3 R:R minimum</li>
+            </ul>
+          </div>
+          )}
+
+          {strategy === "INSIDE_CANDLE" && (
+          <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+            <p className="text-xs text-zinc-400">
+              <strong className="text-lime-300">Inside Candle Breakout:</strong>
+            </p>
+            <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
+              <li>Identify Mother Candle and Inside Candle</li>
+              <li>Buy above Inside Candle high</li>
+              <li>SL below Inside Candle low</li>
+            </ul>
+          </div>
+          )}
 
           <div>
             <label className="mb-1.5 block text-xs text-zinc-500">Capital (₹)</label>
