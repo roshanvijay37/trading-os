@@ -498,7 +498,7 @@ async function tradingLoop(session) {
   if (lastTradeDate !== today) {
     todayTrades = 0;
     lastTradeDate = today;
-    activeAlert = null;
+    activeAlerts.clear();
     openPositions = [];
     console.log(`[AUTO-TRADER] 📅 New day - counters reset`);
   }
@@ -623,7 +623,7 @@ export function getAutoTraderStatus() {
     maxTrades: CONFIG.MAX_TRADES_PER_DAY,
     openPositions: openPositions.filter(p => p.status === "OPEN"),
     closedPositions: openPositions.filter(p => p.status === "CLOSED"),
-    activeAlert,
+    activeAlerts: Object.fromEntries(activeAlerts),
     latestData,
     recentSignals: getRecentSignals(10),
     config: CONFIG,

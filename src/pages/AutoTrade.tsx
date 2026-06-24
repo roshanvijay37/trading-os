@@ -45,7 +45,7 @@ interface AutoTradeStatus {
   todayTrades: number;
   maxTrades: number;
   openPositions: Position[];
-  activeAlert: any;
+  activeAlerts: Record<string, any>;
   latestData: Record<string, any>;
   recentSignals: Signal[];
   config: {
@@ -313,39 +313,41 @@ export function AutoTrade() {
           )}
 
           {/* Active Alert */}
-          {status.activeAlert && (
+          {status.activeAlerts && Object.keys(status.activeAlerts).length > 0 && (
             <Card className="mt-6 border-amber-400/20">
               <div className="flex items-center gap-2">
                 <AlertTriangle size={16} className="text-amber-400" />
-                <h3 className="text-sm font-medium text-amber-300">Active Alert</h3>
+                <h3 className="text-sm font-medium text-amber-300">Active Alerts</h3>
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <div>
-                  <p className="text-xs text-zinc-500">Type</p>
-                  <p className="text-sm font-medium text-white">
-                    {status.activeAlert.type === "BULLISH_ALERT" ? (
-                      <span className="flex items-center gap-1 text-lime-300">
-                        <TrendingUp size={14} /> Bullish
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-rose-300">
-                        <TrendingDown size={14} /> Bearish
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-zinc-500">Underlying</p>
-                  <p className="text-sm font-medium text-white">
-                    {status.activeAlert.underlying}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-zinc-500">5 EMA</p>
-                  <p className="text-sm font-medium text-white">
-                    {status.activeAlert.ema5?.toFixed(2)}
-                  </p>
-                </div>
+              <div className="mt-3 space-y-3">
+                {Object.entries(status.activeAlerts).map(([underlying, alert]) => (
+                  <div key={underlying} className="grid gap-2 sm:grid-cols-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                    <div>
+                      <p className="text-xs text-zinc-500">Type</p>
+                      <p className="text-sm font-medium text-white">
+                        {alert.type === "BULLISH_ALERT" ? (
+                          <span className="flex items-center gap-1 text-lime-300">
+                            <TrendingUp size={14} /> Bullish
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-rose-300">
+                            <TrendingDown size={14} /> Bearish
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-500">Underlying</p>
+                      <p className="text-sm font-medium text-white">{underlying}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-500">5 EMA</p>
+                      <p className="text-sm font-medium text-white">
+                        {alert.ema5?.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </Card>
           )}
