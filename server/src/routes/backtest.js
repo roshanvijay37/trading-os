@@ -173,7 +173,7 @@ function runBacktest(candles, config) {
     slBuffer = 0.005,
     targetMultiplier = 2,
     maxHoldBars = 12,
-    slippage = 0.001, // 0.1% slippage on entry and exit
+    slippage = 0.0002, // 0.02% slippage (~10 pts on BANKNIFTY, ~5 pts on NIFTY)
   } = config;
 
   // Pre-calculate indicators
