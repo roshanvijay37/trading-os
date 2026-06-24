@@ -138,8 +138,12 @@ export function Backtest() {
   // Form state
   const [symbol, setSymbol] = useState("NSE:NIFTYBANK-INDEX");
   const [resolution, setResolution] = useState("5");
-  const [fromDate, setFromDate] = useState("2026-03-24");
-  const [toDate, setToDate] = useState("2026-06-24");
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1825);
+    return d.toISOString().split("T")[0];
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "EMA5_OPTION" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE" | "VWAP_REVERSAL" | "ORB" | "CPR_BREAKOUT" | "EMA9_20" | "FAILED_BREAKOUT" | "OPENING_MOMENTUM">("RSI");
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>(["EMA5"]);
   const [multiMode, setMultiMode] = useState(false);
