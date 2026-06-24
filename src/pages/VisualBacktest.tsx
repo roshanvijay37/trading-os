@@ -198,54 +198,62 @@ export function VisualBacktest() {
       console.log("[VisualBacktest] Nifty data:", niftyData.candles?.length, "candles,", niftyData.trades?.length, "trades");
       if (niftySeries.current && niftyData.candles?.length > 0) {
         try {
-          const candles: CandlestickData[] = niftyData.candles.map((c: any) => ({
-            time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-          }));
-          console.log("[VisualBacktest] Setting Nifty data, first candle:", candles[0]);
-          niftySeries.current.setData(candles);
-          if (niftyData.trades?.length > 0) {
-            renderTradesOnChart(niftySeries.current, niftyData.trades);
+          const candles: CandlestickData[] = niftyData.candles
+            .filter((c: any) => c.open != null && c.high != null && c.low != null && c.close != null && c.datetime)
+            .map((c: any) => ({
+              time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
+              open: Number(c.open),
+              high: Number(c.high),
+              low: Number(c.low),
+              close: Number(c.close),
+            }));
+          console.log("[VisualBacktest] Setting Nifty data, first candle:", candles[0], "total:", candles.length);
+          if (candles.length > 0) {
+            niftySeries.current.setData(candles);
+            if (niftyData.trades?.length > 0) {
+              renderTradesOnChart(niftySeries.current, niftyData.trades);
+            }
+            setTimeout(() => {
+              niftyChartApi.current?.timeScale().fitContent();
+              console.log("[VisualBacktest] Nifty chart fitted");
+            }, 100);
           }
-          setTimeout(() => {
-            niftyChartApi.current?.timeScale().fitContent();
-            console.log("[VisualBacktest] Nifty chart fitted");
-          }, 100);
         } catch (err) {
           console.error("[VisualBacktest] Nifty render error:", err);
         }
       } else {
-        console.log("[VisualBacktest] Nifty series not ready or no candles");
+        console.log("[VisualBacktest] Nifty series not ready or no candles, series:", !!niftySeries.current);
       }
 
       // Render Bank Nifty
       console.log("[VisualBacktest] BankNifty data:", bankNiftyData.candles?.length, "candles,", bankNiftyData.trades?.length, "trades");
       if (bankNiftySeries.current && bankNiftyData.candles?.length > 0) {
         try {
-          const candles: CandlestickData[] = bankNiftyData.candles.map((c: any) => ({
-            time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-          }));
-          console.log("[VisualBacktest] Setting BankNifty data, first candle:", candles[0]);
-          bankNiftySeries.current.setData(candles);
-          if (bankNiftyData.trades?.length > 0) {
-            renderTradesOnChart(bankNiftySeries.current, bankNiftyData.trades);
+          const candles: CandlestickData[] = bankNiftyData.candles
+            .filter((c: any) => c.open != null && c.high != null && c.low != null && c.close != null && c.datetime)
+            .map((c: any) => ({
+              time: Math.floor(new Date(c.datetime).getTime() / 1000) as Time,
+              open: Number(c.open),
+              high: Number(c.high),
+              low: Number(c.low),
+              close: Number(c.close),
+            }));
+          console.log("[VisualBacktest] Setting BankNifty data, first candle:", candles[0], "total:", candles.length);
+          if (candles.length > 0) {
+            bankNiftySeries.current.setData(candles);
+            if (bankNiftyData.trades?.length > 0) {
+              renderTradesOnChart(bankNiftySeries.current, bankNiftyData.trades);
+            }
+            setTimeout(() => {
+              bankNiftyChartApi.current?.timeScale().fitContent();
+              console.log("[VisualBacktest] BankNifty chart fitted");
+            }, 100);
           }
-          setTimeout(() => {
-            bankNiftyChartApi.current?.timeScale().fitContent();
-            console.log("[VisualBacktest] BankNifty chart fitted");
-          }, 100);
         } catch (err) {
           console.error("[VisualBacktest] BankNifty render error:", err);
         }
       } else {
-        console.log("[VisualBacktest] BankNifty series not ready or no candles");
+        console.log("[VisualBacktest] BankNifty series not ready or no candles, series:", !!bankNiftySeries.current);
       }
     } catch (err: any) {
       setNifty({ result: null, loading: false, error: err.message });
