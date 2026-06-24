@@ -63,6 +63,7 @@ function parseNaturalLanguage(text: string) {
 
   // Strategy
   if (t.includes("5 ema") || t.includes("ema 5") || t.includes("subhasish") || t.includes("pani")) config.strategy = "EMA5";
+  else if (t.includes("traffic light") || t.includes("traffic")) config.strategy = "TRAFFIC_LIGHT";
   else if (t.includes("inside candle") || t.includes("mother candle")) config.strategy = "INSIDE_CANDLE";
   else config.strategy = "RSI";
 
@@ -112,7 +113,7 @@ function parseNaturalLanguage(text: string) {
   const rsiExitMatch = text.match(/(?:sell|exit).*rsi\s*(?:>|above)\s*(\d+)/i);
   config.overboughtThreshold = rsiExitMatch ? parseInt(rsiExitMatch[1]) : 90;
 
-  // Target / R:R - supports "1:2 risk reward" OR "risk reward 1:2" OR "risk:reward 1:2"
+  // Target / R:R
   let rrMatch = text.match(/(\d+(?:\.\d+)?)\s*[:\-]\s*(\d+(?:\.\d+)?)\s*(?:r[:\s]?r|risk\s*reward)/i);
   if (!rrMatch) {
     rrMatch = text.match(/risk[:\s]*reward\s*(?:ratio)?\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*[:\-]\s*(\d+(?:\.\d+)?)/i);
@@ -138,7 +139,7 @@ export function Backtest() {
   const [resolution, setResolution] = useState("5");
   const [fromDate, setFromDate] = useState("2026-03-24");
   const [toDate, setToDate] = useState("2026-06-24");
-  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "INSIDE_CANDLE">("RSI");
+  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE">("RSI");
   const [rsiPeriod, setRsiPeriod] = useState(2);
   const [oversold, setOversold] = useState(10);
   const [overbought, setOverbought] = useState(90);
@@ -163,6 +164,7 @@ export function Backtest() {
   const strategies = [
     { value: "RSI", label: "RSI 2-Period (Mean Reversion)" },
     { value: "EMA5", label: "5 EMA (Subhasish Pani)" },
+    { value: "TRAFFIC_LIGHT", label: "Traffic Light (Subhasish Pani)" },
     { value: "INSIDE_CANDLE", label: "Inside Candle Breakout" },
   ];
 
@@ -186,7 +188,6 @@ export function Backtest() {
     setError("");
     setResult(null);
 
-    // Only validate date range in manual mode (NLP mode uses server-side chunking)
     if (mode === "manual") {
       const warning = validateDateRange();
       if (warning) {
@@ -249,7 +250,6 @@ export function Backtest() {
 
   const formatPercent = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 
-  // Simple SVG equity curve
   const renderEquityCurve = () => {
     if (!result || result.equityCurve.length < 2) return null;
 
@@ -274,7 +274,6 @@ export function Backtest() {
       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         <h3 className="mb-4 text-sm font-medium text-zinc-300">Equity Curve</h3>
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ maxHeight: 300 }}>
-          {/* Grid lines */}
           {[0, 0.25, 0.5, 0.75, 1].map((t) => {
             const y = padding + t * (height - 2 * padding);
             return (
@@ -290,13 +289,10 @@ export function Backtest() {
               />
             );
           })}
-          {/* Equity line */}
           <path d={pathD} fill="none" stroke="#a3e635" strokeWidth={2} />
-          {/* Start label */}
           <text x={padding} y={yScale(curve[0].equity) - 8} fill="#a3e635" fontSize={11}>
             {formatCurrency(curve[0].equity)}
           </text>
-          {/* End label */}
           <text
             x={width - padding}
             y={yScale(curve[curve.length - 1].equity) - 8}
@@ -315,10 +311,9 @@ export function Backtest() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Backtest Strategy</h1>
-        <p className="mt-1 text-sm text-zinc-500">Test RSI, 5 EMA (Subhasish Pani), or Inside Candle strategies</p>
+        <p className="mt-1 text-sm text-zinc-500">Test RSI, 5 EMA, Traffic Light, or Inside Candle strategies</p>
       </div>
 
-      {/* Mode Toggle */}
       <div className="flex gap-2">
         <button
           onClick={() => setMode("manual")}
@@ -344,7 +339,6 @@ export function Backtest() {
         </button>
       </div>
 
-      {/* Configuration Panel */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
         {mode === "nlp" ? (
           <div className="space-y-4">
@@ -355,13 +349,13 @@ export function Backtest() {
               <textarea
                 value={nlpText}
                 onChange={(e) => setNlpText(e.target.value)}
-                placeholder="Example: RSI 2 period below 10 on Bank Nifty 5min, sell when RSI above 90, 1% stop loss, 1:2 risk reward, 10 lakh capital, last 3 months"
+                placeholder="Example: Traffic light strategy on Bank Nifty 15 min, 1:3 risk reward, 10 lakh capital, last 3 months"
                 className="h-32 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-lime-400 resize-none"
               />
             </div>
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
               <p className="text-xs text-zinc-500">
-                <strong className="text-zinc-400">Supported:</strong> RSI, Golden Cross, Bollinger, Stop Loss %, Risk:Reward, Capital (lakh), Timeframes (1m/5m/15m/1h/daily), Periods (1mo/3mo/6mo/1yr)
+                <strong className="text-zinc-400">Supported:</strong> RSI, 5 EMA, Traffic Light, Inside Candle, Stop Loss %, Risk:Reward, Capital (lakh), Timeframes (1m/5m/15m/1h/daily), Periods (1mo/3mo/6mo/1yr)
               </p>
               <p className="mt-1 text-xs text-amber-400">
                 <strong>Tip:</strong> 1 Hour timeframe works best — FYERS provides up to 1 year of 1h data!
@@ -374,7 +368,7 @@ export function Backtest() {
             <label className="mb-1.5 block text-xs text-zinc-500">Strategy</label>
             <select
               value={strategy}
-              onChange={(e) => setStrategy(e.target.value as "RSI" | "EMA5" | "INSIDE_CANDLE")}
+              onChange={(e) => setStrategy(e.target.value as "RSI" | "EMA5" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE")}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
             >
               {strategies.map((s) => (
@@ -488,6 +482,20 @@ export function Backtest() {
           </div>
           )}
 
+          {strategy === "TRAFFIC_LIGHT" && (
+          <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
+            <p className="text-xs text-zinc-400">
+              <strong className="text-lime-300">Traffic Light Strategy (Subhasish Pani):</strong>
+            </p>
+            <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
+              <li>Trend = 20 EMA vs 50 EMA direction</li>
+              <li>Yellow Light: Pullback to 20 EMA</li>
+              <li>Green Light: Momentum continuation (break prev candle high/low)</li>
+              <li>Only trade WITH the trend</li>
+            </ul>
+          </div>
+          )}
+
           {strategy === "INSIDE_CANDLE" && (
           <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
             <p className="text-xs text-zinc-400">
@@ -567,10 +575,8 @@ export function Backtest() {
         )}
       </div>
 
-      {/* Results */}
       {result && (
         <div className="space-y-6">
-          {/* Summary Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               icon={<BarChart3 size={18} />}
@@ -622,10 +628,8 @@ export function Backtest() {
             />
           </div>
 
-          {/* Equity Curve */}
           {renderEquityCurve()}
 
-          {/* Trades Table */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5">
             <h3 className="mb-4 text-sm font-medium text-zinc-300">
               Trade Log ({result.trades.length} trades)

@@ -197,7 +197,11 @@ function runBacktest(candles, config) {
   let motherCandle = null;
   let insideCandle = null;
 
-  const warmup = Math.max(rsiOffset, emaOffset, 5);
+  // Traffic Light tracking
+  let trend = null; // 'UP', 'DOWN', null
+  let pullback = false;
+
+  const warmup = Math.max(rsiOffset, emaOffset, 50);
 
   for (let i = warmup; i < candles.length; i++) {
     const candle = candles[i];
@@ -417,6 +421,86 @@ function runBacktest(candles, config) {
               };
               alertCandle = null;
             }
+          }
+        }
+      }
+    }
+
+    // ── Traffic Light Strategy (Subhasish Pani) ──────────────────
+    else if (strategy === "TRAFFIC_LIGHT" && ema !== null) {
+      // Calculate trend using 20 EMA and 50 EMA
+      const ema20 = calculateEMA(closes.slice(0, i + 1), 20);
+      const ema50 = calculateEMA(closes.slice(0, i + 1), 50);
+      const currentEMA20 = ema20[ema20.length - 1];
+      const currentEMA50 = ema50[ema50.length - 1];
+      const prevEMA20 = ema20.length > 1 ? ema20[ema20.length - 2] : currentEMA20;
+
+      // Determine trend
+      if (currentEMA20 > currentEMA50) {
+        trend = "UP";
+      } else if (currentEMA20 < currentEMA50) {
+        trend = "DOWN";
+      }
+
+      // Check for pullback (yellow light)
+      // Price comes near EMA20 in an uptrend
+      if (trend === "UP" && prevCandle.low <= currentEMA20 && prevCandle.close >= currentEMA20 * 0.998) {
+        pullback = true;
+      }
+      // Price comes near EMA20 in a downtrend
+      else if (trend === "DOWN" && prevCandle.high >= currentEMA20 && prevCandle.close <= currentEMA20 * 1.002) {
+        pullback = true;
+      }
+
+      // Enter on momentum continuation (green light)
+      const riskAmount = currentCapital * (riskPercent / 100);
+
+      if (trend === "UP" && pullback && candle.close > prevCandle.high) {
+        // Bullish continuation
+        const entryPrice = candle.close;
+        const sl = Math.min(prevCandle.low, currentEMA50);
+        const stopDistance = entryPrice - sl;
+
+        if (stopDistance > 0) {
+          const qty = Math.floor(riskAmount / stopDistance);
+          if (qty > 0) {
+            const targetDistance = stopDistance * targetMultiplier;
+            const target = Math.round((entryPrice + targetDistance) * 100) / 100;
+
+            position = {
+              side: "LONG",
+              entryPrice,
+              qty,
+              sl: Math.round(sl * 100) / 100,
+              target,
+              entryBar: i,
+              entryTime: candle.datetime,
+            };
+            pullback = false;
+          }
+        }
+      } else if (trend === "DOWN" && pullback && candle.close < prevCandle.low) {
+        // Bearish continuation
+        const entryPrice = candle.close;
+        const sl = Math.max(prevCandle.high, currentEMA50);
+        const stopDistance = sl - entryPrice;
+
+        if (stopDistance > 0) {
+          const qty = Math.floor(riskAmount / stopDistance);
+          if (qty > 0) {
+            const targetDistance = stopDistance * targetMultiplier;
+            const target = Math.round((entryPrice - targetDistance) * 100) / 100;
+
+            position = {
+              side: "SHORT",
+              entryPrice,
+              qty,
+              sl: Math.round(sl * 100) / 100,
+              target,
+              entryBar: i,
+              entryTime: candle.datetime,
+            };
+            pullback = false;
           }
         }
       }
