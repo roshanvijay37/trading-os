@@ -27,7 +27,11 @@ router.post("/connect", (req, res) => {
   }
 
   try {
-    connectFyersWebSocket(session.accessToken, session.appId);
+    const appId = process.env.FYERS_APP_ID;
+    if (!appId) {
+      return res.status(500).json({ error: "FYERS_APP_ID not configured" });
+    }
+    connectFyersWebSocket(session.accessToken, appId);
     res.json({ success: true, message: "WebSocket connection initiated" });
   } catch (err) {
     res.status(500).json({ error: err.message });
