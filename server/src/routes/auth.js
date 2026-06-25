@@ -251,14 +251,19 @@ export function requireAuth(req, res, next) {
   const sessionId = req.headers["x-session-id"];
 
   if (!sessionId) {
+    console.log("[AUTH] 401 - No x-session-id header");
     return res.status(401).json({ error: "Session ID required" });
   }
 
   // Use getSession which reloads from disk if needed
   const session = getSession(sessionId);
   if (!session) {
+    console.log(`[AUTH] 401 - Session not found: ${sessionId.substring(0, 8)}...`);
+    console.log(`[AUTH] Available sessions: ${Array.from(sessions.keys()).map(k => k.substring(0, 8)).join(', ')}`);
     return res.status(401).json({ error: "Invalid or expired session" });
   }
+
+  console.log(`[AUTH] Session validated: ${session.userId}`);
 
   // Attach FYERS config to request
   req.fyers = {
