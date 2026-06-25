@@ -365,13 +365,17 @@ export function TickChart() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      disconnectWebSocket();
-      stopPolling();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [disconnectWebSocket, stopPolling]);
+  }, []);
 
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto pb-12">
