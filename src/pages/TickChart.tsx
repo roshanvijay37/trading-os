@@ -224,6 +224,19 @@ export function TickChart() {
     }
   }, []);
 
+  // Poll for latest tick as fallback
+  const pollLatestTick = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/ticks/latest?symbol=${symbol}`);
+      const data = await response.json();
+      if (data.tick) {
+        queueTick(data.tick);
+      }
+    } catch (err) {
+      // Silently fail on poll error
+    }
+  }, [symbol, queueTick]);
+
   // Connect to backend WebSocket
   const connectWebSocket = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -259,20 +272,39 @@ export function TickChart() {
     ws.onclose = () => {
       console.log("[TickChart] WebSocket closed");
       setIsConnected(false);
-      setWsStatus("Disconnected");
+      setWsStatus("Disconnected - using poll fallback");
       wsRef.current = null;
       
-      // Auto reconnect
-      setTimeout(() => connectWebSocket(), 5000);
+      // Start polling fallback
+      startPolling();
     };
 
     ws.onerror = (err) => {
       console.error("[TickChart] WebSocket error:", err);
-      setWsStatus("Error");
+      setWsStatus("WS Error - using poll fallback");
+      ws.close();
     };
 
     wsRef.current = ws;
   }, [symbol, queueTick]);
+
+  // Polling fallback
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  
+  const startPolling = useCallback(() => {
+    if (pollInterval) return;
+    console.log("[TickChart] Starting polling fallback");
+    pollInterval = setInterval(() => {
+      pollLatestTick();
+    }, 1000); // Poll every second
+  }, [pollLatestTick]);
+
+  const stopPolling = useCallback(() => {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }, []);
 
   // Disconnect WebSocket
   const disconnectWebSocket = useCallback(() => {
@@ -334,11 +366,12 @@ export function TickChart() {
   useEffect(() => {
     return () => {
       disconnectWebSocket();
+      stopPolling();
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [disconnectWebSocket]);
+  }, [disconnectWebSocket, stopPolling]);
 
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto pb-12">
