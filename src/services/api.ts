@@ -19,14 +19,16 @@ async function fetchWithAuth(path: string, options: RequestInit = {}) {
     headers,
   });
 
-  if (response.status === 401) {
-    // Clear invalid session
-    localStorage.removeItem("fyersSessionId");
-    window.dispatchEvent(new Event("fyers:logout"));
-  }
-
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Unknown error" }));
+    
+    // Only clear session if OUR server says session is invalid
+    // Don't clear for FYERS API 401 (expired token)
+    if (response.status === 401 && error.error === "Invalid or expired session") {
+      localStorage.removeItem("fyersSessionId");
+      window.dispatchEvent(new Event("fyers:logout"));
+    }
+    
     throw new Error(error.error || error.message || `HTTP ${response.status}`);
   }
 
