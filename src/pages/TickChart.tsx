@@ -182,6 +182,9 @@ export function TickChart() {
         seriesRef.current = null;
       }
 
+      // Convert UTC timestamps to IST (UTC+5:30 = +19800 seconds)
+      const IST_OFFSET_SECONDS = 19800;
+
       if (int === "tick") {
         // Line chart for tick mode
         const lineSeries = chart.addLineSeries({
@@ -191,7 +194,7 @@ export function TickChart() {
           priceLineVisible: true,
         });
         const lineData: LineData[] = data.candles.map((c: any) => ({
-          time: c.time as Time,
+          time: (c.time + IST_OFFSET_SECONDS) as Time,
           value: c.close,
         }));
         lineSeries.setData(lineData);
@@ -207,7 +210,7 @@ export function TickChart() {
           wickDownColor: "#ef4444",
         });
         const candleData: CandlestickData[] = data.candles.map((c: any) => ({
-          time: c.time as Time,
+          time: (c.time + IST_OFFSET_SECONDS) as Time,
           open: c.open,
           high: c.high,
           low: c.low,
