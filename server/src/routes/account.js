@@ -23,10 +23,22 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
   }
 
   const response = await fetch(url, options);
+  
+  // Check HTTP status first
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[FYERS API] ${endpoint} returned ${response.status}: ${errorText.substring(0, 200)}`);
+    const error = new Error(`FYERS API returned ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  
   const data = await response.json();
 
   if (data.s !== "ok") {
-    throw new Error(data.message || "FYERS API error");
+    const error = new Error(data.message || "FYERS API error");
+    error.status = 400;
+    throw error;
   }
 
   return data;
@@ -43,8 +55,9 @@ router.get("/profile", requireAuth, async (req, res) => {
 
     res.json({ profile: response.data });
   } catch (error) {
-    console.error("Get profile error:", error);
-    res.status(400).json({
+    console.error("Get profile error:", error.message);
+    const status = error.status || 400;
+    res.status(status).json({
       error: "Failed to fetch profile",
       message: error.message,
     });
@@ -62,8 +75,9 @@ router.get("/funds", requireAuth, async (req, res) => {
 
     res.json({ funds: response.fund_limit || [] });
   } catch (error) {
-    console.error("Get funds error:", error);
-    res.status(400).json({
+    console.error("Get funds error:", error.message);
+    const status = error.status || 400;
+    res.status(status).json({
       error: "Failed to fetch funds",
       message: error.message,
     });
@@ -81,8 +95,9 @@ router.get("/holdings", requireAuth, async (req, res) => {
 
     res.json({ holdings: response.holdings || [] });
   } catch (error) {
-    console.error("Get holdings error:", error);
-    res.status(400).json({
+    console.error("Get holdings error:", error.message);
+    const status = error.status || 400;
+    res.status(status).json({
       error: "Failed to fetch holdings",
       message: error.message,
     });
@@ -103,8 +118,9 @@ router.get("/positions", requireAuth, async (req, res) => {
       dayPositions: response.overall || [],
     });
   } catch (error) {
-    console.error("Get positions error:", error);
-    res.status(400).json({
+    console.error("Get positions error:", error.message);
+    const status = error.status || 400;
+    res.status(status).json({
       error: "Failed to fetch positions",
       message: error.message,
     });
