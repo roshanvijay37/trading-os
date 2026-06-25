@@ -10,7 +10,7 @@ import WebSocket from "ws";
 
 // ─── Configuration ────────────────────────────────────────────────
 const MAX_TICKS_PER_SYMBOL = 100000;
-const FYERS_WS_URL = "wss://socket.fyers.in/v3";
+const FYERS_WS_URL = "wss://socket.fyers.in/v2";
 const RECONNECT_DELAY_MS = 5000;
 
 // ─── In-Memory Storage ────────────────────────────────────────────
