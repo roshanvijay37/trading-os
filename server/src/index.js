@@ -12,6 +12,9 @@ import authRoutes from "./routes/auth.js";
 import autoTradeRoutes from "./routes/autoTrade.js";
 import backtestRoutes from "./routes/backtest.js";
 import orderRoutes from "./routes/orders.js";
+import tickRoutes from "./routes/ticks.js";
+import { WebSocketServer } from "ws";
+import { addWsClient, removeWsClient } from "./services/tickService.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +43,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/auto-trade", autoTradeRoutes);
 app.use("/api/backtest", backtestRoutes);
+app.use("/api/ticks", tickRoutes);
 
 // Global error handler
 app.use((err, _req, res, _next) => {
@@ -52,6 +56,41 @@ const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`TradingOS server running on port ${PORT}`);
   console.log(`Allowing CORS from: ${process.env.FRONTEND_URL || "http://localhost:5173"}`);
 });
+
+// WebSocket Server for tick streaming
+const wss = new WebSocketServer({ server, path: "/ws/ticks" });
+
+wss.on("connection", (ws) => {
+  console.log("[WS] Client connected to tick stream");
+  addWsClient(ws);
+
+  ws.on("message", (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      if (data.type === "subscribe" && data.symbol) {
+        ws.symbol = data.symbol;
+        ws.send(JSON.stringify({
+          type: "subscribed",
+          symbol: data.symbol,
+        }));
+      }
+    } catch (err) {
+      console.error("[WS] Invalid message:", err.message);
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("[WS] Client disconnected");
+    removeWsClient(ws);
+  });
+
+  ws.on("error", (err) => {
+    console.error("[WS] Error:", err.message);
+    removeWsClient(ws);
+  });
+});
+
+console.log("[WS] WebSocket server ready at /ws/ticks");
 
 server.on("error", (err) => {
   console.error("Failed to start server:", err);

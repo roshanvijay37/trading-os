@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   BookOpen,
   Bot,
@@ -19,6 +20,7 @@ import { FyersConnect } from "./FyersConnect";
 const navigation = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/auto-trade", label: "Auto Trade", icon: Bot },
+  { to: "/tick-chart", label: "Tick Chart", icon: Activity },
   { to: "/live-trade", label: "Live Trade", icon: Zap },
   { to: "/backtest", label: "Backtest", icon: TestTube },
   { to: "/visual-backtest", label: "Visual", icon: Eye },
