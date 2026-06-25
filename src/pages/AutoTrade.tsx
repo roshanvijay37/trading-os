@@ -48,13 +48,12 @@ interface AutoTradeStatus {
   activeAlerts: Record<string, any>;
   latestData: Record<string, any>;
   recentSignals: Signal[];
-  config: {
-    CAPITAL: number;
-    RISK_PERCENT: number;
-    MAX_TRADES_PER_DAY: number;
-    POLL_INTERVAL_MS: number;
-    UNDERLYINGS: { name: string; symbol: string; lotSize: number }[];
-  };
+  capital: number;
+  riskPercent: number;
+  paperTrading: boolean;
+  emergencyStop: boolean;
+  dailyPnL?: string;
+  consecutiveLosses?: number;
 }
 
 export function AutoTrade() {
@@ -235,7 +234,7 @@ export function AutoTrade() {
                 <div>
                   <p className="text-xs text-zinc-500">Capital</p>
                   <p className="text-lg font-semibold text-white">
-                    ₹{(status.config?.CAPITAL || 0).toLocaleString()}
+                    ₹{(status.capital || 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -249,25 +248,19 @@ export function AutoTrade() {
               <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
                 <p className="text-xs text-zinc-500">Risk Per Trade</p>
                 <p className="text-sm font-medium text-white">
-                  {status.config?.RISK_PERCENT || 1}%
+                  {status.riskPercent || 1}%
                 </p>
               </div>
               <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
                 <p className="text-xs text-zinc-500">Max Trades/Day</p>
                 <p className="text-sm font-medium text-white">
-                  {status.config?.MAX_TRADES_PER_DAY || 2}
+                  {status.maxTrades || 10}
                 </p>
               </div>
               <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                <p className="text-xs text-zinc-500">Scan Interval</p>
+                <p className="text-xs text-zinc-500">Paper Trading</p>
                 <p className="text-sm font-medium text-white">
-                  {(status.config?.POLL_INTERVAL_MS || 30000) / 1000}s
-                </p>
-              </div>
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                <p className="text-xs text-zinc-500">Underlyings</p>
-                <p className="text-sm font-medium text-white">
-                  {status.config?.UNDERLYINGS?.map((u) => u.name).join(", ") || "NIFTY, BANKNIFTY"}
+                  {status.paperTrading ? "ON" : "OFF"}
                 </p>
               </div>
               <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
@@ -275,8 +268,16 @@ export function AutoTrade() {
                 <p className="text-sm font-medium text-white">1:2</p>
               </div>
               <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-                <p className="text-xs text-zinc-500">Trailing SL</p>
-                <p className="text-sm font-medium text-white">Enabled</p>
+                <p className="text-xs text-zinc-500">Daily P&L</p>
+                <p className={`text-sm font-medium ${parseFloat(status.dailyPnL || '0') >= 0 ? 'text-lime-300' : 'text-rose-300'}`}>
+                  ₹{status.dailyPnL || 0}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+                <p className="text-xs text-zinc-500">Emergency Stop</p>
+                <p className={`text-sm font-medium ${status.emergencyStop ? 'text-rose-300' : 'text-lime-300'}`}>
+                  {status.emergencyStop ? "ACTIVE" : "Ready"}
+                </p>
               </div>
             </div>
           </Card>
