@@ -61,10 +61,12 @@ export function connectFyersWebSocket(accessToken, appId) {
       console.log("[TICK-SERVICE] WebSocket connected");
       isConnected = true;
       
-      // Subscribe to NIFTY and BANKNIFTY using FYERS v3 format
+      // Subscribe to NIFTY and BANKNIFTY using FYERS v2 format
       const subscribeMsg = {
-        T: "SUB_L1",
-        symbols: Object.keys(SYMBOL_MAP),
+        method: "sub",
+        data: {
+          symbols: Object.keys(SYMBOL_MAP),
+        },
       };
       wsConnection.send(JSON.stringify(subscribeMsg));
       console.log("[TICK-SERVICE] Subscribed to:", Object.keys(SYMBOL_MAP));
@@ -148,7 +150,7 @@ function storeTick(symbol, tick) {
 function startHeartbeat() {
   heartbeatTimer = setInterval(() => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
-      wsConnection.send(JSON.stringify({ T: "H" }));
+      wsConnection.send(JSON.stringify({ method: "ping" }));
     }
   }, 30000); // Every 30 seconds
 }
