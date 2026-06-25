@@ -90,7 +90,7 @@ export function Dashboard() {
   }, []);
 
   // Calculate real metrics
-  const availableFunds = fyers.funds.find((f: any) => f.title === "Available Balance")?.amount || 0;
+  const availableFunds = fyers.funds.find((f: any) => f.title === "Available Balance")?.equityAmount || 0;
   const portfolioValue = fyers.holdings.reduce((sum: number, h: any) => sum + (h.value || 0), 0);
   const openPositions = fyers.positions.filter((p: any) => p.type === "NET" && p.netQty !== 0);
   const todayPnl = fyers.positions.reduce((sum: number, p: any) => sum + (p.pl || 0), 0);
