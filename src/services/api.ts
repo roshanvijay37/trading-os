@@ -108,6 +108,10 @@ export const autoTradeApi = {
     body: JSON.stringify({ enabled }),
   }),
   getAuditLog: (limit?: number) => fetchWithAuth(`/auto-trade/audit?limit=${limit || 100}`),
+  updateConfig: (config: Record<string, any>) => fetchWithAuth("/auto-trade/config", {
+    method: "POST",
+    body: JSON.stringify(config),
+  }),
 };
 
 export const backtestApi = {

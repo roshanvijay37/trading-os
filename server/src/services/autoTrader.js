@@ -840,6 +840,11 @@ export function setPaperTrading(enabled) {
   return { paperTrading: CONFIG.PAPER_TRADING };
 }
 
+export function updateConfig(updates) {
+  Object.assign(CONFIG, updates);
+  return { config: { ...CONFIG } };
+}
+
 export function getAuditLog(limit = 100) {
   return auditLog.slice(-limit);
 }
