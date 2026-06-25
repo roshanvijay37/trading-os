@@ -61,14 +61,13 @@ export function connectFyersWebSocket(accessToken, appId) {
       console.log("[TICK-SERVICE] WebSocket connected");
       isConnected = true;
       
-      // Subscribe to NIFTY and BANKNIFTY
+      // Subscribe to NIFTY and BANKNIFTY using FYERS v3 format
       const subscribeMsg = {
-        method: "sub",
-        data: {
-          symbols: Object.keys(SYMBOL_MAP),
-        },
+        T: "SUB_L1",
+        symbols: Object.keys(SYMBOL_MAP),
       };
       wsConnection.send(JSON.stringify(subscribeMsg));
+      console.log("[TICK-SERVICE] Subscribed to:", Object.keys(SYMBOL_MAP));
       
       // Start heartbeat
       startHeartbeat();
@@ -77,7 +76,11 @@ export function connectFyersWebSocket(accessToken, appId) {
     wsConnection.on("message", (data) => {
       try {
         const msg = JSON.parse(data.toString());
-        handleFyersMessage(msg);
+        if (msg.s === "ok") {
+          console.log("[TICK-SERVICE] Subscription confirmed:", msg);
+        } else if (msg.ltp !== undefined || msg.lt !== undefined) {
+          handleFyersMessage(msg);
+        }
       } catch (err) {
         console.error("[TICK-SERVICE] Failed to parse message:", err.message);
       }
@@ -103,30 +106,28 @@ export function connectFyersWebSocket(accessToken, appId) {
 
 // ─── Handle FYERS Messages ────────────────────────────────────────
 function handleFyersMessage(msg) {
-  if (msg.type === "sf" || msg.type === "df") {
-    // Market data tick
-    const symbol = msg.symbol;
-    const shortName = SYMBOL_MAP[symbol];
-    
-    if (!shortName) return;
+  // FYERS v3 format: msg has ltp, vol, symbol directly
+  const symbol = msg.symbol;
+  const shortName = SYMBOL_MAP[symbol];
+  
+  if (!shortName) return;
 
-    const tick = {
-      symbol: shortName,
-      ltp: msg.lt || msg.ltp || 0,
-      volume: msg.v || msg.vol || 0,
-      timestamp: Date.now(),
-      raw: msg,
-    };
+  const tick = {
+    symbol: shortName,
+    ltp: msg.ltp || msg.lt || 0,
+    volume: msg.vol || msg.v || 0,
+    timestamp: Date.now(),
+    raw: msg,
+  };
 
-    // Store tick
-    storeTick(shortName, tick);
-    
-    // Update latest
-    latestTick[shortName] = tick;
+  // Store tick
+  storeTick(shortName, tick);
+  
+  // Update latest
+  latestTick[shortName] = tick;
 
-    // Broadcast to all connected WebSocket clients
-    broadcastToClients(tick);
-  }
+  // Broadcast to all connected WebSocket clients
+  broadcastToClients(tick);
 }
 
 // ─── Store Tick with FIFO Cleanup ─────────────────────────────────
@@ -147,7 +148,7 @@ function storeTick(symbol, tick) {
 function startHeartbeat() {
   heartbeatTimer = setInterval(() => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
-      wsConnection.send(JSON.stringify({ method: "ping" }));
+      wsConnection.send(JSON.stringify({ T: "H" }));
     }
   }, 30000); // Every 30 seconds
 }
