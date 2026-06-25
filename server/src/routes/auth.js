@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import express from "express";
+import fs from "fs";
+import path from "path";
 
 const router = express.Router();
 
@@ -15,8 +17,32 @@ const clientId = appId ? appId.split('-')[0] : '';
 // FYERS API base URL
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 
-// In-memory session store (use Redis in production)
-const sessions = new Map();
+// Persist sessions to file (survives server restarts)
+const SESSIONS_FILE = path.join(process.cwd(), "sessions.json");
+
+function loadSessions() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf8"));
+      return new Map(Object.entries(data));
+    }
+  } catch (err) {
+    console.error("[AUTH] Failed to load sessions:", err.message);
+  }
+  return new Map();
+}
+
+function saveSessions() {
+  try {
+    const obj = Object.fromEntries(sessions);
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2));
+  } catch (err) {
+    console.error("[AUTH] Failed to save sessions:", err.message);
+  }
+}
+
+// In-memory session store (persisted to file)
+const sessions = loadSessions();
 const stateStore = new Map(); // Store state tokens for validation
 
 // Step 1: Get FYERS login URL
@@ -109,6 +135,7 @@ router.post("/callback", async (req, res) => {
     };
 
     sessions.set(sessionId, session);
+    saveSessions();
 
     res.json({
       success: true,
@@ -131,7 +158,8 @@ router.post("/callback", async (req, res) => {
 
 // Step 3: Check session status
 router.get("/session/:sessionId", (req, res) => {
-  const session = sessions.get(req.params.sessionId);
+  // Use getSession which reloads from disk if needed
+  const session = getSession(req.params.sessionId);
 
   if (!session) {
     return res.status(401).json({ error: "Session not found" });
@@ -148,18 +176,60 @@ router.get("/session/:sessionId", (req, res) => {
   });
 });
 
+// Step 3b: Refresh session from file (for server restarts)
+router.post("/session/refresh", (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId) {
+    return res.status(400).json({ error: "sessionId required" });
+  }
+  
+  // Reload from disk in case server restarted
+  const freshSessions = loadSessions();
+  const session = freshSessions.get(sessionId);
+  
+  if (!session) {
+    return res.status(401).json({ error: "Session not found" });
+  }
+  
+  // Update in-memory store
+  sessions.set(sessionId, session);
+  
+  res.json({
+    valid: true,
+    sessionId,
+    user: {
+      userId: session.userId,
+      userName: session.userName,
+      email: session.email,
+      broker: session.broker,
+    },
+  });
+});
+
 // Step 4: Logout - invalidate session
 router.post("/logout", (req, res) => {
   const { sessionId } = req.body;
   if (sessionId) {
     sessions.delete(sessionId);
+    saveSessions();
   }
   res.json({ success: true });
 });
 
 // Helper to get session by ID (used by other routes like backtest)
 export function getSession(sessionId) {
-  return sessions.get(sessionId);
+  // First check in-memory
+  let session = sessions.get(sessionId);
+  if (session) return session;
+  
+  // If not found, reload from disk (server may have restarted)
+  const freshSessions = loadSessions();
+  session = freshSessions.get(sessionId);
+  if (session) {
+    // Update in-memory cache
+    sessions.set(sessionId, session);
+  }
+  return session;
 }
 
 // Helper to get all active sessions (used by standalone backtester)
@@ -184,7 +254,8 @@ export function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Session ID required" });
   }
 
-  const session = sessions.get(sessionId);
+  // Use getSession which reloads from disk if needed
+  const session = getSession(sessionId);
   if (!session) {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
