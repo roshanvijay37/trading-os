@@ -290,21 +290,26 @@ export function TickChart() {
   }, [symbol, queueTick]);
 
   // Start polling fallback
-  const startPolling = () => {
+  const startPolling = useCallback(() => {
     if (pollIntervalRef.current) return;
     console.log("[TickChart] Starting polling fallback");
     pollIntervalRef.current = setInterval(() => {
-      pollLatestTick();
+      fetch(`${API_BASE}/ticks/latest?symbol=${symbol}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.tick) queueTick(data.tick);
+        })
+        .catch(() => {});
     }, 1000);
-  };
+  }, [symbol, queueTick]);
 
   // Stop polling
-  const stopPolling = () => {
+  const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
-  };
+  }, []);
 
   // Disconnect WebSocket
   const disconnectWebSocket = useCallback(() => {
