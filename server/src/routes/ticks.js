@@ -109,14 +109,25 @@ async function fetchHistoricalCandles(symbol, interval, limit) {
   const data = await response.json();
   if (!data.candles || data.candles.length === 0) return [];
   
-  return data.candles.map((c) => ({
-    time: c[0],
-    open: c[1],
-    high: c[2],
-    low: c[3],
-    close: c[4],
-    volume: c[5],
-  }));
+  // Sort by time ascending and remove duplicates
+  const seen = new Set();
+  const candles = data.candles
+    .map((c) => ({
+      time: c[0],
+      open: c[1],
+      high: c[2],
+      low: c[3],
+      close: c[4],
+      volume: c[5],
+    }))
+    .filter((c) => {
+      if (seen.has(c.time)) return false;
+      seen.add(c.time);
+      return true;
+    })
+    .sort((a, b) => a.time - b.time);
+  
+  return candles;
 }
 
 // ─── Get Latest Tick ──────────────────────────────────────────────
