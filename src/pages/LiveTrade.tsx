@@ -374,16 +374,16 @@ export function LiveTrade() {
                             {opt.option_type || opt.optionType}
                           </span>
                         </td>
-                        <td className="py-2 text-right">₹{opt.lp || opt.last_price || 0}</td>
-                        <td className={`py-2 text-right ${(opt.ch || opt.chp || 0) >= 0 ? "text-lime-400" : "text-rose-400"}`}>
-                          {opt.chp || opt.change_percent || 0}%
+                        <td className="py-2 text-right">₹{opt.ltp || opt.lp || opt.last_price || 0}</td>
+                        <td className={`py-2 text-right ${(opt.ltpch || opt.ch || opt.chp || 0) >= 0 ? "text-lime-400" : "text-rose-400"}`}>
+                          {opt.ltpchp || opt.chp || opt.change_percent || 0}%
                         </td>
                         <td className="py-2 text-right">{(opt.oi || opt.open_interest || 0).toLocaleString()}</td>
                         <td className="py-2 text-center">
                           <button
                             onClick={() => {
                               setSymbol(opt.symbol || opt.tradingSymbol || opt.ts);
-                              setEntryPrice(opt.lp || opt.last_price || 0);
+                              setEntryPrice(opt.ltp || opt.lp || opt.last_price || 0);
                             }}
                             className="rounded bg-lime-400/10 px-2 py-1 text-[10px] text-lime-300 hover:bg-lime-400/20"
                           >
