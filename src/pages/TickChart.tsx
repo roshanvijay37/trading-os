@@ -47,6 +47,7 @@ export function TickChart() {
   const wsRef = useRef<WebSocket | null>(null);
   const tickBufferRef = useRef<any[]>([]);
   const rafRef = useRef<number | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [symbol, setSymbol] = useState("NIFTY");
   const [interval, setInterval] = useState<Interval>("5m");
@@ -129,7 +130,7 @@ export function TickChart() {
       }
 
       // Update stats
-      setStats((prev) => {
+      setStats((prev: Stats | null) => {
         if (!prev) {
           return {
             currentPrice: tick.ltp,
@@ -288,23 +289,22 @@ export function TickChart() {
     wsRef.current = ws;
   }, [symbol, queueTick]);
 
-  // Polling fallback
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
-  
-  const startPolling = useCallback(() => {
-    if (pollInterval) return;
+  // Start polling fallback
+  const startPolling = () => {
+    if (pollIntervalRef.current) return;
     console.log("[TickChart] Starting polling fallback");
-    pollInterval = setInterval(() => {
+    pollIntervalRef.current = setInterval(() => {
       pollLatestTick();
-    }, 1000); // Poll every second
-  }, [pollLatestTick]);
+    }, 1000);
+  };
 
-  const stopPolling = useCallback(() => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
+  // Stop polling
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
-  }, []);
+  };
 
   // Disconnect WebSocket
   const disconnectWebSocket = useCallback(() => {
