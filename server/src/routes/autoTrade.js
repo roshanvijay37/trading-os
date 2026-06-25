@@ -5,6 +5,9 @@ import {
   stopAutoTrader,
   getAutoTraderStatus,
   getPerformanceSummary,
+  emergencyStop,
+  setPaperTrading,
+  getAuditLog,
 } from "../services/autoTrader.js";
 
 const router = express.Router();
@@ -95,6 +98,77 @@ router.get("/performance", requireAuth, (req, res) => {
     res.status(400).json({
       success: false,
       error: "Failed to get performance",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/auto-trade/emergency-stop
+ * IMMEDIATELY halt all trading
+ */
+router.post("/emergency-stop", requireAuth, (req, res) => {
+  try {
+    const result = emergencyStop();
+    
+    res.json({
+      success: true,
+      message: "🚨 EMERGENCY STOP ACTIVATED",
+      ...result,
+    });
+  } catch (error) {
+    console.error("Emergency stop error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Emergency stop failed",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/auto-trade/paper-trading
+ * Toggle paper trading mode
+ */
+router.post("/paper-trading", requireAuth, (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const result = setPaperTrading(enabled);
+    
+    res.json({
+      success: true,
+      message: `Paper trading ${enabled ? "ENABLED" : "DISABLED"}`,
+      ...result,
+    });
+  } catch (error) {
+    console.error("Paper trading error:", error);
+    res.status(400).json({
+      success: false,
+      error: "Failed to set paper trading",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/auto-trade/audit
+ * Get recent audit log
+ */
+router.get("/audit", requireAuth, (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const logs = getAuditLog(limit);
+    
+    res.json({
+      success: true,
+      count: logs.length,
+      logs,
+    });
+  } catch (error) {
+    console.error("Audit log error:", error);
+    res.status(400).json({
+      success: false,
+      error: "Failed to get audit log",
       message: error.message,
     });
   }

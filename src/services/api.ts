@@ -102,6 +102,12 @@ export const autoTradeApi = {
   stop: () => fetchWithAuth("/auto-trade/stop", { method: "POST" }),
   getStatus: () => fetchWithAuth("/auto-trade/status"),
   getPerformance: () => fetchWithAuth("/auto-trade/performance"),
+  emergencyStop: () => fetchWithAuth("/auto-trade/emergency-stop", { method: "POST" }),
+  setPaperTrading: (enabled: boolean) => fetchWithAuth("/auto-trade/paper-trading", {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  }),
+  getAuditLog: (limit?: number) => fetchWithAuth(`/auto-trade/audit?limit=${limit || 100}`),
 };
 
 export const backtestApi = {
