@@ -503,21 +503,24 @@ async function tradingLoop(session) {
     console.log(`[AUTO-TRADER] 📅 New day - counters reset`);
   }
 
-  // Check market status
+  // Check market status using IST time
   const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
+  const istOffsetMinutes = 330;
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const istMinutes = (utcMinutes + istOffsetMinutes) % (24 * 60);
+  const hours = Math.floor(istMinutes / 60);
+  const minutes = istMinutes % 60;
   const timeStr = `${hours}:${minutes.toString().padStart(2, '0')}`;
 
-  // Pre-market check (9:00-9:15)
+  // Pre-market check (9:00-9:15 IST)
   if (hours === 9 && minutes < 15) {
     marketStatus = "PRE_OPEN";
-    console.log(`[AUTO-TRADER] ⏳ Pre-market (${timeStr}) - waiting for open...`);
+    console.log(`[AUTO-TRADER] ⏳ Pre-market IST (${timeStr}) - waiting for open...`);
   }
-  // Market closed
-  else if (hours < 9 || hours >= 15 && minutes >= 30) {
+  // Market closed (before 9:15 or after 15:30 IST)
+  else if (hours < 9 || (hours >= 15 && minutes >= 30)) {
     marketStatus = "CLOSED";
-    console.log(`[AUTO-TRADER] 🔒 Market closed (${timeStr})`);
+    console.log(`[AUTO-TRADER] 🔒 Market closed IST (${timeStr})`);
     
     // Close any remaining positions
     if (openPositions.some(p => p.status === "OPEN")) {
