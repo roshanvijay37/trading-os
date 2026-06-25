@@ -613,12 +613,29 @@ export function stopAutoTrader() {
 }
 
 /**
+ * Get current market status based on time
+ */
+function getCurrentMarketStatus() {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  
+  if (hours === 9 && minutes < 15) {
+    return "PRE_OPEN";
+  } else if (hours < 9 || (hours >= 15 && minutes >= 30)) {
+    return "CLOSED";
+  } else {
+    return "OPEN";
+  }
+}
+
+/**
  * Get auto-trader status
  */
 export function getAutoTraderStatus() {
   return {
     isRunning,
-    marketStatus,
+    marketStatus: getCurrentMarketStatus(),
     todayTrades,
     maxTrades: CONFIG.MAX_TRADES_PER_DAY,
     openPositions: openPositions.filter(p => p.status === "OPEN"),
