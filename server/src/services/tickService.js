@@ -52,7 +52,11 @@ export function connectFyersWebSocket(accessToken, appId) {
 
   const url = `${FYERS_WS_URL}?access_token=${appId}:${accessToken}`;
   
-  console.log("[TICK-SERVICE] Connecting to FYERS WebSocket...");
+  // Log URL without exposing full token
+  const tokenStart = url.indexOf('access_token=') + 13;
+  const colonIdx = url.indexOf(':', tokenStart);
+  const safeUrl = url.substring(0, colonIdx + 3) + '***' + url.substring(url.length - 5);
+  console.log("[TICK-SERVICE] Connecting to:", safeUrl);
 
   try {
     wsConnection = new WebSocket(url);
