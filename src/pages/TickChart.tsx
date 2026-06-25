@@ -307,7 +307,7 @@ export function TickChart() {
   // Stop polling
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
+      window.clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
   }, []);
