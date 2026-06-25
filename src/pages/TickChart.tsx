@@ -293,14 +293,14 @@ export function TickChart() {
   const startPolling = useCallback(() => {
     if (pollIntervalRef.current) return;
     console.log("[TickChart] Starting polling fallback");
-    pollIntervalRef.current = setInterval(() => {
-      fetch(`${API_BASE}/ticks/latest?symbol=${symbol}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.tick) queueTick(data.tick);
-        })
-        .catch(() => {});
+    const timer = window.setInterval(async () => {
+      try {
+        const r = await fetch(`${API_BASE}/ticks/latest?symbol=${symbol}`);
+        const data = await r.json();
+        if (data.tick) queueTick(data.tick);
+      } catch (e) {}
     }, 1000);
+    pollIntervalRef.current = timer;
   }, [symbol, queueTick]);
 
   // Stop polling
