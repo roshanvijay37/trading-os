@@ -613,12 +613,17 @@ export function stopAutoTrader() {
 }
 
 /**
- * Get current market status based on time
+ * Get current market status based on IST time
+ * Indian market: 9:15 AM - 3:30 PM IST (UTC+5:30)
  */
 function getCurrentMarketStatus() {
   const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
+  // Convert UTC to IST (UTC+5:30)
+  const istOffsetMinutes = 330; // 5 hours 30 minutes
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const istMinutes = (utcMinutes + istOffsetMinutes) % (24 * 60);
+  const hours = Math.floor(istMinutes / 60);
+  const minutes = istMinutes % 60;
   
   if (hours === 9 && minutes < 15) {
     return "PRE_OPEN";
