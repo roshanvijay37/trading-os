@@ -554,6 +554,22 @@ async function tradingLoop(session) {
 }
 
 /**
+ * Fetch available funds from FYERS
+ */
+async function fetchAvailableFunds(session) {
+  try {
+    const response = await fyersApiCall("/funds", session.accessToken, session.appId);
+    const funds = response.fund_limit || [];
+    // Find "Available Balance" or use first fund
+    const available = funds.find((f) => f.title === "Available Balance");
+    return available ? available.equityAmount : 0;
+  } catch (err) {
+    console.error("[AUTO-TRADER] Failed to fetch funds:", err.message);
+    return 0;
+  }
+}
+
+/**
  * Start the auto-trader
  */
 export async function startAutoTrader(sessionId) {
@@ -567,6 +583,15 @@ export async function startAutoTrader(sessionId) {
   
   if (!session) {
     throw new Error("Invalid or expired session");
+  }
+
+  // Fetch actual capital from FYERS
+  const actualCapital = await fetchAvailableFunds(session);
+  if (actualCapital > 0) {
+    CONFIG.CAPITAL = actualCapital;
+    console.log(`[AUTO-TRADER] 💰 Capital set from FYERS balance: ₹${CONFIG.CAPITAL}`);
+  } else {
+    console.log(`[AUTO-TRADER] ⚠️ Could not fetch balance, using default: ₹${CONFIG.CAPITAL}`);
   }
 
   console.log("[AUTO-TRADER] 🚀 Starting automated trading system...");
