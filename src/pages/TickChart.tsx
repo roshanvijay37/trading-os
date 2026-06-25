@@ -24,7 +24,9 @@ const SYMBOLS = [
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 const WS_URL = (() => {
   const base = import.meta.env.VITE_API_URL || "http://localhost:3001";
-  return base.replace(/^http/, "ws") + "/ws/ticks";
+  // Remove /api suffix for WebSocket - WS runs on same origin at /ws/ticks
+  const origin = base.replace(/\/api$/, "");
+  return origin.replace(/^http/, "ws") + "/ws/ticks";
 })();
 
 function getSessionId(): string | null {
