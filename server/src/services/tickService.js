@@ -10,7 +10,7 @@ import WebSocket from "ws";
 
 // ─── Configuration ────────────────────────────────────────────────
 const MAX_TICKS_PER_SYMBOL = 100000;
-const FYERS_WS_URL = "wss://socket.fyers.in/v2";
+const FYERS_WS_URL = "wss://socket.fyers.in";
 const RECONNECT_DELAY_MS = 5000;
 
 // ─── In-Memory Storage ────────────────────────────────────────────
@@ -97,6 +97,7 @@ export function connectFyersWebSocket(accessToken, appId) {
 
     wsConnection.on("error", (err) => {
       console.error("[TICK-SERVICE] WebSocket error:", err.message);
+      console.error("[TICK-SERVICE] Full error:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
       isConnected = false;
     });
 
