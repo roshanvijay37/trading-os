@@ -33,6 +33,7 @@ const CONFIG = {
   RISK_PERCENT: 0.5,           // 0.5% per trade (institutional standard)
   MAX_RISK_PER_DAY_PERCENT: 2,  // Stop after -2% daily loss
   MAX_CONSECUTIVE_LOSSES: 3,    // Psychology circuit breaker
+  MAX_TRADES_PER_DAY: 10,       // Max 10 trades per day
   TARGET_MULTIPLIER: 2,
   
   // Order Execution
@@ -451,9 +452,19 @@ function canTakeTrade(underlyingName) {
   if (!isValidTradingTime()) return false;
   if (!checkDailyLossLimit()) return false;
   if (!checkConsecutiveLosses()) return false;
+  if (!checkMaxTrades()) return false;
   if (!checkTimeFilter()) return false;
   if (!checkCorrelationFilter(underlyingName)) return false;
   return true;
+}
+
+function checkMaxTrades() {
+  const hit = todayTrades >= CONFIG.MAX_TRADES_PER_DAY;
+  if (hit) {
+    console.log(`[AUTO-TRADER] 🚫 MAX TRADES REACHED: ${todayTrades}/${CONFIG.MAX_TRADES_PER_DAY}`);
+    logAudit({ type: "CIRCUIT_BREAKER", reason: "MAX_TRADES", todayTrades, max: CONFIG.MAX_TRADES_PER_DAY });
+  }
+  return !hit;
 }
 
 async function processCandles(underlying, session) {
