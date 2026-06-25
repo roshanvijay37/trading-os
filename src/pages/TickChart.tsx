@@ -47,7 +47,7 @@ export function TickChart() {
   const wsRef = useRef<WebSocket | null>(null);
   const tickBufferRef = useRef<any[]>([]);
   const rafRef = useRef<number | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
 
   const [symbol, setSymbol] = useState("NIFTY");
   const [interval, setInterval] = useState<Interval>("5m");
@@ -301,6 +301,7 @@ export function TickChart() {
       } catch (e) {}
     }, 1000);
     pollIntervalRef.current = timer;
+    return;
   }, [symbol, queueTick]);
 
   // Stop polling
@@ -374,7 +375,7 @@ export function TickChart() {
         wsRef.current.close();
       }
       if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+        window.clearInterval(pollIntervalRef.current);
       }
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
