@@ -518,7 +518,7 @@ async function tradingLoop(session) {
     console.log(`[AUTO-TRADER] ⏳ Pre-market IST (${timeStr}) - waiting for open...`);
   }
   // Market closed (before 9:15 or after 15:30 IST)
-  else if (hours < 9 || (hours >= 15 && minutes >= 30)) {
+  else if (hours < 9 || hours > 15 || (hours === 15 && minutes >= 30)) {
     marketStatus = "CLOSED";
     console.log(`[AUTO-TRADER] 🔒 Market closed IST (${timeStr})`);
     
@@ -630,7 +630,7 @@ function getCurrentMarketStatus() {
   
   if (hours === 9 && minutes < 15) {
     return "PRE_OPEN";
-  } else if (hours < 9 || (hours >= 15 && minutes >= 30)) {
+  } else if (hours < 9 || hours > 15 || (hours === 15 && minutes >= 30)) {
     return "CLOSED";
   } else {
     return "OPEN";
