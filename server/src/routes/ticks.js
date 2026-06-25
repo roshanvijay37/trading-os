@@ -62,11 +62,17 @@ router.get("/history", (req, res) => {
 });
 
 // ─── Get OHLC Candles ─────────────────────────────────────────────
-router.get("/candles", (req, res) => {
+router.get("/candles", async (req, res) => {
   const { symbol = "NIFTY", interval = "1m", limit = 500 } = req.query;
   
   try {
-    const candles = aggregateOHLC(symbol, interval, parseInt(limit));
+    let candles = aggregateOHLC(symbol, interval, parseInt(limit));
+    
+    // If no local ticks, fetch from FYERS history API
+    if (candles.length === 0) {
+      candles = await fetchHistoricalCandles(symbol, interval, parseInt(limit));
+    }
+    
     res.json({
       success: true,
       symbol,
@@ -78,6 +84,40 @@ router.get("/candles", (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Fetch historical candles from FYERS API
+async function fetchHistoricalCandles(symbol, interval, limit) {
+  const { getSession } = await import("./auth.js");
+  const { getAllSessions } = await import("./auth.js");
+  
+  const sessions = getAllSessions();
+  if (sessions.length === 0) return [];
+  
+  const session = sessions[0];
+  const fySymbol = symbol === "NIFTY" ? "NSE:NIFTY50-INDEX" : "NSE:NIFTYBANK-INDEX";
+  const resolution = interval === "tick" ? "1" : interval.replace("m", "");
+  
+  const now = Math.floor(Date.now() / 1000);
+  const from = now - (limit * parseInt(resolution) * 60);
+  
+  const url = `https://api-t1.fyers.in/data/history?symbol=${encodeURIComponent(fySymbol)}&resolution=${resolution}&date_format=0&range_from=${from}&range_to=${now}&cont_flag=1`;
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `${process.env.FYERS_APP_ID}:${session.accessToken}` },
+  });
+  
+  const data = await response.json();
+  if (!data.candles || data.candles.length === 0) return [];
+  
+  return data.candles.map((c) => ({
+    time: c[0],
+    open: c[1],
+    high: c[2],
+    low: c[3],
+    close: c[4],
+    volume: c[5],
+  }));
+}
 
 // ─── Get Latest Tick ──────────────────────────────────────────────
 router.get("/latest", (req, res) => {
