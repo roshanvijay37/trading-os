@@ -8,6 +8,7 @@ import express from "express";
 dns.setDefaultResultOrder("ipv4first");
 
 import accountRoutes from "./routes/account.js";
+import aiRoutes from "./routes/ai.js";
 import authRoutes from "./routes/auth.js";
 import autoTradeRoutes from "./routes/autoTrade.js";
 import backtestRoutes from "./routes/backtest.js";
@@ -66,6 +67,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/account", accountRoutes);
 app.use("/api/auto-trade", autoTradeRoutes);
 app.use("/api/backtest", backtestRoutes);
+app.use("/api/ai", aiRoutes);
 app.use("/api/ticks", tickRoutes);
 
 // Global error handler
