@@ -1,5 +1,4 @@
 import {
-  Activity,
   BarChart3,
   BookOpen,
   Bot,
@@ -7,7 +6,6 @@ import {
   LayoutDashboard,
   LineChart,
   Menu,
-  Monitor,
   Radar,
   Settings,
   ShieldCheck,
@@ -20,16 +18,13 @@ import { NavLink, Outlet } from "react-router-dom";
 import { FyersConnect } from "./FyersConnect";
 
 const navigation = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/", label: "Command Center", icon: LayoutDashboard },
   { to: "/trading-bot", label: "Trading Bot", icon: Bot },
   { to: "/strategy-manager", label: "Strategies", icon: Swords },
-  { to: "/market-monitor", label: "Market Monitor", icon: Monitor },
+  { to: "/market-intelligence", label: "Market Intelligence", icon: Radar },
   { to: "/chart", label: "Live Chart", icon: LineChart },
-  { to: "/backtest", label: "Backtest", icon: TestTube },
-  { to: "/visual-backtest", label: "Visual", icon: Activity },
+  { to: "/backtest", label: "Backtest Lab", icon: TestTube },
   { to: "/risk-dashboard", label: "Risk Engine", icon: ShieldCheck },
-  { to: "/ai-cio", label: "AI CIO", icon: BrainCircuit },
-  { to: "/market-intelligence", label: "Intelligence", icon: Radar },
   { to: "/journal", label: "Journal", icon: BookOpen },
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },
