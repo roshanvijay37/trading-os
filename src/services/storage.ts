@@ -4,14 +4,13 @@ import { toLocalDateKey } from "../utils/date";
 const KEYS = {
   settings: "trading-os:settings",
   trades: "trading-os:trades",
-  constitution: "trading-os:constitution",
 } as const;
 
 export const DEFAULT_SETTINGS: Settings = {
   capital: 100_000,
   riskPercent: 1,
   dailyLossLimitPercent: 2,
-  maxTradesPerDay: 1,
+  maxTradesPerDay: 10,
 };
 
 function readJson<T>(key: string, fallback: T): T {
@@ -56,13 +55,5 @@ export const storage = {
 
   getTradesForDate(date = toLocalDateKey()): Trade[] {
     return this.getTrades().filter((trade) => trade.date === date);
-  },
-
-  hasAcceptedConstitution(date = toLocalDateKey()): boolean {
-    return readJson<string | null>(KEYS.constitution, null) === date;
-  },
-
-  acceptConstitution(date = toLocalDateKey()): void {
-    writeJson(KEYS.constitution, date);
   },
 };

@@ -67,36 +67,17 @@ export const accountApi = {
       method: "POST",
       body: JSON.stringify({ symbols }),
     }),
-  searchInstruments: (query: string, exchange = "NSE") =>
-    fetchWithAuth(`/account/search?q=${encodeURIComponent(query)}&exchange=${exchange}`),
   getOptionChain: (symbol: string, strikecount = 10) =>
     fetchWithAuth(`/account/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`),
 };
 
-// Orders
+// Orders — read-only for bot audit trail
 export const orderApi = {
-  place: (params: {
-    symbol: string;
-    side: number; // 1 = Buy, -1 = Sell
-    qty: number;
-    type?: number; // 1 = Limit, 2 = Market, 3 = Stop, 4 = Stoplimit
-    limitPrice?: number;
-    stopPrice?: number;
-    productType?: string; // INTRADAY, CNC, CO, BO, MARGIN
-  }) =>
-    fetchWithAuth("/orders/place", {
-      method: "POST",
-      body: JSON.stringify(params),
-    }),
-  cancel: (orderId: string) =>
-    fetchWithAuth(`/orders/cancel/${orderId}`, {
-      method: "DELETE",
-    }),
   getHistory: () => fetchWithAuth("/orders/history"),
   getTrades: () => fetchWithAuth("/orders/trades/today"),
 };
 
-// Auto Trading
+// Auto Trading — bot control center
 export const autoTradeApi = {
   start: () => fetchWithAuth("/auto-trade/start", { method: "POST" }),
   stop: () => fetchWithAuth("/auto-trade/stop", { method: "POST" }),

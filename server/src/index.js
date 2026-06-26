@@ -24,12 +24,35 @@ console.log("Starting TradingOS server...");
 console.log("NODE_ENV:", process.env.NODE_ENV || "development");
 console.log("PORT:", PORT);
 
+// CORS — allow local dev and production domains
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://roshanvijay.com",
+  "https://www.roshanvijay.com",
+];
+
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.log(`[CORS] Blocked origin: ${origin}`);
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "x-session-id", "Authorization"],
   })
 );
+
 app.use(express.json());
 
 // Health check
@@ -54,7 +77,7 @@ app.use((err, _req, res, _next) => {
 // Start server with error handling
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`TradingOS server running on port ${PORT}`);
-  console.log(`Allowing CORS from: ${process.env.FRONTEND_URL || "http://localhost:5173"}`);
+  console.log(`Allowed CORS origins: ${allowedOrigins.join(", ")}`);
 });
 
 // WebSocket Server for tick streaming

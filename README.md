@@ -1,34 +1,60 @@
-# TradingOS
+# TradingOS — Automation-First Trading Platform
 
-A local-first trading discipline system built with React, Vite, TypeScript, and
-Tailwind CSS.
+> **I do not trade. I supervise.**
 
-## Current safeguards
+TradingOS is an institutional-grade automated trading platform designed exclusively for algorithmic execution. The system does not support manual order placement — only the configured trading bot can execute orders.
 
-- Daily constitution acceptance
-- One-trade-per-day lock
-- 1% position risk calculation
-- 2% daily loss limit
-- Pre-trade emotion evaluation
-- Local trade journal and discipline scoring
+## Philosophy
 
-No broker API is connected. Data stays in the browser's `localStorage`.
+- **Operator, not Trader**: Configure strategies, monitor execution, review performance
+- **Bot-Only Execution**: The trading bot handles signal generation, position sizing, order placement, and exit logic
+- **Read-Only Surveillance**: Market data pages are strictly for monitoring
+- **Risk-First Design**: All guardrails are enforced programmatically, not by human discipline
 
-## Run locally
+## Tech Stack
+
+- **Frontend**: React + TypeScript + Tailwind CSS + Vite
+- **Backend**: Node.js + Express
+- **Broker Integration**: FYERS API v3
+- **Real-time Data**: WebSocket tick streaming
+
+## Pages
+
+| Page | Purpose |
+|------|---------|
+| **Dashboard** | Bot status, P&L, positions, system health |
+| **Trading Bot** | Start/stop bot, configure strategy, view logs |
+| **Market Monitor** | Live option chains, spot prices, PCR — read-only |
+| **Backtest** | Strategy validation |
+| **Visual Backtest** | Chart-based backtest review |
+| **Journal** | Automated trade audit trail |
+| **Reports** | Performance analytics |
+| **Settings** | Bot risk parameters |
+
+## Quick Start
 
 ```bash
+# Frontend
+cd trading-os
+npm install
+npm run dev
+
+# Backend
+cd server
 npm install
 npm run dev
 ```
 
-## Verify
+## What Was Removed
 
-```bash
-npm test
-npm run build
-```
+All manual trading capabilities have been eliminated:
+- Manual Buy/Sell buttons
+- Order placement forms
+- Quantity/Price/Order type selectors
+- MIS/CNC/BO/CO product selectors
+- Emotion evaluation engine
+- Daily constitution/affirmations
+- Manual order confirmation dialogs
+- Manual position closing
 
-## GitHub Pages
-
-The app uses `HashRouter` and a relative Vite base, so the generated `dist`
-directory can be hosted under a GitHub Pages repository path.
+The platform is now purely an **algorithmic trading operations center**.

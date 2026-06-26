@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Card } from "../components/Card";
 import { useTradingStore } from "../store/useTradingStore";
 import type { Settings as SettingsType } from "../types";
+import { Shield, Bot } from "lucide-react";
 
 export function Settings() {
   const { settings, saveSettings } = useTradingStore();
@@ -20,13 +21,13 @@ export function Settings() {
       ...form,
       riskPercent: Math.min(form.riskPercent, 1),
       dailyLossLimitPercent: Math.min(form.dailyLossLimitPercent, 2),
-      maxTradesPerDay: 1,
+      maxTradesPerDay: Math.max(form.maxTradesPerDay, 1),
     });
     setForm((current) => ({
       ...current,
       riskPercent: Math.min(current.riskPercent, 1),
       dailyLossLimitPercent: Math.min(current.dailyLossLimitPercent, 2),
-      maxTradesPerDay: 1,
+      maxTradesPerDay: Math.max(current.maxTradesPerDay, 1),
     }));
     setSaved(true);
   };
@@ -38,9 +39,14 @@ export function Settings() {
     <div>
       <h1 className="text-3xl font-semibold tracking-tight text-white">Settings</h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Guardrails can be made stricter, never looser than the constitution.
+        Configure bot risk parameters and capital allocation.
       </p>
+
       <Card className="mt-8 max-w-2xl">
+        <div className="mb-6 flex items-center gap-2">
+          <Bot size={16} className="text-zinc-400" />
+          <h2 className="text-sm font-medium text-white">Bot Configuration</h2>
+        </div>
         <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
           <label className="text-sm text-zinc-400">
             Trading capital (₹)
@@ -79,19 +85,41 @@ export function Settings() {
             />
           </label>
           <label className="text-sm text-zinc-400">
-            Maximum trades per day
-            <input type="number" value={1} disabled className={`${fieldClass} opacity-50`} />
+            Max trades per day
+            <input
+              type="number"
+              min="1"
+              max="50"
+              value={form.maxTradesPerDay}
+              onChange={(event) => update("maxTradesPerDay", Number(event.target.value))}
+              className={fieldClass}
+            />
           </label>
           <div className="sm:col-span-2">
             <button
               type="submit"
               className="rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-zinc-950"
             >
-              Save guardrails
+              Save configuration
             </button>
             {saved && <span className="ml-3 text-sm text-lime-300">Saved.</span>}
           </div>
         </form>
+      </Card>
+
+      <Card className="mt-6 max-w-2xl border-zinc-700">
+        <div className="flex items-start gap-3">
+          <Shield size={18} className="mt-0.5 text-zinc-500" />
+          <div>
+            <p className="text-sm font-medium text-white">Risk Philosophy</p>
+            <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
+              The bot manages position sizing, stop-losses, and daily limits automatically.
+              These settings define the outer guardrails. The bot will never exceed the
+              configured risk per trade or daily loss limit. Paper trading is available
+              for strategy validation before live deployment.
+            </p>
+          </div>
+        </div>
       </Card>
     </div>
   );

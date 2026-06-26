@@ -3,27 +3,24 @@ import {
   BarChart3,
   BookOpen,
   Bot,
-  Eye,
   LayoutDashboard,
   Menu,
+  Monitor,
   Settings,
   ShieldCheck,
   TestTube,
   X,
-  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { useDailyAccess } from "../hooks/useDailyAccess";
 import { FyersConnect } from "./FyersConnect";
 
 const navigation = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/auto-trade", label: "Auto Trade", icon: Bot },
-  { to: "/tick-chart", label: "Tick Chart", icon: Activity },
-  { to: "/live-trade", label: "Live Trade", icon: Zap },
+  { to: "/trading-bot", label: "Trading Bot", icon: Bot },
+  { to: "/market-monitor", label: "Market Monitor", icon: Monitor },
   { to: "/backtest", label: "Backtest", icon: TestTube },
-  { to: "/visual-backtest", label: "Visual", icon: Eye },
+  { to: "/visual-backtest", label: "Visual", icon: Activity },
   { to: "/journal", label: "Journal", icon: BookOpen },
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },
@@ -31,7 +28,6 @@ const navigation = [
 
 export function Layout() {
   const [open, setOpen] = useState(false);
-  const { tradeLocked } = useDailyAccess();
 
   const sidebar = (
     <div className="flex h-full flex-col">
@@ -41,7 +37,7 @@ export function Layout() {
         </span>
         <div>
           <p className="font-semibold text-white">TradingOS</p>
-          <p className="text-xs text-zinc-500">Discipline over dopamine</p>
+          <p className="text-xs text-zinc-500">Automation-first</p>
         </div>
       </div>
       <nav className="flex-1 space-y-1 p-4">
@@ -66,9 +62,9 @@ export function Layout() {
         ))}
       </nav>
       <p className="border-t border-zinc-800 p-5 text-xs leading-5 text-zinc-600">
-        Profit is not the objective.
+        I do not trade.
         <br />
-        Discipline is the objective.
+        I supervise.
       </p>
     </div>
   );

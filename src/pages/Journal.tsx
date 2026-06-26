@@ -1,27 +1,31 @@
-import { BookOpen } from "lucide-react";
+import { BookOpen, Bot } from "lucide-react";
 import { useTradingStore } from "../store/useTradingStore";
-import type { Trade, TradeOutcome } from "../types";
 import { formatDate } from "../utils/date";
 import { formatCurrency } from "../utils/format";
 
 export function Journal() {
-  const { trades, updateTrade } = useTradingStore();
-
-  const updateOutcome = (trade: Trade, outcome: TradeOutcome, pnl: number) => {
-    updateTrade({ ...trade, outcome, pnl });
-  };
+  const { trades } = useTradingStore();
 
   return (
     <div>
-      <h1 className="text-3xl font-semibold tracking-tight text-white">Journal</h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        Review execution quality before reviewing money.
-      </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-white">Journal</h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Automated trade audit trail. Review execution quality.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400">
+          <Bot size={14} />
+          Bot-executed only
+        </div>
+      </div>
+
       {trades.length === 0 ? (
         <div className="mt-16 text-center">
           <BookOpen className="mx-auto text-zinc-700" size={38} />
           <p className="mt-4 text-zinc-400">No trades recorded yet.</p>
-          <p className="mt-1 text-sm text-zinc-600">Patience is also a position.</p>
+          <p className="mt-1 text-sm text-zinc-600">The bot will populate this journal automatically.</p>
         </div>
       ) : (
         <div className="mt-8 space-y-3">
@@ -46,6 +50,10 @@ export function Journal() {
                     <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
                       {trade.outcome}
                     </span>
+                    <span className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">
+                      <Bot size={10} />
+                      AUTO
+                    </span>
                   </div>
                   <p className="mt-1 text-xs text-zinc-500">
                     {formatDate(trade.date)} · Entry {trade.entryPrice} · Stop{" "}
@@ -55,9 +63,9 @@ export function Journal() {
                     <p className="mt-3 max-w-2xl text-sm text-zinc-400">{trade.notes}</p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span
-                    className={`mr-2 text-sm font-medium ${
+                    className={`text-sm font-medium ${
                       trade.pnl > 0
                         ? "text-lime-300"
                         : trade.pnl < 0
@@ -67,24 +75,6 @@ export function Journal() {
                   >
                     {formatCurrency(trade.pnl)}
                   </span>
-                  {(["WIN", "LOSS", "BREAKEVEN"] as TradeOutcome[]).map((outcome) => (
-                    <button
-                      key={outcome}
-                      type="button"
-                      onClick={() => {
-                        const raw = window.prompt(
-                          `P&L for ${outcome} (use a negative value for a loss):`,
-                          outcome === "LOSS" ? `-${trade.riskAmount}` : "0",
-                        );
-                        if (raw !== null && Number.isFinite(Number(raw))) {
-                          updateOutcome(trade, outcome, Number(raw));
-                        }
-                      }}
-                      className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-white"
-                    >
-                      {outcome}
-                    </button>
-                  ))}
                 </div>
               </div>
             </article>
