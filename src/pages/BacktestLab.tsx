@@ -112,64 +112,74 @@ export function BacktestLab() {
   // Initialize chart when result changes
   useEffect(() => {
     if (!result || !chartContainerRef.current || viewMode === "table") return;
+    if (!result.equityCurve || result.equityCurve.length === 0) return;
 
+    // Clean up previous chart
     if (chartRef.current) {
       chartRef.current.remove();
       chartRef.current = null;
     }
 
-    const chart = createChart(chartContainerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: "#09090b" }, textColor: "#a1a1aa" },
-      grid: { vertLines: { color: "#18181b" }, horzLines: { color: "#18181b" } },
-      rightPriceScale: { borderColor: "#27272a" },
-      timeScale: { borderColor: "#27272a" },
-      width: chartContainerRef.current.clientWidth,
-      height: 400,
-    });
+    try {
+      const chart = createChart(chartContainerRef.current, {
+        layout: { background: { type: ColorType.Solid, color: "#09090b" }, textColor: "#a1a1aa" },
+        grid: { vertLines: { color: "#18181b" }, horzLines: { color: "#18181b" } },
+        rightPriceScale: { borderColor: "#27272a" },
+        timeScale: { borderColor: "#27272a" },
+        width: chartContainerRef.current.clientWidth,
+        height: 400,
+      });
 
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: "#22c55e", downColor: "#ef4444", borderUpColor: "#22c55e", borderDownColor: "#ef4444", wickUpColor: "#22c55e", wickDownColor: "#ef4444",
-    });
+      // Equity curve as line chart (not candlestick — equity is a single value per point)
+      const lineSeries = chart.addLineSeries({
+        color: "#22c55e",
+        lineWidth: 2,
+        lastValueVisible: true,
+        priceLineVisible: true,
+      });
 
-    // Generate sample candles from equity curve (simplified)
-    const candles: CandlestickData[] = result.equityCurve.map((pt, i) => ({
-      time: pt.date as any,
-      open: pt.equity * (1 - 0.001),
-      high: pt.equity * (1 + 0.002),
-      low: pt.equity * (1 - 0.002),
-      close: pt.equity,
-    }));
+      const lineData = result.equityCurve.map((pt) => ({
+        time: pt.date as any,
+        value: pt.equity,
+      }));
 
-    candleSeries.setData(candles);
+      lineSeries.setData(lineData);
 
-    // Add trade markers
-    result.trades.forEach((trade) => {
-      const price = trade.side === "LONG" ? trade.entryPrice * 0.998 : trade.entryPrice * 1.002;
-      candleSeries.setMarkers([
-        {
-          time: trade.entryTime.split("T")[0] as any,
-          position: trade.side === "LONG" ? "belowBar" : "aboveBar",
-          color: trade.side === "LONG" ? "#22c55e" : "#ef4444",
-          shape: trade.side === "LONG" ? "arrowUp" : "arrowDown",
-          text: `${trade.side[0]} @ ${trade.entryPrice.toFixed(0)}`,
-        },
-      ]);
-    });
+      // Add trade markers (collect all first, then set once)
+      const markers = result.trades.map((trade) => ({
+        time: trade.entryTime.split("T")[0] as any,
+        position: trade.side === "LONG" ? "belowBar" : "aboveBar" as any,
+        color: trade.side === "LONG" ? "#22c55e" : "#ef4444",
+        shape: trade.side === "LONG" ? "arrowUp" : "arrowDown" as any,
+        text: `${trade.side[0]} @ ${trade.entryPrice.toFixed(0)}`,
+        size: 1,
+      }));
 
-    chartRef.current = chart;
-    candleSeriesRef.current = candleSeries;
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (markers.length > 0) {
+        lineSeries.setMarkers(markers);
       }
-    };
-    window.addEventListener("resize", handleResize);
 
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.remove();
-    };
+      chart.timeScale().fitContent();
+
+      chartRef.current = chart;
+
+      const handleResize = () => {
+        if (chartContainerRef.current && chartRef.current) {
+          chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+        }
+      };
+      window.addEventListener("resize", handleResize);
+
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        if (chartRef.current) {
+          chartRef.current.remove();
+          chartRef.current = null;
+        }
+      };
+    } catch (err) {
+      console.error("[BacktestLab] Chart error:", err);
+    }
   }, [result, viewMode]);
 
   const sum = result?.summary;
