@@ -108,6 +108,20 @@ export function AutoTrade() {
     }
   };
 
+  const handleResetEmergency = async () => {
+    if (!window.confirm("Reset emergency stop? This will allow the bot to trade again.")) return;
+    setLoading(true);
+    try {
+      await autoTradeApi.resetEmergency();
+      await fetchStatus();
+      setLogs((prev) => [`${new Date().toLocaleTimeString()} — Emergency stop CLEARED`, ...prev].slice(0, 20));
+    } catch (err: any) {
+      setError(err.message || "Failed to reset emergency");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUpdateConfig = async () => {
     setLoading(true);
     try {
@@ -198,14 +212,25 @@ export function AutoTrade() {
                 {loading ? "Stopping..." : "Stop Bot"}
               </button>
             )}
-            <button
-              onClick={handleEmergencyStop}
-              disabled={loading}
-              className="flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2.5 font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50"
-            >
-              <Lock size={18} />
-              E-Stop
-            </button>
+            {isEmergency ? (
+              <button
+                onClick={handleResetEmergency}
+                disabled={loading}
+                className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-400 disabled:opacity-50"
+              >
+                <Lock size={18} />
+                Reset E-Stop
+              </button>
+            ) : (
+              <button
+                onClick={handleEmergencyStop}
+                disabled={loading}
+                className="flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2.5 font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50"
+              >
+                <Lock size={18} />
+                E-Stop
+              </button>
+            )}
           </div>
         </div>
         {error && (

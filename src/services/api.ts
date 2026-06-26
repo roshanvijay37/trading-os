@@ -84,6 +84,7 @@ export const autoTradeApi = {
   getStatus: () => fetchWithAuth("/auto-trade/status"),
   getPerformance: () => fetchWithAuth("/auto-trade/performance"),
   emergencyStop: () => fetchWithAuth("/auto-trade/emergency-stop", { method: "POST" }),
+  resetEmergency: () => fetchWithAuth("/auto-trade/reset-emergency", { method: "POST" }),
   setPaperTrading: (enabled: boolean) => fetchWithAuth("/auto-trade/paper-trading", {
     method: "POST",
     body: JSON.stringify({ enabled }),

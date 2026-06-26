@@ -702,6 +702,16 @@ export function emergencyStop() {
   return { status: "EMERGENCY_STOPPED", openPositions: openPositions.filter((p) => p.status === "OPEN").length };
 }
 
+export function resetEmergencyStop() {
+  if (!CONFIG.EMERGENCY_STOP) {
+    return { status: "NOT_IN_EMERGENCY", message: "System was not in emergency state" };
+  }
+  CONFIG.EMERGENCY_STOP = false;
+  console.log("[AUTO-TRADER] Emergency stop CLEARED. System ready.");
+  logAudit({ type: "EMERGENCY_CLEARED", timestamp: new Date().toISOString() });
+  return { status: "READY", message: "Emergency stop cleared. Use Start Bot to resume." };
+}
+
 export function getAutoTraderStatus() {
   return {
     isRunning,
