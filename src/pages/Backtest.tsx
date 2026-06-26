@@ -155,6 +155,7 @@ export function Backtest() {
   const [riskPercent, setRiskPercent] = useState(1);
   const [targetMult, setTargetMult] = useState(2);
   const [slippage, setSlippage] = useState(0.02);
+  const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
 
   const symbols = [
     { value: "NSE:NIFTYBANK-INDEX", label: "Bank Nifty" },
@@ -237,6 +238,7 @@ export function Backtest() {
           capital,
           riskPercent,
           targetMultiplier: targetMult,
+          capitalMode,
         };
         const data = await backtestApi.runMulti({ ...params, slippage });
         setMultiResult(data);
@@ -256,6 +258,7 @@ export function Backtest() {
           riskPercent,
           targetMultiplier: targetMult,
           slippage,
+          capitalMode,
         };
       }
       
@@ -607,6 +610,37 @@ export function Backtest() {
               step={10000}
               className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
             />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs text-zinc-500">Capital Mode</label>
+            <div className="flex rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden">
+              <button
+                onClick={() => setCapitalMode("COMPOUND")}
+                className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+                  capitalMode === "COMPOUND"
+                    ? "bg-lime-400/20 text-lime-300"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Compounding
+              </button>
+              <button
+                onClick={() => setCapitalMode("FIXED")}
+                className={`flex-1 px-3 py-2 text-xs font-medium transition ${
+                  capitalMode === "FIXED"
+                    ? "bg-lime-400/20 text-lime-300"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Fixed
+              </button>
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-600">
+              {capitalMode === "FIXED"
+                ? "Each trade uses fixed initial capital (₹1L risk per trade)"
+                : "Position size grows/shrinks with equity"}
+            </p>
           </div>
 
           <div>

@@ -112,6 +112,7 @@ export const backtestApi = {
     targetMultiplier?: number;
     maxHoldBars?: number;
     slippage?: number;
+    capitalMode?: "COMPOUND" | "FIXED";
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",
@@ -126,6 +127,7 @@ export const backtestApi = {
     capital?: number;
     riskPercent?: number;
     targetMultiplier?: number;
+    capitalMode?: "COMPOUND" | "FIXED";
   }) =>
     fetchWithAuth("/backtest/run-multi", {
       method: "POST",

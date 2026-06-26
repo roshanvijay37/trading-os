@@ -174,6 +174,7 @@ function runBacktest(candles, config) {
     targetMultiplier = 2,
     maxHoldBars = 12,
     slippage = 0.0002, // 0.02% slippage (~10 pts on BANKNIFTY, ~5 pts on NIFTY)
+    capitalMode = "COMPOUND",
   } = config;
 
   // Pre-calculate indicators
@@ -186,6 +187,11 @@ function runBacktest(candles, config) {
   const trades = [];
   const equityCurve = [{ date: candles[0].datetime, equity: capital }];
   let currentCapital = capital;
+
+  // In FIXED mode, position sizing always uses initialCapital
+  // In COMPOUND mode, position sizing uses current capital
+  const initialCapital = Number(capital);
+
   let position = null;
   let totalTrades = 0;
   let wins = 0;
@@ -317,7 +323,7 @@ function runBacktest(candles, config) {
         const entryPrice = candle.open;
         const stopDistance = entryPrice * slBuffer;
         const sl = Math.round((entryPrice - stopDistance) * 100) / 100;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
         const qty = Math.floor(riskAmount / stopDistance);
 
         if (qty > 0) {
@@ -338,7 +344,7 @@ function runBacktest(candles, config) {
         const entryPrice = candle.open;
         const stopDistance = entryPrice * slBuffer;
         const sl = Math.round((entryPrice + stopDistance) * 100) / 100;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
         const qty = Math.floor(riskAmount / stopDistance);
 
         if (qty > 0) {
@@ -381,7 +387,7 @@ function runBacktest(candles, config) {
       // Check for entry on current candle
       if (alertCandle) {
         const ac = alertCandle.candle;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
         // Bullish Entry: Break above Alert Candle high
         if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
@@ -461,7 +467,7 @@ function runBacktest(candles, config) {
 
       if (alertCandle) {
         const ac = alertCandle.candle;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
         // CE Entry: Break above Alert Candle high
         if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
@@ -545,7 +551,7 @@ function runBacktest(candles, config) {
       }
 
       // Enter on momentum continuation (green light)
-      const riskAmount = currentCapital * (riskPercent / 100);
+      const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
       if (trend === "UP" && pullback && candle.close > prevCandle.high) {
         // Bullish continuation
@@ -606,7 +612,7 @@ function runBacktest(candles, config) {
       }
 
       if (motherCandle && insideCandle) {
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
         const entryPrice = insideCandle.high;
         const sl = insideCandle.low;
         const stopDistance = entryPrice - sl;
@@ -644,7 +650,7 @@ function runBacktest(candles, config) {
         const entryPrice = candle.close;
         const sl = candle.low;
         const stopDistance = entryPrice - sl;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
         if (stopDistance > 0) {
           const qty = Math.floor(riskAmount / stopDistance);
@@ -680,7 +686,7 @@ function runBacktest(candles, config) {
 
       if (alertCandle && alertCandle.type === "ORB") {
         const orb = alertCandle.candle;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
         // Break above ORB high
         if (candle.high > orb.high) {
@@ -744,7 +750,7 @@ function runBacktest(candles, config) {
         const entryPrice = candle.close;
         const sl = currentEMA20;
         const stopDistance = entryPrice - sl;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
         if (stopDistance > 0) {
           const qty = Math.floor(riskAmount / stopDistance);
@@ -782,7 +788,7 @@ function runBacktest(candles, config) {
           const entryPrice = candle.close;
           const sl = currentEMA20;
           const stopDistance = entryPrice - sl;
-          const riskAmount = currentCapital * (riskPercent / 100);
+          const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
           if (stopDistance > 0) {
             const qty = Math.floor(riskAmount / stopDistance);
@@ -812,7 +818,7 @@ function runBacktest(candles, config) {
         const entryPrice = candle.close;
         const sl = prevCandle.low;
         const stopDistance = entryPrice - sl;
-        const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
         if (stopDistance > 0) {
           const qty = Math.floor(riskAmount / stopDistance);
@@ -852,12 +858,12 @@ function runBacktest(candles, config) {
           const entryPrice = candle.close;
           const sl = prevCandle.low;
           const stopDistance = entryPrice - sl;
-          const riskAmount = currentCapital * (riskPercent / 100);
+        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
 
-          if (stopDistance > 0) {
-            const qty = Math.floor(riskAmount / stopDistance);
-            if (qty > 0) {
-              const targetDistance = stopDistance * 1.5; // 1.5x ATR target
+        if (stopDistance > 0) {
+          const qty = Math.floor(riskAmount / stopDistance);
+          if (qty > 0) {
+            const targetDistance = stopDistance * 1.5; // 1.5x ATR target
               const target = Math.round((entryPrice + targetDistance) * 100) / 100;
 
               position = {
@@ -992,6 +998,7 @@ router.post("/run", async (req, res) => {
       slBuffer,
       targetMultiplier,
       maxHoldBars,
+      capitalMode: req.body.capitalMode || "COMPOUND",
     });
 
     res.json({
@@ -1144,18 +1151,19 @@ router.post("/run-multi", async (req, res) => {
 
     const results = [];
     for (const strat of strategies) {
-      const result = runBacktest(candles, {
-        strategy: strat,
-        rsiPeriod,
-        oversoldThreshold,
-        overboughtThreshold,
-        emaPeriod,
-        capital,
-        riskPercent,
-        slBuffer,
-        targetMultiplier,
-        maxHoldBars,
-      });
+    const result = runBacktest(candles, {
+      strategy: strat,
+      rsiPeriod,
+      oversoldThreshold,
+      overboughtThreshold,
+      emaPeriod,
+      capital,
+      riskPercent,
+      slBuffer,
+      targetMultiplier,
+      maxHoldBars,
+      capitalMode: req.body.capitalMode || "COMPOUND",
+    });
       results.push({
         strategy: strat,
         ...result,
