@@ -36,10 +36,20 @@ TradingOS is an institutional-grade automated trading platform. The system is de
 - Auto-refreshing read-only data
 - **No trading actions — surveillance only**
 
+### Live Chart
+- SVG candlestick chart with volume bars
+- Symbol selector: BANKNIFTY, NIFTY 50, FINNIFTY, SENSEX
+- Timeframe selector: 1m, 5m, 15m, 30m, 1h, Daily
+- Auto-refresh every 5 seconds when market is open
+- OHLC bar for latest candle
+- Shows historical data when market is closed
+- Market status indicator (Open / Closed / Holiday)
+
 ### Trading Bot
 - **Start Bot** — Begin automated scanning and execution
 - **Stop Bot** — Halt new signal generation
 - **Emergency Stop** — Immediately kill all positions and halt
+- **Reset E-Stop** — Clear emergency state and resume readiness
 - Paper trading toggle
 - Strategy configuration (risk %, lot sizing, max trades)
 - Active positions with live P&L
@@ -53,6 +63,9 @@ TradingOS is an institutional-grade automated trading platform. The system is de
 - Strategy backtesting engine
 - Multi-strategy comparison
 - Configurable parameters
+- **Capital Mode**: Compounding vs Fixed
+  - **Compounding**: Position size grows/shrinks with equity
+  - **Fixed**: Each trade uses initial capital (consistent risk)
 
 ### Visual Backtest
 - Chart-based backtest visualization
@@ -95,6 +108,7 @@ TradingOS is an institutional-grade automated trading platform. The system is de
 - `POST /api/auto-trade/start`
 - `POST /api/auto-trade/stop`
 - `POST /api/auto-trade/emergency-stop`
+- `POST /api/auto-trade/reset-emergency` — Clear emergency halt
 - `GET /api/auto-trade/status`
 - `GET /api/auto-trade/performance`
 - `POST /api/auto-trade/paper-trading`
@@ -105,6 +119,8 @@ TradingOS is an institutional-grade automated trading platform. The system is de
 - `GET /api/backtest/symbols`
 - `POST /api/backtest/run`
 - `POST /api/backtest/run-multi`
+- `GET /api/backtest/holidays` — NSE trading holidays
+- `POST /api/backtest/holidays/refresh` — Refresh from NSE
 
 ---
 
@@ -124,6 +140,18 @@ All manual trading features have been eliminated:
 - ❌ Manual trade validation UI
 - ❌ `POST /api/orders/place`
 - ❌ `DELETE /api/orders/cancel`
+
+---
+
+## Market Holidays
+
+NSE trading holidays are handled dynamically:
+
+- **Backend** fetches from NSE API (`nseindia.com/api/holiday-master`) on startup
+- **Fallback**: Cached list stored in `data/holidays.json`
+- **Manual refresh**: `POST /api/backtest/holidays/refresh`
+- **Frontend** Chart and Bot both respect holidays
+- Shows holiday name (e.g., "Holiday — Republic Day") instead of "Market Open"
 
 ---
 

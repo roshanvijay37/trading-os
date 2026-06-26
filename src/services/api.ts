@@ -98,6 +98,8 @@ export const autoTradeApi = {
 
 export const backtestApi = {
   getSymbols: () => fetchWithAuth("/backtest/symbols"),
+  getHolidays: () => fetchWithAuth("/backtest/holidays"),
+  refreshHolidays: () => fetchWithAuth("/backtest/holidays/refresh", { method: "POST" }),
   run: (params: {
     symbol: string;
     resolution: string;

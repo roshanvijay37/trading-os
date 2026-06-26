@@ -1,4 +1,4 @@
- //**
+/**
  * PRODUCTION-GRADE AUTOMATED TRADING SYSTEM
  *
  * Institutional-quality risk management for real money trading.

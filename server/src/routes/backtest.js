@@ -1,5 +1,6 @@
 import express from "express";
 import { getSession, getAllSessions } from "./auth.js";
+import { getHolidays, refreshHolidays } from "../utils/marketHolidays.js";
 
 const router = express.Router();
 
@@ -1294,6 +1295,33 @@ router.get("/symbols", (_req, res) => {
       { value: "OPENING_MOMENTUM", label: "Opening Momentum" },
     ],
   });
+});
+
+// ─── API Endpoint: Get NSE Market Holidays ──────────────────────
+router.get("/holidays", async (_req, res) => {
+  try {
+    const holidays = getHolidays();
+    res.json({
+      success: true,
+      ...holidays,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── API Endpoint: Refresh NSE Market Holidays ──────────────────
+router.post("/holidays/refresh", async (_req, res) => {
+  try {
+    const result = await refreshHolidays();
+    res.json({
+      success: true,
+      message: "Holidays refreshed",
+      ...result,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;

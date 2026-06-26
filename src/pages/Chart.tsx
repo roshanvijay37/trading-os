@@ -12,56 +12,41 @@ interface Candle {
   volume: number;
 }
 
-// 2026 NSE Trading Holidays
-const NSE_HOLIDAYS = new Set([
-  "2026-01-01", "2026-01-26", "2026-03-17", "2026-04-02",
-  "2026-04-14", "2026-05-01", "2026-08-15", "2026-08-28",
-  "2026-10-02", "2026-10-20", "2026-10-21", "2026-11-09", "2026-12-25",
-]);
+let holidayCache: { date: string; name: string }[] = [];
 
-function isMarketHoliday(): boolean {
+async function fetchHolidays(): Promise<{ date: string; name: string }[]> {
+  if (holidayCache.length > 0) return holidayCache;
+  try {
+    const data = await backtestApi.getHolidays();
+    if (data.holidays) {
+      holidayCache = data.holidays;
+      return holidayCache;
+    }
+  } catch {
+    // Fallback to empty if API fails
+  }
+  return [];
+}
+
+function isMarketHoliday(holidays: { date: string; name: string }[]): boolean {
   const iso = new Date().toISOString().split("T")[0];
-  return NSE_HOLIDAYS.has(iso);
+  return holidays.some((h) => h.date === iso);
 }
 
-function isMarketOpen(): boolean {
-  const now = new Date();
-  const day = now.getUTCDay();
-  if (day === 0 || day === 6) return false;
-  if (isMarketHoliday()) return false;
-  const utc = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const ist = (utc + 330) % (24 * 60);
-  const h = Math.floor(ist / 60);
-  const m = ist % 60;
-  if (h < 9 || h > 15) return false;
-  if (h === 9 && m < 15) return false;
-  if (h === 15 && m > 30) return false;
-  return true;
+function getHolidayName(holidays: { date: string; name: string }[]): string | null {
+  const iso = new Date().toISOString().split("T")[0];
+  const found = holidays.find((h) => h.date === iso);
+  return found ? found.name : null;
 }
 
-function getMarketStatusText(): string {
+function getMarketStatusText(holidays: { date: string; name: string }[]): string {
   const now = new Date();
   const day = now.getUTCDay();
   if (day === 0) return "Sunday — Market Closed";
   if (day === 6) return "Saturday — Market Closed";
-  if (isMarketHoliday()) {
-    const names: Record<string, string> = {
-      "2026-01-01": "New Year's Day",
-      "2026-01-26": "Republic Day",
-      "2026-03-17": "Holi",
-      "2026-04-02": "Good Friday",
-      "2026-04-14": "Ambedkar Jayanti",
-      "2026-05-01": "Labour Day",
-      "2026-08-15": "Independence Day",
-      "2026-08-28": "Ganesh Chaturthi",
-      "2026-10-02": "Gandhi Jayanti",
-      "2026-10-20": "Diwali Laxmi Pujan",
-      "2026-10-21": "Diwali Balipratipada",
-      "2026-11-09": "Gurunanak Jayanti",
-      "2026-12-25": "Christmas",
-    };
-    const iso = now.toISOString().split("T")[0];
-    return `Holiday — ${names[iso] || "Market Closed"}`;
+  const holidayName = getHolidayName(holidays);
+  if (holidayName) {
+    return `Holiday — ${holidayName}`;
   }
   const utc = now.getUTCHours() * 60 + now.getUTCMinutes();
   const ist = (utc + 330) % (24 * 60);
@@ -70,6 +55,21 @@ function getMarketStatusText(): string {
   if (h === 9 && m < 15) return "Pre-market";
   if (h < 9 || h > 15 || (h === 15 && m >= 30)) return "Market Closed";
   return "Market Open — Auto-refreshing";
+}
+
+function isMarketOpen(holidays: { date: string; name: string }[]): boolean {
+  const now = new Date();
+  const day = now.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  if (isMarketHoliday(holidays)) return false;
+  const utc = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const ist = (utc + 330) % (24 * 60);
+  const h = Math.floor(ist / 60);
+  const m = ist % 60;
+  if (h < 9 || h > 15) return false;
+  if (h === 9 && m < 15) return false;
+  if (h === 15 && m > 30) return false;
+  return true;
 }
 
 function formatTime(iso: string) {
@@ -88,7 +88,8 @@ export function Chart() {
   const [candles, setCandles] = useState<Candle[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [marketOpen, setMarketOpen] = useState(isMarketOpen());
+  const [holidays, setHolidays] = useState<{ date: string; name: string }[]>([]);
+  const [marketOpen, setMarketOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -108,11 +109,18 @@ export function Chart() {
     { value: "D", label: "D" },
   ];
 
+  // Load holidays once on mount
+  useEffect(() => {
+    fetchHolidays().then((h) => {
+      setHolidays(h);
+      setMarketOpen(isMarketOpen(h));
+    });
+  }, []);
+
   const fetchData = async () => {
     try {
       const to = new Date();
       const from = new Date();
-      // Fetch last 2 days for intraday, 90 days for daily
       const daysBack = resolution === "D" ? 90 : 2;
       from.setDate(from.getDate() - daysBack);
 
@@ -130,13 +138,13 @@ export function Chart() {
 
       if (data.candles && data.candles.length > 0) {
         const parsed: Candle[] = data.candles.map((c: any) => ({
-          timestamp: c[0] * 1000,
-          datetime: new Date(c[0] * 1000).toISOString(),
-          open: c[1],
-          high: c[2],
-          low: c[3],
-          close: c[4],
-          volume: c[5],
+          timestamp: c.timestamp,
+          datetime: c.datetime,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
         }));
         setCandles(parsed);
         setLastUpdate(new Date().toLocaleTimeString("en-IN"));
@@ -151,19 +159,17 @@ export function Chart() {
     setLoading(true);
     fetchData().finally(() => setLoading(false));
 
-    // Check market status every minute
     const statusInterval = setInterval(() => {
-      setMarketOpen(isMarketOpen());
+      setMarketOpen(isMarketOpen(holidays));
     }, 60000);
 
     return () => {
       clearInterval(statusInterval);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [symbol, resolution]);
+  }, [symbol, resolution, holidays]);
 
   useEffect(() => {
-    // Auto-refresh every 5 seconds when market is open
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (marketOpen) {
       intervalRef.current = setInterval(() => {
@@ -184,7 +190,7 @@ export function Chart() {
     const chartW = width - padding.left - padding.right;
     const chartH = height - padding.top - padding.bottom;
 
-    const visibleCandles = candles.slice(-120); // Show last 120 candles
+    const visibleCandles = candles.slice(-120);
     const highs = visibleCandles.map((c) => c.high);
     const lows = visibleCandles.map((c) => c.low);
     const maxH = Math.max(...highs);
@@ -202,7 +208,6 @@ export function Chart() {
 
     return (
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ maxHeight: 500 }}>
-        {/* Grid lines */}
         {[0, 0.25, 0.5, 0.75, 1].map((t) => {
           const y = padding.top + t * chartH;
           const price = maxH - t * range;
@@ -216,7 +221,6 @@ export function Chart() {
           );
         })}
 
-        {/* Volume bars */}
         {visibleCandles.map((c, i) => {
           const x = xScale(i);
           const isGreen = c.close >= c.open;
@@ -233,7 +237,6 @@ export function Chart() {
           );
         })}
 
-        {/* Candles */}
         {visibleCandles.map((c, i) => {
           const x = xScale(i);
           const isGreen = c.close >= c.open;
@@ -244,29 +247,12 @@ export function Chart() {
 
           return (
             <g key={`candle-${i}`}>
-              {/* Wick */}
-              <line
-                x1={x}
-                y1={yScale(c.high)}
-                x2={x}
-                y2={yScale(c.low)}
-                stroke={color}
-                strokeWidth={1}
-              />
-              {/* Body */}
-              <rect
-                x={x - candleWidth / 2}
-                y={bodyTop}
-                width={candleWidth}
-                height={bodyH}
-                fill={isGreen ? "#a3e635" : "#f87171"}
-                rx={1}
-              />
+              <line x1={x} y1={yScale(c.high)} x2={x} y2={yScale(c.low)} stroke={color} strokeWidth={1} />
+              <rect x={x - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyH} fill={color} rx={1} />
             </g>
           );
         })}
 
-        {/* Time labels */}
         {visibleCandles.map((c, i) => {
           if (i % Math.ceil(visibleCandles.length / 6) !== 0) return null;
           const x = xScale(i);
@@ -287,7 +273,7 @@ export function Chart() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-white">Live Chart</h1>
           <p className="mt-2 text-sm text-zinc-500">
-            {getMarketStatusText()}
+            {getMarketStatusText(holidays)}
           </p>
         </div>
         <div className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ${
@@ -298,7 +284,6 @@ export function Chart() {
         </div>
       </div>
 
-      {/* Controls */}
       <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
         <div className="flex items-center gap-2">
           <LineChart size={16} className="text-zinc-500" />
