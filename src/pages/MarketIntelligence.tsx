@@ -1,4 +1,4 @@
-/**
+ /**
  * TradingOS — Market Intelligence
  * Institutional-grade market analytics
  */
@@ -98,13 +98,29 @@ export function MarketIntelligencePage() {
         </div>
       </div>
 
-      {/* OI Heatmap Placeholder */}
+      {/* Gamma Exposure */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
         <div className="mb-3 flex items-center gap-2">
           <Eye size={14} className="text-zinc-500" />
-          <h3 className="text-sm font-medium text-white">OI Heatmap</h3>
+          <h3 className="text-sm font-medium text-white">Gamma Exposure</h3>
         </div>
-        <p className="text-xs text-zinc-600">Live OI heatmap visualization with strike-wise open interest data.</p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-zinc-500">Total Gamma</p>
+            <p className="font-mono text-sm text-white">{marketIntel.gammaExposure.totalGamma.toFixed(2)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Zero Gamma Level</p>
+            <p className="font-mono text-sm text-white">₹{marketIntel.gammaExposure.zeroGammaLevel.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Flip Point</p>
+            <p className="font-mono text-sm text-white">₹{marketIntel.gammaExposure.flipPoint.toLocaleString()}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-zinc-600">
+          Dealer hedging estimated delta: {marketIntel.gammaExposure.estimatedHedgeDelta.toFixed(0)} contracts
+        </p>
       </div>
     </div>
   );
