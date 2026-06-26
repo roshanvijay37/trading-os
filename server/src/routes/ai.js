@@ -12,6 +12,9 @@ const router = Router();
 const KIMI_BASE_URL = "https://api.moonshot.cn/v1";
 const KIMI_MODEL = process.env.KIMI_MODEL || "moonshot-v1-8k";
 
+// Strip moonshot: prefix if present (some providers use it, Moonshot API does not)
+const NORMALIZED_MODEL = KIMI_MODEL.replace(/^moonshot:/, "");
+
 /**
  * Helper: Call Kimi API with system prompt + user message
  */
@@ -29,7 +32,7 @@ async function callKimi(systemPrompt, userMessage, temperature = 0.3) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: KIMI_MODEL,
+      model: NORMALIZED_MODEL,
       temperature,
       messages: [
         { role: "system", content: systemPrompt },
@@ -124,7 +127,7 @@ router.post("/cio/query", async (req, res) => {
       success: true,
       question,
       answer,
-      model: KIMI_MODEL,
+      model: NORMALIZED_MODEL,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -172,7 +175,7 @@ router.post("/cio/regime", async (req, res) => {
     res.json({
       success: true,
       ...parsed,
-      model: KIMI_MODEL,
+      model: NORMALIZED_MODEL,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -204,7 +207,7 @@ router.post("/trade/review", async (req, res) => {
       success: true,
       tradeId: trade.id,
       review: answer,
-      model: KIMI_MODEL,
+      model: NORMALIZED_MODEL,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
@@ -230,23 +233,33 @@ router.get("/status", async (req, res) => {
   }
 
   try {
-    // Quick health check — list models
-    const response = await fetch(`${KIMI_BASE_URL}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+    // Quick health check — minimal chat completion
+    const response = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: NORMALIZED_MODEL,
+        max_tokens: 1,
+        messages: [{ role: "user", content: "hi" }],
+      }),
     });
 
     if (response.ok) {
       res.json({
         configured: true,
         reachable: true,
-        model: KIMI_MODEL,
+        model: NORMALIZED_MODEL,
         message: "Kimi AI connected and ready",
       });
     } else {
+      const errText = await response.text();
       res.json({
         configured: true,
         reachable: false,
-        message: `Kimi API returned ${response.status}. Check your API key.`,
+        message: `Kimi API returned ${response.status}: ${errText}`,
       });
     }
   } catch (err) {
