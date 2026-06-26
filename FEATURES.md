@@ -1,7 +1,7 @@
 # TradingOS - Feature Documentation
 
-> **Version**: 1.0.0  
-> **Last Updated**: June 25, 2026  
+> **Version**: 1.1.0  
+> **Last Updated**: June 26, 2026  
 > **Author**: Roshan Vijay  
 > **Description**: Complete trading platform for FYERS broker with automated 5 EMA strategy execution, backtesting, and live trading capabilities.
 
@@ -192,6 +192,11 @@ trading-os/
 | **Server Restart Recovery** | ✅ | Reloads open positions on restart |
 | **No Trade Limit** | ✅ | `MAX_TRADES_PER_DAY: 999` (unlimited) |
 | **Trailing SL Disabled** | ✅ | `TRAILING_SL_ENABLED: false` |
+| **Config Editor** | ✅ | Update risk, lots, max trades from UI |
+| **Position Sizing Mode** | ✅ | Toggle between Risk % and Fixed Lots |
+| **Paper Trading** | ✅ | Simulate trades without real orders |
+| **Emergency Stop** | ✅ | Immediate halt button |
+| **Daily P&L Tracking** | ✅ | Real-time P&L display |
 
 ### Bot Configuration
 
@@ -203,12 +208,16 @@ trading-os/
     { name: "BANKNIFTY", symbol: "NSE:NIFTYBANK-INDEX", lotSize: 30 }
   ],
   CAPITAL: 100000,
-  RISK_PERCENT: 1,                // 1% per trade
-  MAX_TRADES_PER_DAY: 999,        // Unlimited
+  RISK_PERCENT: 0.5,              // 0.5% per trade (institutional)
+  MAX_TRADES_PER_DAY: 10,         // Max 10 trades/day
   TARGET_MULTIPLIER: 2,           // 1:2 R:R
+  POSITION_SIZING_MODE: "RISK",   // "RISK" or "LOTS"
+  FIXED_LOTS: 1,                  // Lots per trade (when mode=LOTS)
   TRAILING_SL_ENABLED: false,     // Disabled
   ORDER_TYPE: "LIMIT",
-  SLIPPAGE_BUFFER_PCT: 0.5
+  LIMIT_BUFFER_PCT: 0.3,          // 0.3% limit order buffer
+  SLIPPAGE_BUFFER_PCT: 0.5,
+  PAPER_TRADING: false            // Set true to simulate
 }
 ```
 
@@ -393,6 +402,10 @@ trading-os/
 | `/api/auto-trade/stop` | POST | Session | Stop bot |
 | `/api/auto-trade/status` | GET | Session | Get bot status |
 | `/api/auto-trade/performance` | GET | Session | Performance metrics |
+| `/api/auto-trade/emergency-stop` | POST | Session | Immediate halt |
+| `/api/auto-trade/paper-trading` | POST | Session | Toggle paper mode |
+| `/api/auto-trade/config` | POST | Session | Update configuration |
+| `/api/auto-trade/audit` | GET | Session | Get audit logs |
 
 ### Backtest
 
@@ -560,7 +573,9 @@ server {
 - [ ] Multi-leg strategies (spreads, iron condors)
 - [ ] Telegram/Discord notifications
 - [ ] Mobile app (React Native)
-- [ ] Paper trading mode
+- [x] Paper trading mode
+- [x] Config editor (risk/lots/mode)
+- [x] Position sizing toggle (Risk % / Fixed Lots)
 - [ ] Strategy optimizer (walk-forward analysis)
 
 ---
