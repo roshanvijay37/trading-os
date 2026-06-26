@@ -65,7 +65,7 @@ All manual trading capabilities have been eliminated:
 │  ├── Risk Dashboard         Portfolio risk monitoring        │
 │  ├── Market Intelligence    Live data + analytics merged     │
 │  ├── Trading Bot            Automated execution control      │
-│  ├── Live Chart             Technical analysis               │
+│  ├── Live Chart             SVG candlestick analysis         │
 │  ├── Backtest Lab           Strategy validation + charts     │
 │  ├── Journal                Automatic trade audit            │
 │  ├── Reports                Performance analytics            │
@@ -89,18 +89,20 @@ All manual trading capabilities have been eliminated:
 
 ## Pages
 
-| Page | Purpose | New |
-|------|---------|-----|
-| **Command Center** | Bot status, P&L, AI CIO, regime, chat | ✅ |
-| **Strategy Manager** | Enable/disable 17 strategies, configure capital allocation, risk, sessions | ✅ |
-| **Trading Bot** | Start/stop bot, emergency controls, execution logs | |
-| **Risk Dashboard** | Portfolio risk monitoring, VaR, circuit breakers, stress tests | ✅ |
-| **Market Intelligence** | Live option chains + PCR, IV, institutional flow analytics | ✅ |
-| **Live Chart** | SVG candlestick with volume, timeframe selector | |
-| **Backtest Lab** | Strategy backtest with table/chart toggle | ✅ |
-| **Journal** | Automated trade audit trail with AI comments | |
-| **Reports** | Performance analytics (Sharpe, Sortino, Calmar) | |
-| **Settings** | Platform configuration, broker, risk, capital | |
+| Page | Purpose | Route |
+|------|---------|-------|
+| **Command Center** | Bot status, P&L, market regime, AI CIO chat | `/` |
+| **Trading Bot** | Start/stop bot, emergency controls, execution logs, positions, signals | `/trading-bot` |
+| **Strategy Manager** | Enable/disable 17 strategies, configure capital allocation, risk, sessions | `/strategy-manager` |
+| **Live Chart** | SVG candlestick with volume, timeframe selector, market status | `/chart` |
+| **Backtest Lab** | Strategy backtest with table/chart toggle view | `/backtest` |
+| **Market Intelligence** | PCR, IV, institutional flow, gamma exposure analytics | `/market-intelligence` |
+| **Risk Dashboard** | Portfolio risk monitoring, VaR, circuit breakers, stress tests | `/risk-dashboard` |
+| **Journal** | Automated trade audit trail | `/journal` |
+| **Reports** | Performance analytics (discipline, win rate, P&L) | `/reports` |
+| **Settings** | Platform configuration, broker, risk, capital | `/settings` |
+
+Navigation: 10 items in grouped sidebar sections (Operations, Research, Risk, Records, System).
 
 ---
 
@@ -162,16 +164,15 @@ Merged **Dashboard** + **AI CIO** into a single supervision hub with two tabs:
 
 ### Overview Tab
 - Bot status, Portfolio P&L, Today's trades
-- Capital used, Daily risk used
+- Capital used, Daily risk used (progress bars)
 - Health Score, Execution Score
-- Market Regime display with confidence
+- Market Regime display with confidence and color coding
 - Active AI Recommendations with apply action
 
 ### AI CIO Tab
 - **Market Regime Detection**: Trending Up/Down, Sideways, Volatile, Low Volatility, Gap Day, Expiry Day, Event Day
-- **Market Context**: VIX, PCR, OI Buildup, Advance/Decline Ratio
 - **Performance Forecast**: Expected return, volatility, win probability
-- **Adjustments**: Tracked portfolio changes with before/after values
+- **Kimi AI Chat**: Natural language interface for portfolio queries
 
 ### Kimi AI (Moonshot) Chat
 

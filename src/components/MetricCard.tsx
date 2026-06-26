@@ -1,39 +1,30 @@
-import type { LucideIcon } from "lucide-react";
-import { Card } from "./Card";
-
 interface MetricCardProps {
   label: string;
-  value: string;
-  detail: string;
-  icon: LucideIcon;
-  tone?: "green" | "amber" | "rose";
+  value: string | number;
+  detail?: string;
+  icon: React.ElementType;
+  tone?: "green" | "rose" | "amber" | "blue" | "zinc";
 }
 
-const tones = {
-  green: "bg-lime-400/10 text-lime-300",
-  amber: "bg-amber-400/10 text-amber-300",
-  rose: "bg-rose-400/10 text-rose-300",
-};
+export function MetricCard({ label, value, detail, icon: Icon, tone = "zinc" }: MetricCardProps) {
+  const toneClasses: Record<string, { text: string; bg: string }> = {
+    green: { text: "text-gain", bg: "bg-gain/10" },
+    rose: { text: "text-loss", bg: "bg-loss/10" },
+    amber: { text: "text-warn", bg: "bg-warn/10" },
+    blue: { text: "text-info", bg: "bg-info/10" },
+    zinc: { text: "text-zinc-100", bg: "bg-zinc-800" },
+  };
 
-export function MetricCard({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  tone = "green",
-}: MetricCardProps) {
+  const t = toneClasses[tone] || toneClasses.zinc;
+
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-zinc-400">{label}</p>
-          <p className="mt-3 text-2xl font-semibold tracking-tight text-white">{value}</p>
-          <p className="mt-1 text-xs text-zinc-500">{detail}</p>
-        </div>
-        <span className={`rounded-xl p-2.5 ${tones[tone]}`}>
-          <Icon size={19} />
-        </span>
+    <div className="rounded-panel border border-border bg-panel p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon size={14} className="text-zinc-500" strokeWidth={1.5} />
+        <span className="text-2xs font-medium uppercase tracking-wider text-zinc-600">{label}</span>
       </div>
-    </Card>
+      <p className={`font-mono text-xl font-semibold ${t.text}`}>{value}</p>
+      {detail && <p className="mt-1 text-2xs text-zinc-600">{detail}</p>}
+    </div>
   );
 }

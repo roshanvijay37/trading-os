@@ -114,34 +114,30 @@ export function Dashboard() {
       ? "healthy"
       : "idle";
   const botHealthColor = {
-    healthy: "text-lime-300",
-    idle: "text-zinc-400",
-    critical: "text-rose-300",
+    healthy: "text-gain",
+    idle: "text-zinc-500",
+    critical: "text-loss",
   }[botHealth];
 
   return (
     <div>
-      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end mb-5">
         <div>
-          <p className="text-sm text-emerald-300 flex items-center gap-1.5">
-            <CircleDot size={12} className={botRunning ? "animate-pulse" : ""} />
+          <p className="flex items-center gap-1.5 text-2xs text-gain">
+            <CircleDot size={10} className={botRunning ? "animate-pulse" : ""} />
             {botRunning ? "Bot operational" : "Bot idle"}
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-white">Dashboard</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            I do not trade. I supervise.
           </p>
         </div>
         <Link
           to="/trading-bot"
-          className="rounded-xl bg-lime-400 px-5 py-2.5 text-center text-sm font-semibold text-zinc-950 hover:bg-lime-300"
+          className="rounded-panel border border-gain/20 bg-gain-dim px-5 py-2.5 text-center text-2xs font-semibold text-gain transition hover:bg-gain/20"
         >
           Trading Bot
         </Link>
       </div>
 
       {/* Bot Status Overview */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Bot Status"
           value={botRunning ? "RUNNING" : "STOPPED"}
@@ -173,15 +169,15 @@ export function Dashboard() {
       </div>
 
       {/* System Health Row */}
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <Card>
           <div className="flex items-center gap-3">
-            <div className={`rounded-lg bg-zinc-800 p-2 ${botHealthColor}`}>
-              <Radio size={18} />
+            <div className={`rounded-panel p-2 ${botHealthColor}`}>
+              <Radio size={16} />
             </div>
             <div>
-              <p className="text-xs text-zinc-500">Bot Health</p>
-              <p className={`text-sm font-semibold ${botHealthColor}`}>
+              <p className="text-2xs text-zinc-600">Bot Health</p>
+              <p className={`text-2xs font-semibold ${botHealthColor}`}>
                 {botHealth === "healthy" ? "Healthy" : botHealth === "idle" ? "Idle" : "Emergency Stop"}
               </p>
             </div>
@@ -189,12 +185,12 @@ export function Dashboard() {
         </Card>
         <Card>
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-zinc-800 p-2 text-blue-300">
-              <Wallet size={18} />
+            <div className="rounded-panel p-2 text-info">
+              <Wallet size={16} />
             </div>
             <div>
-              <p className="text-xs text-zinc-500">Broker Status</p>
-              <p className="text-sm font-semibold text-zinc-300">
+              <p className="text-2xs text-zinc-600">Broker Status</p>
+              <p className="text-2xs font-semibold text-zinc-300">
                 {fyers.error ? "Disconnected" : "Connected"}
               </p>
             </div>
@@ -202,12 +198,12 @@ export function Dashboard() {
         </Card>
         <Card>
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-zinc-800 p-2 text-amber-300">
-              <Zap size={18} />
+            <div className="rounded-panel p-2 text-warn">
+              <Zap size={16} />
             </div>
             <div>
-              <p className="text-xs text-zinc-500">Market Status</p>
-              <p className="text-sm font-semibold text-zinc-300">
+              <p className="text-2xs text-zinc-600">Market Status</p>
+              <p className="text-2xs font-semibold text-zinc-300">
                 {botStatus?.marketStatus || "Unknown"}
               </p>
             </div>
@@ -216,13 +212,13 @@ export function Dashboard() {
       </div>
 
       {/* Account Data */}
-      <div className="mt-8">
+      <div className="mt-6">
         <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-300">Account Overview</h2>
-          {fyers.loading && <Clock size={14} className="animate-spin text-zinc-500" />}
-          {fyers.error && <span className="text-xs text-rose-400">(Broker disconnected)</span>}
+          <span className="text-2xs font-semibold uppercase tracking-wider text-zinc-500">Account Overview</span>
+          {fyers.loading && <Clock size={12} className="animate-spin text-zinc-700" />}
+          {fyers.error && <span className="text-2xs text-loss">(Broker disconnected)</span>}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Available Funds"
             value={formatCurrency(availableFunds)}
@@ -255,55 +251,42 @@ export function Dashboard() {
       </div>
 
       {/* Recent Activity */}
-      <div className="mt-8 grid gap-6 xl:grid-cols-2">
-        <Card>
-          <div className="flex items-center gap-2 mb-4">
-            <FileText size={16} className="text-zinc-400" />
-            <h3 className="text-sm font-medium text-white">System Logs</h3>
-          </div>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
+      <div className="mt-6 grid gap-4 xl:grid-cols-2">
+        <Card title="System Logs" icon={FileText}>
+          <div className="space-y-1 max-h-44 overflow-y-auto">
             {logs.map((log, i) => (
-              <p key={i} className="text-xs text-zinc-500 font-mono">
+              <p key={i} className="text-2xs text-zinc-700 font-mono">
                 {log}
               </p>
             ))}
           </div>
         </Card>
 
-        <Card>
-          <div className="flex items-center gap-2 mb-4">
-            <Clock size={16} className="text-zinc-400" />
-            <h3 className="text-sm font-medium text-white">Last Trade</h3>
-          </div>
+        <Card title="Last Trade" icon={Clock}>
           {lastTrade ? (
             <div className="space-y-1">
-              <p className="text-sm text-zinc-300">
-                {lastTrade.symbol} — <span className={lastTrade.pnl >= 0 ? "text-lime-300" : "text-rose-300"}>
+              <p className="text-2xs text-zinc-300">
+                {lastTrade.symbol} — <span className={lastTrade.pnl >= 0 ? "text-gain" : "text-loss"}>
                   {formatCurrency(lastTrade.pnl || 0)}
                 </span>
               </p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-2xs text-zinc-700">
                 {lastTrade.orderDateTime || new Date(lastTrade.orderDateTime).toLocaleString()}
               </p>
             </div>
           ) : (
-            <p className="text-xs text-zinc-600">No trades executed yet today.</p>
+            <p className="text-2xs text-zinc-700">No trades executed yet today.</p>
           )}
         </Card>
       </div>
 
-      {/* Upcoming Signals placeholder */}
-      <Card className="mt-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Activity size={16} className="text-zinc-400" />
-            <h3 className="text-sm font-medium text-white">Strategy Status</h3>
-          </div>
-          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${botRunning ? "bg-lime-400/10 text-lime-300" : "bg-zinc-800 text-zinc-500"}`}>
-            {botRunning ? "Scanning" : "Standby"}
-          </span>
-        </div>
-        <p className="mt-3 text-sm text-zinc-400">
+      {/* Strategy Status */}
+      <Card className="mt-5" title="Strategy Status" icon={Activity} action={
+        <span className={`rounded-panel border px-2 py-0.5 text-2xs font-medium ${botRunning ? "border-gain/20 bg-gain-dim text-gain" : "border-border-subtle bg-surface text-zinc-600"}`}>
+          {botRunning ? "Scanning" : "Standby"}
+        </span>
+      }>
+        <p className="text-2xs text-zinc-500">
           {botRunning
             ? "Bot is actively monitoring 5 EMA crossover conditions on NIFTY and BANKNIFTY. Signals will be generated and executed automatically per configured risk parameters."
             : "Start the Trading Bot to begin automated signal scanning and execution."}

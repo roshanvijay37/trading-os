@@ -31,17 +31,16 @@ The bot does everything. The user only supervises.
 │                    TRADINGOS PLATFORM                        │
 ├─────────────────────────────────────────────────────────────┤
 │  UI Layer (React + Tailwind)                                │
-│  ├── Dashboard              Institutional command center     │
-│  ├── Strategy Manager       Enable/disable/configure         │
-│  ├── Risk Dashboard         Portfolio risk monitoring        │
-│  ├── AI CIO                 Market regime & recommendations  │
-│  ├── Market Intelligence    PCR, OI, IV, Flow analytics      │
-│  ├── Trading Bot            Legacy bot control               │
-│  ├── Market Monitor         Read-only surveillance           │
-│  ├── Live Chart             Technical analysis               │
-│  ├── Backtest               Strategy validation              │
-│  ├── Journal                Automatic trade audit            │
-│  └── Settings               Platform configuration           │
+│  ├── Command Center         Dashboard + AI CIO merged       │
+│  ├── Strategy Manager       Enable/disable/configure (17)   │
+│  ├── Risk Dashboard         Portfolio risk monitoring       │
+│  ├── Market Intelligence    PCR, OI, IV, Flow, Gamma        │
+│  ├── Trading Bot            Start/stop, emergency, logs     │
+│  ├── Live Chart             SVG candlestick analysis        │
+│  ├── Backtest Lab           Table/chart toggle view         │
+│  ├── Journal                Automatic trade audit           │
+│  ├── Reports                Performance analytics           │
+│  └── Settings               Platform configuration          │
 ├─────────────────────────────────────────────────────────────┤
 │  State Management (React Context + useReducer)              │
 │  ├── InstitutionalProvider   Central state container         │
@@ -81,7 +80,7 @@ The bot does everything. The user only supervises.
 Every strategy is implemented ONCE. Both backtest and live trading use the exact same code:
 - `runStrategy()` — generates signals from candles
 - `runBacktestEngine()` — runs backtest using same signals
-- Live trading would call `runStrategy()` on each new candle
+- Live trading calls `runStrategy()` on each new candle
 
 **Strategies Implemented**:
 - EMA5 (Subhasish Pani)
@@ -177,13 +176,25 @@ src/
 ├── store/
 │   └── InstitutionalProvider.tsx  # React Context state management
 ├── pages/
+│   ├── CommandCenter.tsx          # Dashboard + AI CIO merged
+│   ├── AutoTrade.tsx              # Bot control + positions + logs
 │   ├── StrategyManager.tsx        # Strategy configuration UI
 │   ├── RiskDashboard.tsx          # Portfolio risk monitoring
-│   ├── AICIO.tsx                  # AI CIO interface
-│   └── MarketIntelligence.tsx     # Market analytics
+│   ├── MarketIntelligence.tsx     # Market analytics
+│   ├── BacktestLab.tsx            # Backtest + visual chart
+│   ├── Chart.tsx                  # Live SVG candlestick
+│   ├── Dashboard.tsx              # Legacy dashboard (redirects)
+│   ├── Journal.tsx                # Trade audit trail
+│   ├── Reports.tsx                # Performance analytics
+│   └── Settings.tsx               # Platform configuration
 ├── components/
-│   └── Layout.tsx                 # Updated navigation
-└── App.tsx                        # Updated routes
+│   ├── Card.tsx                   # Institutional panel card
+│   ├── Layout.tsx                 # Sidebar + status bar + header
+│   ├── MetricCard.tsx             # Metric display component
+│   └── FyersConnect.tsx           # Broker connection badge
+├── styles.css                     # Global dark theme + utilities
+├── tailwind.config.js             # Institutional color tokens
+└── App.tsx                        # Routes
 ```
 
 ---
@@ -235,11 +246,11 @@ The architecture supports:
 
 The new institutional architecture wraps the existing application:
 
-- `App.tsx` now uses `InstitutionalProvider`
+- `App.tsx` uses `InstitutionalProvider`
 - All existing pages continue to work
 - New pages are additive (Strategy Manager, Risk, CIO, Intelligence)
-- Backtest page can be updated to use `runBacktestEngine()` from the unified engine
-- AutoTrade page can be updated to use `runStrategy()` for live signals
+- Backtest page uses `runBacktestEngine()` from unified engine
+- AutoTrade page uses `runStrategy()` for live signals
 
 ---
 

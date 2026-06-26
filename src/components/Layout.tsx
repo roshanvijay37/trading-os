@@ -2,82 +2,156 @@ import {
   BarChart3,
   BookOpen,
   Bot,
-  BrainCircuit,
   LayoutDashboard,
   LineChart,
-  Menu,
   Radar,
   Settings,
   ShieldCheck,
   Swords,
   TestTube,
   X,
+  ChevronRight,
+  Activity,
+  Menu,
 } from "lucide-react";
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation, useMatch } from "react-router-dom";
 import { FyersConnect } from "./FyersConnect";
+import type { ElementType } from "react";
 
 const navigation = [
-  { to: "/", label: "Command Center", icon: LayoutDashboard },
-  { to: "/trading-bot", label: "Trading Bot", icon: Bot },
-  { to: "/strategy-manager", label: "Strategies", icon: Swords },
-  { to: "/market-intelligence", label: "Market Intelligence", icon: Radar },
-  { to: "/chart", label: "Live Chart", icon: LineChart },
-  { to: "/backtest", label: "Backtest Lab", icon: TestTube },
-  { to: "/risk-dashboard", label: "Risk Engine", icon: ShieldCheck },
-  { to: "/journal", label: "Journal", icon: BookOpen },
-  { to: "/reports", label: "Reports", icon: BarChart3 },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/", label: "Command Center", icon: LayoutDashboard, group: "Operations" },
+  { to: "/trading-bot", label: "Trading Bot", icon: Bot, group: "Operations" },
+  { to: "/strategy-manager", label: "Strategies", icon: Swords, group: "Operations" },
+  { to: "/chart", label: "Live Chart", icon: LineChart, group: "Operations" },
+  { to: "/backtest", label: "Backtest Lab", icon: TestTube, group: "Research" },
+  { to: "/market-intelligence", label: "Market Intel", icon: Radar, group: "Research" },
+  { to: "/risk-dashboard", label: "Risk Engine", icon: ShieldCheck, group: "Risk" },
+  { to: "/journal", label: "Journal", icon: BookOpen, group: "Records" },
+  { to: "/reports", label: "Reports", icon: BarChart3, group: "Records" },
+  { to: "/settings", label: "Settings", icon: Settings, group: "System" },
 ];
+
+function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
+  const match = useMatch(to === "/" ? "/" : `${to}/*`);
+  const isActive = !!match;
+  return (
+    <Link
+      to={to}
+      className={`group flex items-center gap-2.5 rounded px-2.5 py-1.5 text-2xs font-medium transition ${
+        isActive
+          ? "bg-surface text-zinc-100"
+          : "text-zinc-500 hover:bg-surface hover:text-zinc-300"
+      }`}
+    >
+      <Icon
+        size={14}
+        strokeWidth={isActive ? 2.5 : 1.5}
+        className="transition"
+      />
+      <span>{label}</span>
+      {isActive && <ChevronRight size={12} className="ml-auto text-zinc-600" />}
+    </Link>
+  );
+}
+
+function StatusBar() {
+  return (
+    <div className="hidden h-7 items-center border-b border-border bg-surface px-4 lg:flex">
+      <div className="flex items-center gap-6 text-2xs">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gain" />
+          <span className="text-zinc-500">System</span>
+          <span className="text-zinc-400">Online</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Activity size={10} className="text-zinc-600" />
+          <span className="text-zinc-500">Latency</span>
+          <span className="font-mono text-zinc-400">24ms</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gain animate-pulse" />
+          <span className="text-zinc-500">AI CIO</span>
+          <span className="text-zinc-400">Active</span>
+        </div>
+        <div className="ml-auto flex items-center gap-6">
+          <span className="text-zinc-600">NSE Pre-open</span>
+          <span className="font-mono text-zinc-500">
+            {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Header() {
+  const location = useLocation();
+  const current = navigation.find((n) => n.to === location.pathname);
+  const label = current?.label || "Command Center";
+
+  return (
+    <header className="sticky top-0 z-30 flex h-11 items-center justify-between border-b border-border bg-ink/90 px-4 backdrop-blur lg:px-6">
+      <div className="flex items-center gap-3">
+        <span className="text-2xs font-semibold uppercase tracking-wider text-zinc-500">{label}</span>
+      </div>
+      <FyersConnect />
+    </header>
+  );
+}
 
 export function Layout() {
   const [open, setOpen] = useState(false);
 
-  const sidebar = (
+  const grouped = navigation.reduce<Record<string, typeof navigation>>((acc, item) => {
+    if (!acc[item.group]) acc[item.group] = [];
+    acc[item.group].push(item);
+    return acc;
+  }, {});
+
+  const sidebarContent = (
     <div className="flex h-full flex-col">
-      <div className="flex h-20 items-center gap-3 border-b border-zinc-800 px-6">
-        <span className="rounded-xl bg-lime-400 p-2 text-zinc-950">
-          <ShieldCheck size={22} strokeWidth={2.5} />
-        </span>
-        <div>
-          <p className="font-semibold text-white">TradingOS</p>
-          <p className="text-xs text-zinc-500">Automation-first</p>
+      {/* Logo */}
+      <div className="flex h-11 items-center gap-2.5 border-b border-border px-4">
+        <div className="flex h-6 w-6 items-center justify-center rounded bg-gain/10">
+          <Activity size={14} className="text-gain" strokeWidth={2.5} />
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold tracking-tight text-zinc-100">TradingOS</span>
+          <span className="font-mono text-2xs text-zinc-600">v3.0</span>
         </div>
       </div>
-      <nav className="flex-1 space-y-1 p-4">
-        {navigation.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={() => setOpen(false)}
-            className={({ isActive }) =>
-              `flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition ${
-                isActive
-                  ? "bg-lime-400/10 text-lime-300"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-              }`
-            }
-          >
-            <span className="flex items-center gap-3">
-              <Icon size={18} />
-              {label}
-            </span>
-          </NavLink>
+
+      {/* Navigation */}
+      <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+        {Object.entries(grouped).map(([group, items]) => (
+          <div key={group}>
+            <p className="mb-1 px-2.5 text-2xs font-semibold uppercase tracking-wider text-zinc-700">
+              {group}
+            </p>
+            <div className="space-y-0.5">
+              {items.map((item) => (
+                <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon as React.ElementType} />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
-      <p className="border-t border-zinc-800 p-5 text-xs leading-5 text-zinc-600">
-        I do not trade.
-        <br />
-        I supervise.
-      </p>
+
+      {/* Footer */}
+      <div className="border-t border-border p-3">
+        <p className="text-2xs leading-relaxed text-zinc-700">
+          I do not trade.
+          <br />
+          I supervise.
+        </p>
+      </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-ink text-zinc-200">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-zinc-800 bg-zinc-950 lg:block">
-        {sidebar}
-      </aside>
+    <div className="min-h-screen bg-ink text-zinc-400">
+      {/* Mobile overlay */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
@@ -85,36 +159,46 @@ export function Layout() {
             className="absolute inset-0 bg-black/70"
             onClick={() => setOpen(false)}
           />
-          <aside className="relative h-full w-72 border-r border-zinc-800 bg-zinc-950">
+          <aside className="relative h-full w-64 border-r border-border bg-surface">
             <button
               aria-label="Close menu"
               onClick={() => setOpen(false)}
-              className="absolute right-4 top-6 text-zinc-400"
+              className="absolute right-3 top-3 text-zinc-500"
             >
-              <X />
+              <X size={16} />
             </button>
-            {sidebar}
+            {sidebarContent}
           </aside>
         </div>
       )}
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zinc-800 bg-zinc-950/90 px-4 backdrop-blur lg:hidden">
-          <div className="flex items-center">
+
+      {/* Desktop sidebar */}
+      <aside className="fixed inset-y-0 left-0 hidden w-56 border-r border-border bg-surface lg:block">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile header */}
+      <div className="lg:hidden">
+        <div className="flex h-11 items-center justify-between border-b border-border bg-ink/90 px-4 backdrop-blur">
+          <div className="flex items-center gap-3">
             <button
               aria-label="Open menu"
               onClick={() => setOpen(true)}
-              className="rounded-lg border border-zinc-800 p-2"
+              className="rounded p-1.5 text-zinc-500 hover:bg-surface"
             >
-              <Menu size={20} />
+              <Menu size={16} />
             </button>
-            <p className="ml-3 font-semibold text-white">TradingOS</p>
+            <span className="text-sm font-semibold text-zinc-100">TradingOS</span>
           </div>
           <FyersConnect />
-        </header>
-        <header className="sticky top-0 z-30 hidden h-16 items-center justify-end border-b border-zinc-800 bg-zinc-950/90 px-6 backdrop-blur lg:flex">
-          <FyersConnect />
-        </header>
-        <main className="mx-auto max-w-7xl p-5 sm:p-8">
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="lg:pl-56">
+        <StatusBar />
+        <Header />
+        <main className="mx-auto max-w-[1400px] p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

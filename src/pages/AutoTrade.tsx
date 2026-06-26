@@ -21,7 +21,6 @@ import {
   Clock,
 } from "lucide-react";
 import type { BotPosition, BotSignal, BotConfig, BotStatus } from "../types";
-import { formatCurrency } from "../utils/format";
 
 export function AutoTrade() {
   const [status, setStatus] = useState<BotStatus | null>(null);
@@ -141,74 +140,67 @@ export function AutoTrade() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-white">Trading Bot</h1>
-            <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium ${
-              isEmergency
-                ? "bg-rose-400/10 text-rose-300"
-                : isRunning
-                  ? "bg-lime-400/10 text-lime-300"
-                  : "bg-zinc-800 text-zinc-500"
-            }`}>
-              <Radio size={10} className={isRunning && !isEmergency ? "animate-pulse" : ""} />
-              {isEmergency ? "EMERGENCY" : isRunning ? "LIVE" : "STANDBY"}
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-zinc-500">
-            Institutional-grade automated execution. No manual intervention.
-          </p>
-        </div>
+      {/* Status Badge */}
+      <div className="flex items-center gap-2 mb-5">
+        <span className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-1 text-2xs font-medium ${
+          isEmergency
+            ? "border-loss/20 bg-loss-dim text-loss"
+            : isRunning
+              ? "border-gain/20 bg-gain-dim text-gain"
+              : "border-border bg-surface text-zinc-500"
+        }`}>
+          <Radio size={9} className={isRunning && !isEmergency ? "animate-pulse" : ""} />
+          {isEmergency ? "EMERGENCY" : isRunning ? "LIVE" : "STANDBY"}
+        </span>
+        <p className="text-2xs text-zinc-600">Institutional-grade automated execution. No manual intervention.</p>
       </div>
 
       {/* Control Panel */}
-      <Card className="mt-6 border-zinc-700">
+      <Card>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${
+          <div className="flex items-center gap-3">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-panel ${
               isEmergency
-                ? "bg-rose-400/10 text-rose-300"
+                ? "bg-loss-dim text-loss"
                 : isRunning
-                  ? "bg-lime-400/10 text-lime-300"
-                  : "bg-zinc-800 text-zinc-500"
+                  ? "bg-gain-dim text-gain"
+                  : "bg-surface text-zinc-500"
             }`}>
-              {isEmergency ? <AlertTriangle size={24} /> : isRunning ? <Activity size={24} className="animate-pulse" /> : <XCircle size={24} />}
+              {isEmergency ? <AlertTriangle size={20} /> : isRunning ? <Activity size={20} className="animate-pulse" /> : <XCircle size={20} />}
             </div>
             <div>
-              <p className="text-sm font-medium text-white">
+              <p className="text-2xs font-medium text-zinc-200">
                 {isEmergency ? "System Halted" : isRunning ? "Strategy Active" : "System Idle"}
               </p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-2xs text-zinc-600">
                 {isRunning ? "Scanning 5 EMA crossovers on NIFTY / BANKNIFTY" : "Ready for operator command"}
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setShowConfig(!showConfig)}
-              className="flex items-center gap-2 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-700"
+              className="flex items-center gap-1.5 rounded-panel border border-border bg-panel px-3 py-2 text-2xs font-medium text-zinc-300 transition hover:border-border-hover hover:text-zinc-100"
             >
-              <Settings size={16} />
+              <Settings size={13} />
               Config
             </button>
             {!isRunning ? (
               <button
                 onClick={handleStart}
                 disabled={loading || isEmergency}
-                className="flex items-center gap-2 rounded-xl bg-lime-400 px-5 py-2.5 font-semibold text-zinc-950 transition hover:bg-lime-300 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-panel border border-gain/20 bg-gain-dim px-4 py-2 text-2xs font-semibold text-gain transition hover:bg-gain/20 disabled:opacity-50"
               >
-                <Play size={18} />
+                <Play size={14} />
                 {loading ? "Starting..." : "Start Bot"}
               </button>
             ) : (
               <button
                 onClick={handleStop}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-xl bg-amber-400 px-5 py-2.5 font-semibold text-zinc-950 transition hover:bg-amber-300 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-panel border border-warn/20 bg-warn-dim px-4 py-2 text-2xs font-semibold text-warn transition hover:bg-warn/20 disabled:opacity-50"
               >
-                <Square size={18} />
+                <Square size={14} />
                 {loading ? "Stopping..." : "Stop Bot"}
               </button>
             )}
@@ -216,25 +208,25 @@ export function AutoTrade() {
               <button
                 onClick={handleResetEmergency}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-400 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-panel border border-gain/20 bg-gain-dim px-3 py-2 text-2xs font-semibold text-gain transition hover:bg-gain/20 disabled:opacity-50"
               >
-                <Lock size={18} />
+                <Lock size={14} />
                 Reset E-Stop
               </button>
             ) : (
               <button
                 onClick={handleEmergencyStop}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-xl bg-rose-500 px-4 py-2.5 font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-panel border border-loss/20 bg-loss-dim px-3 py-2 text-2xs font-semibold text-loss transition hover:bg-loss/20 disabled:opacity-50"
               >
-                <Lock size={18} />
+                <Lock size={14} />
                 E-Stop
               </button>
             )}
           </div>
         </div>
         {error && (
-          <p className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-300">
+          <p className="mt-4 rounded-panel border border-loss/20 bg-loss-dim p-3 text-2xs text-loss">
             {error}
           </p>
         )}
@@ -242,27 +234,27 @@ export function AutoTrade() {
 
       {/* Configuration Panel */}
       {showConfig && (
-        <Card className="mt-4 border-amber-400/20">
+        <Card className="mt-3 border-warn/20">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-medium text-amber-300">
-              <Settings size={16} />
+            <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-warn">
+              <Settings size={13} />
               Strategy Configuration
             </h3>
             <button
               onClick={handleUpdateConfig}
               disabled={loading}
-              className="rounded-lg bg-lime-400 px-3 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-lime-300 disabled:opacity-50"
+              className="rounded-panel border border-gain/20 bg-gain-dim px-3 py-1.5 text-2xs font-semibold text-gain transition hover:bg-gain/20 disabled:opacity-50"
             >
               Save Config
             </button>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="text-xs text-zinc-500">Sizing Mode</label>
+              <label className="text-2xs text-zinc-600">Sizing Mode</label>
               <select
                 value={configForm.positionSizingMode}
                 onChange={(e) => setConfigForm({ ...configForm, positionSizingMode: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white"
+                className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
               >
                 <option value="RISK">Risk %</option>
                 <option value="LOTS">Fixed Lots</option>
@@ -270,7 +262,7 @@ export function AutoTrade() {
             </div>
             {configForm.positionSizingMode === "RISK" ? (
               <div>
-                <label className="text-xs text-zinc-500">Risk Per Trade (%)</label>
+                <label className="text-2xs text-zinc-600">Risk Per Trade (%)</label>
                 <input
                   type="number"
                   step="0.1"
@@ -278,31 +270,31 @@ export function AutoTrade() {
                   max="5"
                   value={configForm.riskPercent}
                   onChange={(e) => setConfigForm({ ...configForm, riskPercent: parseFloat(e.target.value) })}
-                  className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white"
+                  className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
                 />
               </div>
             ) : (
               <div>
-                <label className="text-xs text-zinc-500">Lots Per Trade</label>
+                <label className="text-2xs text-zinc-600">Lots Per Trade</label>
                 <input
                   type="number"
                   min="1"
                   max="100"
                   value={configForm.fixedLots}
                   onChange={(e) => setConfigForm({ ...configForm, fixedLots: parseInt(e.target.value) })}
-                  className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white"
+                  className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
                 />
               </div>
             )}
             <div>
-              <label className="text-xs text-zinc-500">Max Trades/Day</label>
+              <label className="text-2xs text-zinc-600">Max Trades/Day</label>
               <input
                 type="number"
                 min="1"
                 max="100"
                 value={configForm.maxTradesPerDay}
                 onChange={(e) => setConfigForm({ ...configForm, maxTradesPerDay: parseInt(e.target.value) })}
-                className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white"
+                className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
               />
             </div>
             <div className="flex items-center gap-3 pt-5">
@@ -310,9 +302,9 @@ export function AutoTrade() {
                 type="checkbox"
                 checked={configForm.paperTrading}
                 onChange={(e) => setConfigForm({ ...configForm, paperTrading: e.target.checked })}
-                className="h-4 w-4 rounded border-zinc-600 bg-zinc-950"
+                className="h-3.5 w-3.5 rounded border-border bg-surface"
               />
-              <label className="text-xs text-zinc-500">Paper Trading</label>
+              <label className="text-2xs text-zinc-600">Paper Trading</label>
             </div>
           </div>
         </Card>
@@ -321,7 +313,7 @@ export function AutoTrade() {
       {/* Status Metrics */}
       {status && (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               label="Market Status"
               value={status.marketStatus}
@@ -353,34 +345,27 @@ export function AutoTrade() {
           </div>
 
           {/* Active Positions */}
-          <Card className="mt-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-medium text-white">
-                <Target size={16} />
-                Active Positions
-              </h3>
-              <span className="text-xs text-zinc-500">{status.openPositions?.length || 0} open</span>
-            </div>
+          <Card className="mt-5" title="Active Positions" icon={Target} action={<span className="text-2xs text-zinc-600">{status.openPositions?.length || 0} open</span>}>
             {status.openPositions && status.openPositions.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {status.openPositions.map((pos: BotPosition) => (
                   <div
                     key={pos.id}
-                    className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/50 p-3"
+                    className="flex items-center justify-between rounded border border-border-subtle bg-surface px-3 py-2"
                   >
                     <div className="flex items-center gap-3">
-                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
-                        pos.pnl >= 0 ? "bg-lime-400/10 text-lime-300" : "bg-rose-400/10 text-rose-300"
+                      <span className={`rounded px-1.5 py-0.5 text-2xs font-semibold ${
+                        pos.pnl >= 0 ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"
                       }`}>
                         {pos.status}
                       </span>
-                      <span className="text-sm text-zinc-300">{pos.optionSymbol}</span>
+                      <span className="text-2xs text-zinc-300">{pos.optionSymbol}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-zinc-500">
+                    <div className="flex items-center gap-4 text-2xs text-zinc-500">
                       <span>Qty: {pos.quantity}</span>
                       <span>Entry: ₹{pos.entryPrice}</span>
                       <span>SL: ₹{pos.currentSL}</span>
-                      <span className={`font-medium ${pos.pnl >= 0 ? "text-lime-300" : "text-rose-300"}`}>
+                      <span className={`font-medium ${pos.pnl >= 0 ? "text-gain" : "text-loss"}`}>
                         {pos.pnl >= 0 ? "+" : ""}₹{pos.pnl.toFixed(2)}
                       </span>
                     </div>
@@ -388,20 +373,20 @@ export function AutoTrade() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-zinc-600">No active positions.</p>
+              <p className="text-2xs text-zinc-600">No active positions.</p>
             )}
           </Card>
 
           {/* Risk & Performance */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Card>
               <div className="flex items-center gap-3">
-                <div className={`rounded-lg p-2 ${parseFloat(status.dailyPnL || "0") >= 0 ? "bg-lime-400/10 text-lime-300" : "bg-rose-400/10 text-rose-300"}`}>
-                  {parseFloat(status.dailyPnL || "0") >= 0 ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+                <div className={`rounded-panel p-2 ${parseFloat(status.dailyPnL || "0") >= 0 ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"}`}>
+                  {parseFloat(status.dailyPnL || "0") >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500">Daily P&L</p>
-                  <p className={`text-lg font-semibold ${parseFloat(status.dailyPnL || "0") >= 0 ? "text-lime-300" : "text-rose-300"}`}>
+                  <p className="text-2xs text-zinc-600">Daily P&L</p>
+                  <p className={`font-mono text-base font-semibold ${parseFloat(status.dailyPnL || "0") >= 0 ? "text-gain" : "text-loss"}`}>
                     ₹{status.dailyPnL || 0}
                   </p>
                 </div>
@@ -409,12 +394,12 @@ export function AutoTrade() {
             </Card>
             <Card>
               <div className="flex items-center gap-3">
-                <div className={`rounded-lg p-2 ${status.emergencyStop ? "bg-rose-400/10 text-rose-300" : "bg-lime-400/10 text-lime-300"}`}>
-                  <Shield size={20} />
+                <div className={`rounded-panel p-2 ${status.emergencyStop ? "bg-loss-dim text-loss" : "bg-gain-dim text-gain"}`}>
+                  <Shield size={18} />
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500">Risk System</p>
-                  <p className={`text-lg font-semibold ${status.emergencyStop ? "text-rose-300" : "text-lime-300"}`}>
+                  <p className="text-2xs text-zinc-600">Risk System</p>
+                  <p className={`font-mono text-base font-semibold ${status.emergencyStop ? "text-loss" : "text-gain"}`}>
                     {status.emergencyStop ? "HALTED" : "ACTIVE"}
                   </p>
                 </div>
@@ -422,12 +407,12 @@ export function AutoTrade() {
             </Card>
             <Card>
               <div className="flex items-center gap-3">
-                <div className={`rounded-lg p-2 ${status.paperTrading ? "bg-amber-400/10 text-amber-300" : "bg-emerald-400/10 text-emerald-300"}`}>
-                  <Lock size={20} />
+                <div className={`rounded-panel p-2 ${status.paperTrading ? "bg-warn-dim text-warn" : "bg-gain-dim text-gain"}`}>
+                  <Lock size={18} />
                 </div>
                 <div>
-                  <p className="text-xs text-zinc-500">Execution Mode</p>
-                  <p className={`text-lg font-semibold ${status.paperTrading ? "text-amber-300" : "text-emerald-300"}`}>
+                  <p className="text-2xs text-zinc-600">Execution Mode</p>
+                  <p className={`font-mono text-base font-semibold ${status.paperTrading ? "text-warn" : "text-gain"}`}>
                     {status.paperTrading ? "PAPER" : "LIVE"}
                   </p>
                 </div>
@@ -437,33 +422,27 @@ export function AutoTrade() {
 
           {/* Recent Signals */}
           {status.recentSignals && status.recentSignals.length > 0 && (
-            <Card className="mt-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="flex items-center gap-2 text-sm font-medium text-white">
-                  <Zap size={16} />
-                  Recent Signals
-                </h3>
-              </div>
-              <div className="space-y-2">
+            <Card className="mt-5" title="Recent Signals" icon={Zap}>
+              <div className="space-y-1.5">
                 {status.recentSignals.slice(0, 5).map((sig: BotSignal, i: number) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/50 p-3"
+                    className="flex items-center justify-between rounded border border-border-subtle bg-surface px-3 py-2"
                   >
                     <div className="flex items-center gap-3">
-                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
-                        sig.type.includes("BUY") ? "bg-lime-400/10 text-lime-300" : "bg-rose-400/10 text-rose-300"
+                      <span className={`rounded px-1.5 py-0.5 text-2xs font-semibold ${
+                        sig.type.includes("BUY") ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"
                       }`}>
                         {sig.type}
                       </span>
-                      <span className="text-sm text-zinc-300">{sig.underlying}</span>
+                      <span className="text-2xs text-zinc-300">{sig.underlying}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-zinc-500">
+                    <div className="flex items-center gap-4 text-2xs text-zinc-500">
                       <span>Entry: ₹{sig.entryPrice}</span>
                       <span>SL: ₹{sig.stopLoss}</span>
                       <span>Tgt: ₹{sig.target}</span>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] ${
-                        sig.status === "EXECUTED" ? "bg-lime-400/10 text-lime-300" : "bg-zinc-800 text-zinc-500"
+                      <span className={`rounded px-1.5 py-0.5 text-2xs ${
+                        sig.status === "EXECUTED" ? "bg-gain-dim text-gain" : "bg-surface text-zinc-500"
                       }`}>
                         {sig.status}
                       </span>
@@ -475,26 +454,16 @@ export function AutoTrade() {
           )}
 
           {/* System Logs */}
-          <Card className="mt-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-medium text-white">
-                <FileText size={16} />
-                Execution Logs
-              </h3>
-              <span className="text-xs text-zinc-500 flex items-center gap-1">
-                <Clock size={10} />
-                Real-time
-              </span>
-            </div>
-            <div className="max-h-64 overflow-y-auto space-y-1 font-mono text-xs">
+          <Card className="mt-5" title="Execution Logs" icon={FileText} action={<span className="flex items-center gap-1 text-2xs text-zinc-600"><Clock size={10} /> Real-time</span>}>
+            <div className="max-h-52 overflow-y-auto space-y-0.5 font-mono text-2xs">
               {logs.length > 0 ? (
                 logs.map((log, i) => (
-                  <p key={i} className="text-zinc-500">
+                  <p key={i} className="text-zinc-600">
                     {log}
                   </p>
                 ))
               ) : (
-                <p className="text-zinc-600">No activity recorded.</p>
+                <p className="text-zinc-700">No activity recorded.</p>
               )}
             </div>
           </Card>

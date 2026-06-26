@@ -1,11 +1,10 @@
 /**
  * TradingOS — Backtest Lab
  * Merged Backtest + Visual Backtest
- * Run once. See both table and chart.
  */
 
 import { useState, useEffect, useRef } from "react";
-import { createChart, ColorType, IChartApi, ISeriesApi } from "lightweight-charts";
+import { createChart, ColorType, IChartApi } from "lightweight-charts";
 import { Play, RotateCcw, TrendingUp, TrendingDown, Shield, BarChart3, Table, LineChart, Eye } from "lucide-react";
 import { backtestApi } from "../services/api";
 
@@ -114,7 +113,6 @@ export function BacktestLab() {
     }
   };
 
-  // Initialize chart when result changes
   useEffect(() => {
     if (!result || !chartContainerRef.current || viewMode === "table") return;
     if (!result.equityCurve || result.equityCurve.length === 0) return;
@@ -126,17 +124,17 @@ export function BacktestLab() {
 
     try {
       const chart = createChart(chartContainerRef.current, {
-        layout: { background: { type: ColorType.Solid, color: "#09090b" }, textColor: "#a1a1aa" },
-        grid: { vertLines: { color: "#18181b" }, horzLines: { color: "#18181b" } },
-        rightPriceScale: { borderColor: "#27272a" },
-        timeScale: { borderColor: "#27272a" },
+        layout: { background: { type: ColorType.Solid, color: "#08080a" }, textColor: "#71717a" },
+        grid: { vertLines: { color: "#131318" }, horzLines: { color: "#131318" } },
+        rightPriceScale: { borderColor: "#23232a" },
+        timeScale: { borderColor: "#23232a" },
         width: chartContainerRef.current.clientWidth,
-        height: 400,
+        height: 380,
       });
 
       const lineSeries = chart.addLineSeries({
-        color: "#22c55e",
-        lineWidth: 2,
+        color: "#10b981",
+        lineWidth: 1,
         lastValueVisible: true,
         priceLineVisible: true,
       });
@@ -151,7 +149,7 @@ export function BacktestLab() {
       const markers = result.trades.map((trade: Trade) => ({
         time: trade.entryTime.split("T")[0] as any,
         position: (trade.side === "LONG" ? "belowBar" : "aboveBar") as any,
-        color: trade.side === "LONG" ? "#22c55e" : "#ef4444",
+        color: trade.side === "LONG" ? "#10b981" : "#ef4444",
         shape: (trade.side === "LONG" ? "arrowUp" : "arrowDown") as any,
         text: `${trade.side[0]} @ ${trade.entryPrice.toFixed(0)}`,
         size: 1,
@@ -186,18 +184,15 @@ export function BacktestLab() {
   const sum = result?.summary;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-white">Backtest Lab</h1>
-        <p className="mt-2 text-sm text-zinc-500">Run backtests. View results as table and chart.</p>
-      </div>
+    <div className="space-y-5">
+      <p className="text-2xs text-zinc-600">Run backtests. View results as table and chart.</p>
 
       {/* Form */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="rounded-panel border border-border bg-panel p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Symbol</label>
-            <select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white">
+            <label className="mb-1 block text-2xs text-zinc-600">Symbol</label>
+            <select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
               <option value="NSE:NIFTY50-INDEX">NIFTY 50</option>
               <option value="NSE:NIFTYBANK-INDEX">BANKNIFTY</option>
               <option value="NSE:FINNIFTY-INDEX">FINNIFTY</option>
@@ -205,22 +200,22 @@ export function BacktestLab() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Strategy</label>
-            <select value={strategy} onChange={(e) => setStrategy(e.target.value)} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white">
+            <label className="mb-1 block text-2xs text-zinc-600">Strategy</label>
+            <select value={strategy} onChange={(e) => setStrategy(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
               {strategies.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">From</label>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+            <label className="mb-1 block text-2xs text-zinc-600">From</label>
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">To</label>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+            <label className="mb-1 block text-2xs text-zinc-600">To</label>
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Resolution</label>
-            <select value={resolution} onChange={(e) => setResolution(e.target.value)} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white">
+            <label className="mb-1 block text-2xs text-zinc-600">Resolution</label>
+            <select value={resolution} onChange={(e) => setResolution(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
               <option value="1">1 minute</option>
               <option value="5">5 minutes</option>
               <option value="15">15 minutes</option>
@@ -230,34 +225,34 @@ export function BacktestLab() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Capital (₹)</label>
-            <input type="number" value={capital} onChange={(e) => setCapital(Number(e.target.value))} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+            <label className="mb-1 block text-2xs text-zinc-600">Capital (₹)</label>
+            <input type="number" value={capital} onChange={(e) => setCapital(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Risk %</label>
-            <input type="number" step="0.1" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+            <label className="mb-1 block text-2xs text-zinc-600">Risk %</label>
+            <input type="number" step="0.1" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Target R:R</label>
-            <input type="number" step="0.1" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+            <label className="mb-1 block text-2xs text-zinc-600">Target R:R</label>
+            <input type="number" step="0.1" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Slippage %</label>
-            <input type="number" step="0.01" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+            <label className="mb-1 block text-2xs text-zinc-600">Slippage %</label>
+            <input type="number" step="0.01" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-zinc-500">Capital Mode</label>
-            <select value={capitalMode} onChange={(e) => setCapitalMode(e.target.value as "COMPOUND" | "FIXED")} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white">
+            <label className="mb-1 block text-2xs text-zinc-600">Capital Mode</label>
+            <select value={capitalMode} onChange={(e) => setCapitalMode(e.target.value as "COMPOUND" | "FIXED")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
               <option value="COMPOUND">Compounding</option>
               <option value="FIXED">Fixed</option>
             </select>
           </div>
           <div className="flex items-end gap-2 sm:col-span-2">
-            <button onClick={runBacktest} disabled={loading} className="flex-1 rounded-lg bg-lime-400/10 py-2 text-sm font-medium text-lime-300 transition hover:bg-lime-400/20 disabled:opacity-50">
-              {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={14} /> Run</span>}
+            <button onClick={runBacktest} disabled={loading} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">
+              {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run</span>}
             </button>
-            <button onClick={() => setResult(null)} className="rounded-lg bg-zinc-800 p-2 text-zinc-400 hover:text-white">
-              <RotateCcw size={14} />
+            <button onClick={() => setResult(null)} className="rounded-panel border border-border-subtle bg-surface p-2 text-zinc-500 hover:text-zinc-300">
+              <RotateCcw size={12} />
             </button>
           </div>
         </div>
@@ -265,7 +260,7 @@ export function BacktestLab() {
 
       {/* View Toggle */}
       {result && (
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           {[
             { key: "both", label: "Both", icon: Eye },
             { key: "table", label: "Table", icon: Table },
@@ -274,11 +269,11 @@ export function BacktestLab() {
             <button
               key={v.key}
               onClick={() => setViewMode(v.key as any)}
-              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition ${
-                viewMode === v.key ? "bg-lime-400/10 text-lime-300" : "text-zinc-400 hover:bg-zinc-800"
+              className={`flex items-center gap-1.5 rounded-panel border px-3 py-1.5 text-2xs transition ${
+                viewMode === v.key ? "border-border-hover bg-surface text-zinc-200" : "border-border-subtle bg-panel text-zinc-500 hover:border-border-hover"
               }`}
             >
-              <v.icon size={12} /> {v.label}
+              <v.icon size={11} /> {v.label}
             </button>
           ))}
         </div>
@@ -287,47 +282,45 @@ export function BacktestLab() {
       {/* Results */}
       {result && sum && (
         <>
-          {/* Summary */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryCard label="Total Trades" value={sum.totalTrades} icon={BarChart3} />
-            <SummaryCard label="Win Rate" value={`${sum.winRate.toFixed(1)}%`} icon={sum.winRate >= 50 ? TrendingUp : TrendingDown} color={sum.winRate >= 50 ? "lime" : "rose"} />
-            <SummaryCard label="Total Return" value={`${sum.totalReturn >= 0 ? "+" : ""}${sum.totalReturn.toFixed(2)}%`} icon={sum.totalReturn >= 0 ? TrendingUp : TrendingDown} color={sum.totalReturn >= 0 ? "lime" : "rose"} />
-            <SummaryCard label="Max Drawdown" value={`${sum.maxDrawdown.toFixed(2)}%`} icon={Shield} color="rose" />
+            <SummaryCard label="Win Rate" value={`${sum.winRate.toFixed(1)}%`} icon={sum.winRate >= 50 ? TrendingUp : TrendingDown} color={sum.winRate >= 50 ? "gain" : "loss"} />
+            <SummaryCard label="Total Return" value={`${sum.totalReturn >= 0 ? "+" : ""}${sum.totalReturn.toFixed(2)}%`} icon={sum.totalReturn >= 0 ? TrendingUp : TrendingDown} color={sum.totalReturn >= 0 ? "gain" : "loss"} />
+            <SummaryCard label="Max Drawdown" value={`${sum.maxDrawdown.toFixed(2)}%`} icon={Shield} color="loss" />
           </div>
 
-          {/* Table View */}
           {(viewMode === "both" || viewMode === "table") && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
-              <h3 className="mb-3 text-sm font-medium text-white flex items-center gap-2">
-                <Table size={14} className="text-zinc-500" /> Trade Log
+            <div className="rounded-panel border border-border bg-panel p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-zinc-400">
+                <Table size={12} className="text-zinc-600" /> Trade Log
               </h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+                <table className="w-full text-2xs">
                   <thead>
-                    <tr className="border-b border-zinc-800 text-zinc-500">
-                      <th className="px-2 py-2 text-left">#</th>
-                      <th className="px-2 py-2 text-left">Side</th>
-                      <th className="px-2 py-2 text-right">Entry</th>
-                      <th className="px-2 py-2 text-right">Exit</th>
-                      <th className="px-2 py-2 text-right">P&L</th>
-                      <th className="px-2 py-2 text-right">%</th>
-                      <th className="px-2 py-2 text-left">Reason</th>
-                      <th className="px-2 py-2 text-right">Bars</th>
+                    <tr className="border-b border-border text-zinc-600">
+                      <th className="px-2 py-2 text-left font-medium">#</th>
+                      <th className="px-2 py-2 text-left font-medium">Side</th>
+                      <th className="px-2 py-2 text-right font-medium">Entry</th>
+                      <th className="px-2 py-2 text-right font-medium">Exit</th>
+                      <th className="px-2 py-2 text-right font-medium">P&L</th>
+                      <th className="px-2 py-2 text-right font-medium">%</th>
+                      <th className="px-2 py-2 text-left font-medium">Reason</th>
+                      <th className="px-2 py-2 text-right font-medium">Bars</th>
                     </tr>
                   </thead>
                   <tbody>
                     {result.trades.map((t: Trade) => (
-                      <tr key={t.id} className="border-b border-zinc-800/50">
-                        <td className="px-2 py-2 text-zinc-500">{t.id}</td>
+                      <tr key={t.id} className="border-b border-border-subtle">
+                        <td className="px-2 py-2 text-zinc-600">{t.id}</td>
                         <td className="px-2 py-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.side === "LONG" ? "bg-lime-400/10 text-lime-300" : "bg-rose-400/10 text-rose-300"}`}>{t.side}</span>
+                          <span className={`rounded px-1.5 py-0.5 text-2xs font-medium ${t.side === "LONG" ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"}`}>{t.side}</span>
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-zinc-300">{t.entryPrice.toFixed(2)}</td>
                         <td className="px-2 py-2 text-right font-mono text-zinc-300">{t.exitPrice.toFixed(2)}</td>
-                        <td className={`px-2 py-2 text-right font-mono ${t.pnl >= 0 ? "text-lime-300" : "text-rose-300"}`}>{t.pnl >= 0 ? "+" : ""}{t.pnl.toFixed(0)}</td>
-                        <td className={`px-2 py-2 text-right font-mono ${t.pnlPercent >= 0 ? "text-lime-300" : "text-rose-300"}`}>{t.pnlPercent >= 0 ? "+" : ""}{t.pnlPercent.toFixed(2)}%</td>
-                        <td className="px-2 py-2 text-zinc-500">{t.exitReason}</td>
-                        <td className="px-2 py-2 text-right text-zinc-500">{t.barsHeld}</td>
+                        <td className={`px-2 py-2 text-right font-mono ${t.pnl >= 0 ? "text-gain" : "text-loss"}`}>{t.pnl >= 0 ? "+" : ""}{t.pnl.toFixed(0)}</td>
+                        <td className={`px-2 py-2 text-right font-mono ${t.pnlPercent >= 0 ? "text-gain" : "text-loss"}`}>{t.pnlPercent >= 0 ? "+" : ""}{t.pnlPercent.toFixed(2)}%</td>
+                        <td className="px-2 py-2 text-zinc-600">{t.exitReason}</td>
+                        <td className="px-2 py-2 text-right text-zinc-600">{t.barsHeld}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -336,11 +329,10 @@ export function BacktestLab() {
             </div>
           )}
 
-          {/* Chart View */}
           {(viewMode === "both" || viewMode === "chart") && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
-              <h3 className="mb-3 text-sm font-medium text-white flex items-center gap-2">
-                <LineChart size={14} className="text-zinc-500" /> Equity Chart
+            <div className="rounded-panel border border-border bg-panel p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-zinc-400">
+                <LineChart size={12} className="text-zinc-600" /> Equity Chart
               </h3>
               <div ref={chartContainerRef} className="w-full" />
             </div>
@@ -352,14 +344,14 @@ export function BacktestLab() {
 }
 
 function SummaryCard({ label, value, icon: Icon, color = "zinc" }: { label: string; value: string | number; icon: React.ElementType; color?: string }) {
-  const colors: Record<string, string> = { lime: "text-lime-300", rose: "text-rose-300", zinc: "text-white" };
+  const colors: Record<string, string> = { gain: "text-gain", loss: "text-loss", zinc: "text-zinc-100" };
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon size={14} className="text-zinc-500" />
-        <span className="text-xs text-zinc-500">{label}</span>
+    <div className="rounded-panel border border-border bg-panel p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon size={12} className="text-zinc-600" />
+        <span className="text-2xs font-medium uppercase tracking-wider text-zinc-600">{label}</span>
       </div>
-      <p className={`font-mono text-xl font-semibold ${colors[color] || "text-white"}`}>{value}</p>
+      <p className={`font-mono text-xl font-semibold ${colors[color] || "text-zinc-100"}`}>{value}</p>
     </div>
   );
 }

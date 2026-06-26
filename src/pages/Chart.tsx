@@ -109,7 +109,6 @@ export function Chart() {
     { value: "D", label: "D" },
   ];
 
-  // Load holidays once on mount
   useEffect(() => {
     fetchHolidays().then((h) => {
       setHolidays(h);
@@ -185,8 +184,8 @@ export function Chart() {
     if (candles.length < 2) return null;
 
     const width = 900;
-    const height = 420;
-    const padding = { top: 20, right: 60, bottom: 40, left: 10 };
+    const height = 400;
+    const padding = { top: 16, right: 60, bottom: 36, left: 10 };
     const chartW = width - padding.left - padding.right;
     const chartH = height - padding.top - padding.bottom;
 
@@ -198,23 +197,23 @@ export function Chart() {
     const range = maxH - minL || 1;
 
     const maxVol = Math.max(...visibleCandles.map((c) => c.volume));
-    const volH = chartH * 0.15;
+    const volH = chartH * 0.12;
 
     const xScale = (i: number) => padding.left + (i / (visibleCandles.length - 1)) * chartW;
     const yScale = (p: number) => padding.top + chartH - ((p - minL) / range) * chartH;
     const yVol = (v: number) => padding.top + chartH - (v / maxVol) * volH;
 
-    const candleWidth = Math.max(2, (chartW / visibleCandles.length) * 0.6);
+    const candleWidth = Math.max(2, (chartW / visibleCandles.length) * 0.55);
 
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ maxHeight: 500 }}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ maxHeight: 460 }}>
         {[0, 0.25, 0.5, 0.75, 1].map((t) => {
           const y = padding.top + t * chartH;
           const price = maxH - t * range;
           return (
             <g key={t}>
-              <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#27272a" strokeWidth={1} />
-              <text x={width - padding.right + 5} y={y + 4} fill="#52525b" fontSize={10}>
+              <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#1a1a20" strokeWidth={1} />
+              <text x={width - padding.right + 5} y={y + 4} fill="#3f3f46" fontSize={9}>
                 {price.toFixed(1)}
               </text>
             </g>
@@ -231,8 +230,8 @@ export function Chart() {
               y={yVol(c.volume)}
               width={candleWidth}
               height={padding.top + chartH - yVol(c.volume)}
-              fill={isGreen ? "#365314" : "#450a0a"}
-              opacity={0.5}
+              fill={isGreen ? "#064e3b" : "#450a0a"}
+              opacity={0.4}
             />
           );
         })}
@@ -240,7 +239,7 @@ export function Chart() {
         {visibleCandles.map((c, i) => {
           const x = xScale(i);
           const isGreen = c.close >= c.open;
-          const color = isGreen ? "#a3e635" : "#f87171";
+          const color = isGreen ? "#10b981" : "#ef4444";
           const bodyTop = yScale(Math.max(c.open, c.close));
           const bodyBottom = yScale(Math.min(c.open, c.close));
           const bodyH = Math.max(1, bodyBottom - bodyTop);
@@ -248,7 +247,7 @@ export function Chart() {
           return (
             <g key={`candle-${i}`}>
               <line x1={x} y1={yScale(c.high)} x2={x} y2={yScale(c.low)} stroke={color} strokeWidth={1} />
-              <rect x={x - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyH} fill={color} rx={1} />
+              <rect x={x - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyH} fill={color} rx={0.5} />
             </g>
           );
         })}
@@ -258,7 +257,7 @@ export function Chart() {
           const x = xScale(i);
           const label = resolution === "D" ? formatDateShort(c.datetime) : formatTime(c.datetime);
           return (
-            <text key={`time-${i}`} x={x} y={height - 10} fill="#52525b" fontSize={9} textAnchor="middle">
+            <text key={`time-${i}`} x={x} y={height - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
               {label}
             </text>
           );
@@ -269,28 +268,23 @@ export function Chart() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-white">Live Chart</h1>
-          <p className="mt-2 text-sm text-zinc-500">
-            {getMarketStatusText(holidays)}
-          </p>
-        </div>
-        <div className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ${
-          marketOpen ? "bg-lime-400/10 text-lime-300" : "bg-zinc-800 text-zinc-500"
+      <div className="flex items-center gap-2 mb-5">
+        <span className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-1 text-2xs font-medium ${
+          marketOpen ? "border-gain/20 bg-gain-dim text-gain" : "border-border bg-surface text-zinc-500"
         }`}>
-          <Activity size={12} className={marketOpen ? "animate-pulse" : ""} />
+          <Activity size={9} className={marketOpen ? "animate-pulse" : ""} />
           {marketOpen ? "LIVE" : "CLOSED"}
-        </div>
+        </span>
+        <span className="text-2xs text-zinc-600">{getMarketStatusText(holidays)}</span>
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-panel border border-border bg-panel p-3">
         <div className="flex items-center gap-2">
-          <LineChart size={16} className="text-zinc-500" />
+          <LineChart size={13} className="text-zinc-600" />
           <select
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
+            className="rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
           >
             {symbols.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
@@ -299,15 +293,15 @@ export function Chart() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Clock size={16} className="text-zinc-500" />
-          <div className="flex rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden">
+          <Clock size={13} className="text-zinc-600" />
+          <div className="flex rounded-panel border border-border-subtle bg-surface overflow-hidden">
             {timeframes.map((tf) => (
               <button
                 key={tf.value}
                 onClick={() => setResolution(tf.value)}
-                className={`px-3 py-2 text-xs font-medium transition ${
+                className={`px-3 py-2 text-2xs font-medium transition ${
                   resolution === tf.value
-                    ? "bg-lime-400/20 text-lime-300"
+                    ? "bg-surface text-gain"
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
@@ -318,56 +312,56 @@ export function Chart() {
         </div>
 
         {lastUpdate && (
-          <div className="flex items-center gap-1.5 text-xs text-zinc-600 ml-auto">
-            <Calendar size={12} />
+          <div className="ml-auto flex items-center gap-1.5 text-2xs text-zinc-700">
+            <Calendar size={10} />
             Last update: {lastUpdate}
           </div>
         )}
       </div>
 
       {loading && candles.length === 0 && (
-        <div className="mt-8 flex items-center justify-center text-zinc-500">
-          <Activity size={20} className="mr-2 animate-spin" />
+        <div className="mt-6 flex items-center justify-center text-zinc-600">
+          <Activity size={16} className="mr-2 animate-spin" />
           Loading chart data...
         </div>
       )}
 
       {error && (
-        <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-300">
+        <div className="mt-4 rounded-panel border border-loss/20 bg-loss-dim p-3 text-2xs text-loss">
           {error}
         </div>
       )}
 
       {candles.length > 0 && (
-        <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+        <div className="mt-5 rounded-panel border border-border bg-panel p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h2 className="text-sm font-medium text-white">
+              <h2 className="text-2xs font-semibold uppercase tracking-wider text-zinc-400">
                 {symbols.find((s) => s.value === symbol)?.label}
               </h2>
-              <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
+              <span className="rounded-panel border border-border-subtle bg-surface px-2 py-0.5 text-2xs text-zinc-600">
                 {timeframes.find((t) => t.value === resolution)?.label}
               </span>
             </div>
-            <div className="flex items-center gap-4 text-xs text-zinc-500">
-              <span>O: {candles[candles.length - 1].open.toFixed(2)}</span>
-              <span>H: {candles[candles.length - 1].high.toFixed(2)}</span>
-              <span>L: {candles[candles.length - 1].low.toFixed(2)}</span>
-              <span className={candles[candles.length - 1].close >= candles[candles.length - 1].open ? "text-lime-300" : "text-rose-300"}>
+            <div className="flex items-center gap-4 text-2xs text-zinc-600">
+              <span className="font-mono">O: {candles[candles.length - 1].open.toFixed(2)}</span>
+              <span className="font-mono">H: {candles[candles.length - 1].high.toFixed(2)}</span>
+              <span className="font-mono">L: {candles[candles.length - 1].low.toFixed(2)}</span>
+              <span className={`font-mono ${candles[candles.length - 1].close >= candles[candles.length - 1].open ? "text-gain" : "text-loss"}`}>
                 C: {candles[candles.length - 1].close.toFixed(2)}
               </span>
             </div>
           </div>
           {renderCandlestickChart()}
 
-          <div className="mt-3 flex items-center justify-between text-[10px] text-zinc-600">
+          <div className="mt-3 flex items-center justify-between text-2xs text-zinc-700">
             <span>Showing last {Math.min(120, candles.length)} candles</span>
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm bg-lime-400" /> Bullish
+                <span className="inline-block h-1.5 w-1.5 rounded-sm bg-gain" /> Bullish
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm bg-rose-400" /> Bearish
+                <span className="inline-block h-1.5 w-1.5 rounded-sm bg-loss" /> Bearish
               </span>
             </div>
           </div>

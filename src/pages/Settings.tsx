@@ -33,22 +33,15 @@ export function Settings() {
   };
 
   const fieldClass =
-    "mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-white outline-none focus:border-lime-400/60";
+    "mt-1.5 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover";
 
   return (
     <div>
-      <h1 className="text-3xl font-semibold tracking-tight text-white">Settings</h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        Configure bot risk parameters and capital allocation.
-      </p>
+      <p className="text-2xs text-zinc-600 mb-5">Configure bot risk parameters and capital allocation.</p>
 
-      <Card className="mt-8 max-w-2xl">
-        <div className="mb-6 flex items-center gap-2">
-          <Bot size={16} className="text-zinc-400" />
-          <h2 className="text-sm font-medium text-white">Bot Configuration</h2>
-        </div>
-        <form onSubmit={submit} className="grid gap-5 sm:grid-cols-2">
-          <label className="text-sm text-zinc-400">
+      <Card className="max-w-2xl" title="Bot Configuration" icon={Bot}>
+        <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+          <label className="text-2xs text-zinc-500">
             Trading capital (₹)
             <input
               type="number"
@@ -58,7 +51,7 @@ export function Settings() {
               className={fieldClass}
             />
           </label>
-          <label className="text-sm text-zinc-400">
+          <label className="text-2xs text-zinc-500">
             Risk per trade (%) — max 1
             <input
               type="number"
@@ -70,7 +63,7 @@ export function Settings() {
               className={fieldClass}
             />
           </label>
-          <label className="text-sm text-zinc-400">
+          <label className="text-2xs text-zinc-500">
             Daily loss limit (%) — max 2
             <input
               type="number"
@@ -84,7 +77,7 @@ export function Settings() {
               className={fieldClass}
             />
           </label>
-          <label className="text-sm text-zinc-400">
+          <label className="text-2xs text-zinc-500">
             Max trades per day
             <input
               type="number"
@@ -98,28 +91,22 @@ export function Settings() {
           <div className="sm:col-span-2">
             <button
               type="submit"
-              className="rounded-xl bg-lime-400 px-5 py-2.5 text-sm font-semibold text-zinc-950"
+              className="rounded-panel border border-gain/20 bg-gain-dim px-5 py-2.5 text-2xs font-semibold text-gain transition hover:bg-gain/20"
             >
               Save configuration
             </button>
-            {saved && <span className="ml-3 text-sm text-lime-300">Saved.</span>}
+            {saved && <span className="ml-3 text-2xs text-gain">Saved.</span>}
           </div>
         </form>
       </Card>
 
-      <Card className="mt-6 max-w-2xl border-zinc-700">
-        <div className="flex items-start gap-3">
-          <Shield size={18} className="mt-0.5 text-zinc-500" />
-          <div>
-            <p className="text-sm font-medium text-white">Risk Philosophy</p>
-            <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
-              The bot manages position sizing, stop-losses, and daily limits automatically.
-              These settings define the outer guardrails. The bot will never exceed the
-              configured risk per trade or daily loss limit. Paper trading is available
-              for strategy validation before live deployment.
-            </p>
-          </div>
-        </div>
+      <Card className="mt-5 max-w-2xl border-border" title="Risk Philosophy" icon={Shield}>
+        <p className="text-2xs text-zinc-500 leading-relaxed">
+          The bot manages position sizing, stop-losses, and daily limits automatically.
+          These settings define the outer guardrails. The bot will never exceed the
+          configured risk per trade or daily loss limit. Paper trading is available
+          for strategy validation before live deployment.
+        </p>
       </Card>
     </div>
   );
