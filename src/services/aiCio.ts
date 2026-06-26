@@ -3,7 +3,8 @@
  * Kimi (Moonshot) integration for natural language queries
  */
 
-const API_BASE = "/api/ai";
+const isProduction = typeof window !== "undefined" && window.location.hostname === "roshanvijay.com";
+const API_BASE = isProduction ? "https://api.roshanvijay.com/api/ai" : "/api/ai";
 
 export interface CIOQueryRequest {
   question: string;
