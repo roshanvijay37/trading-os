@@ -10,7 +10,7 @@ import { Router } from "express";
 const router = Router();
 
 const KIMI_BASE_URL = "https://api.moonshot.cn/v1";
-const KIMI_MODEL = "kimi-latest";
+const KIMI_MODEL = process.env.KIMI_MODEL || "moonshot-v1-8k";
 
 /**
  * Helper: Call Kimi API with system prompt + user message
