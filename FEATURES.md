@@ -19,7 +19,10 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 
 ## Pages
 
-### Dashboard
+### Command Center
+Merged **Dashboard** + **AI CIO** with two tabs:
+
+**Overview Tab:**
 - Bot status indicator (Running / Stopped / Emergency)
 - Today's P&L with real-time updates
 - Current positions managed by bot
@@ -32,9 +35,17 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 - Last executed trade summary
 - Strategy status with scan state
 - **Health Score** and **Execution Score**
-- **Current Market Regime** from AI CIO
-- **AI CIO Recommendation** display
 - Active alerts and warnings
+
+**AI CIO Tab:**
+- **Current Market Regime** display with confidence
+- Regime types: Trending Up/Down, Sideways, Volatile, Low Volatility, Gap Day, Expiry Day, Event Day
+- **Market Context**: VIX, PCR, OI Buildup, A/D Ratio
+- **Performance Forecast**: Expected Return, Volatility, Win Probability
+- **AI Recommendations** with urgency levels (LOW, MEDIUM, HIGH, CRITICAL)
+- Apply recommendation action
+- **Applied Adjustments** history with before/after values
+- **Natural Language Chat** powered by Kimi K2.6
 
 ### Strategy Manager
 - **17 Strategies** with enable/disable checkboxes
@@ -85,25 +96,19 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 - **Stress Test Results** (PASS/FAIL)
 - Circuit breaker status
 
-### AI CIO
-- **Current Market Regime** display with confidence
-- Regime types: Trending Up/Down, Sideways, Volatile, Low Volatility, Gap Day, Expiry Day, Event Day
-- **Market Context**: VIX, PCR, OI Buildup, A/D Ratio
-- **Performance Forecast**: Expected Return, Volatility, Win Probability
-- **AI Recommendations** with urgency levels (LOW, MEDIUM, HIGH, CRITICAL)
-- Apply recommendation action
-- **Applied Adjustments** history with before/after values
-
-#### Natural Language Chat (Kimi AI)
-- Ask the CIO questions in plain English
-- Examples: *"How did we perform today?"*, *"Why did Strategy Alpha lose money?"*, *"What is the current risk level?"*
-- AI responds with institutional-grade analysis using current portfolio context
-- Streaming conversation history with timestamps
-- Suggested question prompts for common queries
-
-**Powered by**: Kimi K2.6 (Moonshot) via configurable API endpoint
-
 ### Market Intelligence
+Merged **Market Monitor** + **Market Intelligence**:
+
+**Live Tab:**
+- Live option chain for NIFTY and BANKNIFTY
+- Real-time spot price with OHLC
+- ATM strike highlighting
+- Put/Call Ratio (PCR)
+- Total OI for CE and PE
+- Auto-refreshing read-only data
+- **No trading actions — surveillance only**
+
+**Analytics Tab:**
 - **Advance/Decline** metrics
 - **Put/Call Ratio (PCR)** with percentile
 - **Max Pain** strike
@@ -114,15 +119,6 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 - **OI Heatmap** visualization
 - Market breadth indicators
 
-### Market Monitor
-- Live option chain for NIFTY and BANKNIFTY
-- Real-time spot price with OHLC
-- ATM strike highlighting
-- Put/Call Ratio (PCR)
-- Total OI for CE and PE
-- Auto-refreshing read-only data
-- **No trading actions — surveillance only**
-
 ### Live Chart
 - SVG candlestick chart with volume bars
 - Symbol selector: BANKNIFTY, NIFTY 50, FINNIFTY, SENSEX
@@ -132,21 +128,19 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 - Shows historical data when market is closed
 - Market status indicator (Open / Closed / Holiday)
 
-### Backtest
+### Backtest Lab
+Merged **Backtest** + **Visual Backtest**:
+
 - Strategy backtesting using **unified engine** (same code as live trading)
 - **17 strategies** available
-- Multi-strategy comparison
 - Configurable parameters
+- Default date range: **5 years ago → today**
+- **View Toggle**: Both | Table | Chart
+- **Table View**: Trade log with entry/exit/P&L details
+- **Chart View**: Equity curve with trade markers (lightweight-charts)
 - **AI Reasoning Reports** on every simulated trade
 - **Trade Grades** (A+, A, B, C, REJECT)
 - **Capital Mode**: Compounding vs Fixed
-  - **Compounding**: Position size grows/shrinks with equity
-  - **Fixed**: Each trade uses initial capital (consistent risk)
-
-### Visual Backtest
-- Chart-based backtest visualization
-- Signal markers on chart
-- Entry/exit annotations
 
 ### Journal
 - Automated trade audit trail

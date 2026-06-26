@@ -1,4 +1,4 @@
-# TradingOS — Institutional Grade Autonomous Trading Platform
+?# TradingOS — Institutional Grade Autonomous Trading Platform
 
 > **"I do not trade. I supervise."**
 
@@ -42,16 +42,13 @@ All manual trading capabilities have been eliminated:
 │                    TRADINGOS PLATFORM                        │
 ├─────────────────────────────────────────────────────────────┤
 │  UI Layer (React + TypeScript + Tailwind CSS)               │
-│  ├── Dashboard              Institutional command center     │
+│  ├── Command Center         Dashboard + AI CIO merged        │
 │  ├── Strategy Manager       Enable/disable/configure (17)    │
 │  ├── Risk Dashboard         Portfolio risk monitoring        │
-│  ├── AI CIO                 Market regime & recommendations  │
-│  ├── Market Intelligence    PCR, OI, IV, Flow analytics      │
+│  ├── Market Intelligence    Live data + analytics merged     │
 │  ├── Trading Bot            Automated execution control      │
-│  ├── Market Monitor         Read-only surveillance           │
 │  ├── Live Chart             Technical analysis               │
-│  ├── Backtest               Strategy validation              │
-│  ├── Visual Backtest        Chart-based replay               │
+│  ├── Backtest Lab           Strategy validation + charts     │
 │  ├── Journal                Automatic trade audit            │
 │  ├── Reports                Performance analytics            │
 │  └── Settings               Platform configuration           │
@@ -76,16 +73,13 @@ All manual trading capabilities have been eliminated:
 
 | Page | Purpose | New |
 |------|---------|-----|
-| **Dashboard** | Bot status, P&L, positions, system health | |
+| **Command Center** | Bot status, P&L, AI CIO, regime, chat | ✅ |
 | **Strategy Manager** | Enable/disable 17 strategies, configure capital allocation, risk, sessions | ✅ |
 | **Trading Bot** | Start/stop bot, emergency controls, execution logs | |
 | **Risk Dashboard** | Portfolio risk monitoring, VaR, circuit breakers, stress tests | ✅ |
-| **AI CIO** | Market regime detection, AI recommendations, applied adjustments | ✅ |
-| **Market Intelligence** | PCR, OI, IV Rank, Max Pain, Institutional Flow | ✅ |
-| **Market Monitor** | Live option chains, spot prices — read-only | |
+| **Market Intelligence** | Live option chains + PCR, IV, institutional flow analytics | ✅ |
 | **Live Chart** | SVG candlestick with volume, timeframe selector | |
-| **Backtest** | Strategy validation using unified engine | |
-| **Visual Backtest** | Chart-based backtest review | |
+| **Backtest Lab** | Strategy backtest with table/chart toggle | ✅ |
 | **Journal** | Automated trade audit trail with AI comments | |
 | **Reports** | Performance analytics (Sharpe, Sortino, Calmar) | |
 | **Settings** | Platform configuration, broker, risk, capital | |
@@ -144,15 +138,24 @@ Every trade signal contains an `AIReasoningReport`:
 
 ---
 
-## AI Chief Investment Officer
+## Command Center
 
+Merged **Dashboard** + **AI CIO** into a single supervision hub with two tabs:
+
+### Overview Tab
+- Bot status, Portfolio P&L, Today's trades
+- Capital used, Daily risk used
+- Health Score, Execution Score
+- Market Regime display with confidence
+- Active AI Recommendations with apply action
+
+### AI CIO Tab
 - **Market Regime Detection**: Trending Up/Down, Sideways, Volatile, Low Volatility, Gap Day, Expiry Day, Event Day
 - **Market Context**: VIX, PCR, OI Buildup, Advance/Decline Ratio
 - **Performance Forecast**: Expected return, volatility, win probability
-- **Recommendations**: Auto-generated with urgency (LOW → CRITICAL)
 - **Adjustments**: Tracked portfolio changes with before/after values
 
-### Kimi AI (Moonshot) Integration
+### Kimi AI (Moonshot) Chat
 
 The AI CIO includes a **natural language chat interface** powered by Kimi K2.6:
 
@@ -209,6 +212,16 @@ cd server
 npm install
 npm run dev
 ```
+
+## Merged Pages
+
+| Before | After |
+|--------|-------|
+| Dashboard + AI CIO | **Command Center** |
+| Backtest + Visual Backtest | **Backtest Lab** |
+| Market Monitor + Market Intelligence | **Market Intelligence** |
+
+Navigation simplified from 13 items → 10 items.
 
 ---
 
