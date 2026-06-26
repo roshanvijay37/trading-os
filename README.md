@@ -152,6 +152,25 @@ Every trade signal contains an `AIReasoningReport`:
 - **Recommendations**: Auto-generated with urgency (LOW → CRITICAL)
 - **Adjustments**: Tracked portfolio changes with before/after values
 
+### Kimi AI (Moonshot) Integration
+
+The AI CIO includes a **natural language chat interface** powered by Kimi K2.6:
+
+- Ask questions like *"How did we perform today?"*, *"Why did Strategy Alpha lose money?"*
+- AI explains trade decisions with institutional reasoning
+- LLM-powered regime detection with detailed justification
+- Graceful fallback to rule-based CIO when AI is unavailable
+
+**Environment Variables:**
+```
+KIMI_API_KEY=sk-your-key
+KIMI_MODEL=kimi-k2.6
+KIMI_BASE_URL=https://api.moonshot.ai/v1
+```
+
+**Supported Models:** `moonshot-v1-8k`, `moonshot-v1-32k`, `moonshot-v1-128k`, `kimi-k2.6`
+**Supported Endpoints:** `api.moonshot.cn/v1`, `api.moonshot.ai/v1`, `api.kimi.ai/v1`
+
 ---
 
 ## Portfolio Risk Engine
@@ -171,6 +190,7 @@ Every trade signal contains an `AIReasoningReport`:
 - **Frontend**: React 19 + TypeScript 5.9 + Tailwind CSS + Vite
 - **State Management**: React Context + useReducer
 - **Backend**: Node.js + Express
+- **AI Engine**: Kimi (Moonshot) LLM with configurable base URL
 - **Broker Integration**: FYERS API v3
 - **Real-time Data**: WebSocket tick streaming
 
@@ -191,6 +211,24 @@ npm run dev
 ```
 
 ---
+
+## Deployment Notes
+
+**Frontend** builds to static files. Set API URL for production:
+```bash
+# .env.production
+VITE_API_URL=https://api.roshanvijay.com
+```
+
+**Nginx** requires proper proxy headers for WebSocket and API:
+```nginx
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
 
 ## Documentation
 

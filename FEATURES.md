@@ -94,6 +94,15 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 - Apply recommendation action
 - **Applied Adjustments** history with before/after values
 
+#### Natural Language Chat (Kimi AI)
+- Ask the CIO questions in plain English
+- Examples: *"How did we perform today?"*, *"Why did Strategy Alpha lose money?"*, *"What is the current risk level?"*
+- AI responds with institutional-grade analysis using current portfolio context
+- Streaming conversation history with timestamps
+- Suggested question prompts for common queries
+
+**Powered by**: Kimi K2.6 (Moonshot) via configurable API endpoint
+
 ### Market Intelligence
 - **Advance/Decline** metrics
 - **Put/Call Ratio (PCR)** with percentile
@@ -210,6 +219,19 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 - `POST /api/backtest/run-multi`
 - `GET /api/backtest/holidays` — NSE trading holidays
 - `POST /api/backtest/holidays/refresh` — Refresh from NSE
+
+### AI CIO (Kimi Integration)
+- `GET /api/ai/status` — Check AI connection health
+- `POST /api/ai/cio/query` — Natural language query with context
+- `POST /api/ai/cio/regime` — LLM-powered regime detection
+- `POST /api/ai/trade/review` — AI trade review with grading
+
+**Environment Variables:**
+```
+KIMI_API_KEY=sk-your-key
+KIMI_MODEL=kimi-k2.6
+KIMI_BASE_URL=https://api.moonshot.ai/v1
+```
 
 ---
 
