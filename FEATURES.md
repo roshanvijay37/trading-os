@@ -1,15 +1,19 @@
-# TradingOS — Automation-First Trading Platform
+# TradingOS — Institutional Grade Autonomous Trading Platform
 
-> **I do not trade. I supervise.**
+> **"I do not trade. I supervise."**
 
-TradingOS is an institutional-grade automated trading platform. The system is designed exclusively for algorithmic execution — no manual order placement is supported.
+TradingOS is an institutional-grade autonomous trading platform designed for hedge funds, quantitative firms, and proprietary trading desks. The system is **completely automation-first** — no manual order placement is supported.
 
-## Architecture Philosophy
+---
 
-- **Operator, not Trader**: Your role is to configure, monitor, and improve algorithms
+## Philosophy
+
+- **Operator, not Trader**: Configure strategies, monitor execution, review performance
 - **Bot-Only Execution**: Only the trading bot can place, manage, and exit positions
 - **Read-Only Market Data**: Market surveillance without execution capability
 - **Risk-First Design**: All guardrails are enforced programmatically
+- **Single Source of Truth**: Backtest and live trading use identical strategy code
+- **AI Supervision**: Every trade contains an AI reasoning report
 
 ---
 
@@ -22,10 +26,84 @@ TradingOS is an institutional-grade automated trading platform. The system is de
 - Trade count vs daily limit
 - Bot health, broker status, market status
 - Daily risk used vs limit
-- Current strategy (5 EMA)
+- **Running Strategies** count with status
+- **Paused Strategies** count
 - System logs stream
 - Last executed trade summary
 - Strategy status with scan state
+- **Health Score** and **Execution Score**
+- **Current Market Regime** from AI CIO
+- **AI CIO Recommendation** display
+- Active alerts and warnings
+
+### Strategy Manager
+- **17 Strategies** with enable/disable checkboxes
+- Capital Allocation % per strategy
+- Risk % per strategy
+- Max Trades per strategy
+- Max Consecutive Losses
+- Trading Session selection (FULL, MORNING, AFTERNOON, CUSTOM)
+- Allowed Symbols per strategy
+- Allowed Expiry (WEEKLY, MONTHLY, BOTH)
+- Allowed Days
+- Max Drawdown limit
+- Daily Loss Limit
+- Cooldown After Loss (minutes)
+- Confidence Threshold
+- Priority and Execution Weight
+- **Strategy-specific Parameters** dynamically loaded from registry
+- Category filtering (Trend Following, Mean Reversion, Momentum, Breakout, Option, Custom)
+- Real-time allocation tracker with over-allocation warnings
+- Individual strategy status (ACTIVE, PAUSED, COOLDOWN, HALTED, DISABLED)
+
+### Trading Bot
+- **Start Bot** — Begin automated scanning and execution
+- **Stop Bot** — Halt new signal generation
+- **Emergency Stop** — Immediately kill all positions and halt
+- **Reset E-Stop** — Clear emergency state and resume readiness
+- Paper trading toggle
+- Strategy configuration (risk %, lot sizing, max trades)
+- Active positions with live P&L
+- Recent signals with execution status
+- Real-time execution logs
+- Daily P&L tracking
+- Risk system status
+- Execution mode (LIVE / PAPER)
+
+### Risk Dashboard
+- **Total Exposure** monitoring
+- **Portfolio Drawdown** with limits
+- **Daily Risk Used** vs limit
+- **Capital Utilized** percentage
+- **Strategy Exposure** breakdown
+- **Directional Exposure** (net long/short)
+- **Delta, Gamma, Theta, Vega Exposure**
+- **Net Premium Risk**
+- **VaR (95%, 99%)**
+- **Risk Limits** configuration
+- **Active Risk Breaches** with severity
+- **Stress Test Results** (PASS/FAIL)
+- Circuit breaker status
+
+### AI CIO
+- **Current Market Regime** display with confidence
+- Regime types: Trending Up/Down, Sideways, Volatile, Low Volatility, Gap Day, Expiry Day, Event Day
+- **Market Context**: VIX, PCR, OI Buildup, A/D Ratio
+- **Performance Forecast**: Expected Return, Volatility, Win Probability
+- **AI Recommendations** with urgency levels (LOW, MEDIUM, HIGH, CRITICAL)
+- Apply recommendation action
+- **Applied Adjustments** history with before/after values
+
+### Market Intelligence
+- **Advance/Decline** metrics
+- **Put/Call Ratio (PCR)** with percentile
+- **Max Pain** strike
+- **Expected Move** with confidence
+- **IV Rank** and **IV Percentile**
+- **IV Skew** and ATM IV
+- **Institutional Flow**: FII/DII Cash & F&O
+- **OI Heatmap** visualization
+- Market breadth indicators
 
 ### Market Monitor
 - Live option chain for NIFTY and BANKNIFTY
@@ -45,43 +123,54 @@ TradingOS is an institutional-grade automated trading platform. The system is de
 - Shows historical data when market is closed
 - Market status indicator (Open / Closed / Holiday)
 
-### Trading Bot
-- **Start Bot** — Begin automated scanning and execution
-- **Stop Bot** — Halt new signal generation
-- **Emergency Stop** — Immediately kill all positions and halt
-- **Reset E-Stop** — Clear emergency state and resume readiness
-- Paper trading toggle
-- Strategy configuration (risk %, lot sizing, max trades)
-- Active positions with live P&L
-- Recent signals with execution status
-- Real-time execution logs
-- Daily P&L tracking
-- Risk system status
-- Execution mode (LIVE / PAPER)
-
 ### Backtest
-- Strategy backtesting engine
+- Strategy backtesting using **unified engine** (same code as live trading)
+- **17 strategies** available
 - Multi-strategy comparison
 - Configurable parameters
+- **AI Reasoning Reports** on every simulated trade
+- **Trade Grades** (A+, A, B, C, REJECT)
 - **Capital Mode**: Compounding vs Fixed
   - **Compounding**: Position size grows/shrinks with equity
   - **Fixed**: Each trade uses initial capital (consistent risk)
 
 ### Visual Backtest
 - Chart-based backtest visualization
+- Signal markers on chart
+- Entry/exit annotations
 
 ### Journal
 - Automated trade audit trail
 - Bot-execution tagging
 - P&L review
+- **AI Comments** on each trade
+- **Trade Grade** record
+- Screenshot and chart capture
 
 ### Reports
 - Performance analytics
+- **Sharpe Ratio**, **Sortino Ratio**, **Calmar Ratio**
+- **Profit Factor**, **SQN**, **Expectancy**
+- Equity curve visualization
+- Hourly/Weekday/Monthly performance breakdown
+- Strategy comparison
+- Export PDF / Excel
 
 ### Settings
-- Bot risk parameters
+- Broker configuration
+- Risk parameters
 - Capital allocation
 - Daily limits
+- Strategy defaults
+- Trading sessions
+- Notifications
+- Paper trading
+- Emergency stop
+- Execution engine
+- AI engine
+- Logging
+- Reports
+- Backup and audit
 
 ---
 
@@ -143,6 +232,47 @@ All manual trading features have been eliminated:
 
 ---
 
+## AI Decision Engine
+
+Every trade signal contains an `AIReasoningReport`:
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| Trend Alignment | 20% | Price vs EMA20 alignment |
+| Volume Confirmation | 15% | Volume > 1.2x average |
+| ATR Validation | 15% | Stop loss > 0.5 ATR |
+| Risk Reward | 20% | Minimum 1:1.5 R:R |
+| Time Filter | 10% | Within optimal hours |
+| Market Structure | 20% | Structure aligns with signal |
+
+**Trade Grades**: A+ | A | B | C | REJECT
+
+---
+
+## Strategies (17)
+
+| # | Strategy | Category | Author |
+|---|----------|----------|--------|
+| 1 | 5 EMA Trend | Trend Following | Subhasish Pani |
+| 2 | 5 EMA Option Buying | Option | Subhasish Pani |
+| 3 | RSI 2-Period | Mean Reversion | Larry Connors |
+| 4 | Traffic Light | Trend Following | Subhasish Pani |
+| 5 | Inside Candle Breakout | Breakout | Price Action |
+| 6 | VWAP Reversal | Mean Reversion | Anant Ladha |
+| 7 | Opening Range Breakout | Breakout | Toby Crabel |
+| 8 | CPR Breakout | Breakout | Vivek Bajaj |
+| 9 | 9/20 EMA Crossover | Trend Following | Power of Stocks |
+| 10 | Failed Breakout | Mean Reversion | Al Brooks |
+| 11 | Opening Momentum | Momentum | Intraday Momentum |
+| 12 | Mean Reversion | Mean Reversion | Statistical |
+| 13 | Bollinger Breakout | Breakout | Volatility |
+| 14 | SuperTrend | Trend Following | ATR-Based |
+| 15 | Option Momentum | Option | OI + Volume |
+| 16 | Price Action | Trend Following | Pattern Based |
+| 17 | Custom Strategy | Custom | User Defined |
+
+---
+
 ## Market Holidays
 
 NSE trading holidays are handled dynamically:
@@ -161,4 +291,17 @@ Every page reinforces:
 
 > **"I do not trade. I supervise."**
 
-No UI encourages discretionary intervention. The interface resembles a professional automated trading system — Bloomberg Terminal meets QuantConnect.
+No UI encourages discretionary intervention. The interface resembles a professional automated trading system — Bloomberg Terminal meets QuantConnect meets Jane Street internal tools.
+
+---
+
+## Documentation
+
+- [README.md](README.md) — Overview and quick start
+- [ARCHITECTURE.md](ARCHITECTURE.md) — Architecture deep dive
+
+---
+
+## License
+
+Proprietary — Institutional Trading Platform
