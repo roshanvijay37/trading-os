@@ -1,4 +1,4 @@
-/**
+ //**
  * PRODUCTION-GRADE AUTOMATED TRADING SYSTEM
  *
  * Institutional-quality risk management for real money trading.
@@ -583,6 +583,8 @@ async function fetchOptionChain(symbol, accessToken, appId) {
 }
 
 // ─── MARKET STATUS ───────────────────────────────────────────────
+import { getNseMarketStatus } from "../utils/marketHolidays.js";
+
 function getISTTime() {
   const now = new Date();
   const istOffsetMinutes = 330;
@@ -592,10 +594,7 @@ function getISTTime() {
 }
 
 function getCurrentMarketStatus() {
-  const { hours, minutes } = getISTTime();
-  if (hours === 9 && minutes < 15) return "PRE_OPEN";
-  if (hours < 9 || hours > 15 || (hours === 15 && minutes >= 30)) return "CLOSED";
-  return "OPEN";
+  return getNseMarketStatus();
 }
 
 // ─── MAIN LOOP ───────────────────────────────────────────────────

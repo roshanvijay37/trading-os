@@ -12,19 +12,64 @@ interface Candle {
   volume: number;
 }
 
+// 2026 NSE Trading Holidays
+const NSE_HOLIDAYS = new Set([
+  "2026-01-01", "2026-01-26", "2026-03-17", "2026-04-02",
+  "2026-04-14", "2026-05-01", "2026-08-15", "2026-08-28",
+  "2026-10-02", "2026-10-20", "2026-10-21", "2026-11-09", "2026-12-25",
+]);
+
+function isMarketHoliday(): boolean {
+  const iso = new Date().toISOString().split("T")[0];
+  return NSE_HOLIDAYS.has(iso);
+}
+
 function isMarketOpen(): boolean {
   const now = new Date();
+  const day = now.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  if (isMarketHoliday()) return false;
   const utc = now.getUTCHours() * 60 + now.getUTCMinutes();
   const ist = (utc + 330) % (24 * 60);
   const h = Math.floor(ist / 60);
   const m = ist % 60;
-  // NSE: 9:15 AM - 3:30 PM IST, Mon-Fri
-  const day = now.getUTCDay();
-  if (day === 0 || day === 6) return false;
   if (h < 9 || h > 15) return false;
   if (h === 9 && m < 15) return false;
   if (h === 15 && m > 30) return false;
   return true;
+}
+
+function getMarketStatusText(): string {
+  const now = new Date();
+  const day = now.getUTCDay();
+  if (day === 0) return "Sunday — Market Closed";
+  if (day === 6) return "Saturday — Market Closed";
+  if (isMarketHoliday()) {
+    const names: Record<string, string> = {
+      "2026-01-01": "New Year's Day",
+      "2026-01-26": "Republic Day",
+      "2026-03-17": "Holi",
+      "2026-04-02": "Good Friday",
+      "2026-04-14": "Ambedkar Jayanti",
+      "2026-05-01": "Labour Day",
+      "2026-08-15": "Independence Day",
+      "2026-08-28": "Ganesh Chaturthi",
+      "2026-10-02": "Gandhi Jayanti",
+      "2026-10-20": "Diwali Laxmi Pujan",
+      "2026-10-21": "Diwali Balipratipada",
+      "2026-11-09": "Gurunanak Jayanti",
+      "2026-12-25": "Christmas",
+    };
+    const iso = now.toISOString().split("T")[0];
+    return `Holiday — ${names[iso] || "Market Closed"}`;
+  }
+  const utc = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const ist = (utc + 330) % (24 * 60);
+  const h = Math.floor(ist / 60);
+  const m = ist % 60;
+  if (h === 9 && m < 15) return "Pre-market";
+  if (h < 9 || h > 15 || (h === 15 && m >= 30)) return "Market Closed";
+  return "Market Open — Auto-refreshing";
 }
 
 function formatTime(iso: string) {
@@ -242,9 +287,7 @@ export function Chart() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-white">Live Chart</h1>
           <p className="mt-2 text-sm text-zinc-500">
-            {marketOpen
-              ? "Market is OPEN — auto-refreshing every 5 seconds"
-              : "Market is CLOSED — showing historical data"}
+            {getMarketStatusText()}
           </p>
         </div>
         <div className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ${
