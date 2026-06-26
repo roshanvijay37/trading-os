@@ -71,8 +71,12 @@ const strategies = [
 export function BacktestLab() {
   const [symbol, setSymbol] = useState("NSE:NIFTY50-INDEX");
   const [resolution, setResolution] = useState("5");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1825);
+    return d.toISOString().split("T")[0];
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [strategy, setStrategy] = useState("EMA5");
   const [capital, setCapital] = useState(100000);
   const [riskPercent, setRiskPercent] = useState(1);
