@@ -237,13 +237,29 @@ export function MarketMonitor() {
         </Card>
       </div>
 
+      {/* OI Heatmap */}
+      <Card className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-medium text-white">
+            OI Heatmap — {underlying === "BANKNIFTY" ? "Bank Nifty" : "Nifty 50"}
+          </p>
+          {loading && <p className="text-xs text-zinc-500">Refreshing...</p>}
+        </div>
+        {optionChain.length > 0 ? (
+          <OIHeatmap optionChain={optionChain} atmStrike={atmStrike} underlying={underlying} />
+        ) : (
+          <p className="text-sm text-zinc-500">
+            {loading ? "Fetching option chain..." : "No options data available."}
+          </p>
+        )}
+      </Card>
+
       {/* Option Chain Table */}
       <Card className="mt-6">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-medium text-white">
             Option Chain — {underlying === "BANKNIFTY" ? "Bank Nifty" : "Nifty 50"}
           </p>
-          {loading && <p className="text-xs text-zinc-500">Refreshing...</p>}
         </div>
         {optionChain.length > 0 ? (
           <div className="overflow-x-auto">
@@ -323,6 +339,112 @@ export function MarketMonitor() {
           This page is read-only. Signal generation and order execution are handled exclusively by the Trading Bot.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ─── OI Heatmap Component ───────────────────────────────────────
+function OIHeatmap({
+  optionChain,
+  atmStrike,
+  underlying,
+}: {
+  optionChain: OptionChainItem[];
+  atmStrike: number | null;
+  underlying: "NIFTY" | "BANKNIFTY";
+}) {
+  // Group by strike — pair CE and PE
+  const strikeMap = new Map<number, { ce?: OptionChainItem; pe?: OptionChainItem }>();
+
+  for (const opt of optionChain) {
+    const strike = opt.strike_price || opt.strike || 0;
+    const type = opt.option_type || opt.optionType;
+    if (!strikeMap.has(strike)) strikeMap.set(strike, {});
+    const entry = strikeMap.get(strike)!;
+    if (type === "CE") entry.ce = opt;
+    else entry.pe = opt;
+  }
+
+  const strikes = Array.from(strikeMap.keys()).sort((a, b) => a - b);
+
+  // Find max OI for scaling
+  let maxOI = 0;
+  for (const s of strikes) {
+    const { ce, pe } = strikeMap.get(s)!;
+    maxOI = Math.max(maxOI, ce?.oi || ce?.open_interest || 0, pe?.oi || pe?.open_interest || 0);
+  }
+  if (maxOI === 0) maxOI = 1;
+
+  return (
+    <div className="space-y-1">
+      {/* Header */}
+      <div className="grid grid-cols-[1fr_60px_1fr] gap-2 text-[10px] text-zinc-500 uppercase tracking-wider mb-1">
+        <div className="text-right">Call OI</div>
+        <div className="text-center">Strike</div>
+        <div className="text-left">Put OI</div>
+      </div>
+
+      {strikes.map((strike) => {
+        const { ce, pe } = strikeMap.get(strike)!;
+        const isATM = atmStrike !== null && Math.abs(strike - atmStrike) < (underlying === "NIFTY" ? 25 : 50);
+
+        const ceOI = ce?.oi || ce?.open_interest || 0;
+        const peOI = pe?.oi || pe?.open_interest || 0;
+        const ceWidth = (ceOI / maxOI) * 100;
+        const peWidth = (peOI / maxOI) * 100;
+
+        const ceLtp = ce?.ltp || ce?.lp || ce?.last_price || 0;
+        const peLtp = pe?.ltp || pe?.lp || pe?.last_price || 0;
+        const ceChp = ce?.ltpchp || ce?.chp || ce?.change_percent || 0;
+        const peChp = pe?.ltpchp || pe?.chp || pe?.change_percent || 0;
+
+        return (
+          <div
+            key={strike}
+            className={`grid grid-cols-[1fr_60px_1fr] gap-2 items-center rounded py-0.5 ${
+              isATM ? "bg-amber-400/10" : "hover:bg-zinc-900/30"
+            }`}
+          >
+            {/* Call OI Bar (right-aligned) */}
+            <div className="flex justify-end items-center gap-1.5">
+              <div className="text-right">
+                <p className="text-[10px] text-zinc-400">{ceOI.toLocaleString()}</p>
+                <p className={`text-[9px] ${ceChp >= 0 ? "text-lime-400" : "text-rose-400"}`}>
+                  {ceLtp > 0 ? `₹${ceLtp.toFixed(1)}` : "—"}
+                </p>
+              </div>
+              <div className="w-full max-w-[120px] h-4 bg-zinc-900 rounded-sm overflow-hidden flex justify-end">
+                <div
+                  className="h-full bg-lime-400/40 transition-all"
+                  style={{ width: `${ceWidth}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Strike */}
+            <div className={`text-center font-mono text-[11px] font-semibold ${isATM ? "text-amber-300" : "text-zinc-300"}`}>
+              {strike.toLocaleString()}
+              {isATM && <span className="block text-[8px] text-amber-400/70">ATM</span>}
+            </div>
+
+            {/* Put OI Bar (left-aligned) */}
+            <div className="flex justify-start items-center gap-1.5">
+              <div className="w-full max-w-[120px] h-4 bg-zinc-900 rounded-sm overflow-hidden">
+                <div
+                  className="h-full bg-rose-400/40 transition-all"
+                  style={{ width: `${peWidth}%` }}
+                />
+              </div>
+              <div className="text-left">
+                <p className="text-[10px] text-zinc-400">{peOI.toLocaleString()}</p>
+                <p className={`text-[9px] ${peChp >= 0 ? "text-lime-400" : "text-rose-400"}`}>
+                  {peLtp > 0 ? `₹${peLtp.toFixed(1)}` : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
