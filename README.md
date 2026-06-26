@@ -260,6 +260,20 @@ Navigation simplified from 13 items → 10 items.
 
 **.env file location:** `~/trading-os/.env` — only ONE file needed.
 
+**Current production `.env`:**
+```bash
+# Kimi Model (override if needed)
+# Options: moonshot-v1-8k | moonshot-v1-32k | moonshot-v1-128k | moonshot:kimi-k2.6
+KIMI_MODEL=moonshot:kimi-k2.6
+KIMI_API_KEY=REDACTED-KIMI-KEY
+FYERS_APP_ID=REDACTED-APP-ID
+FYERS_SECRET_ID=REDACTED-SECRET
+FYERS_REDIRECT_URL=https://roshanvijay.com
+PORT=3001
+KIMI_BASE_URL=https://api.moonshot.ai/v1
+```
+
+**Template for new setups:**
 ```bash
 # FYERS API credentials
 FYERS_APP_ID=REDACTED-APP-ID
@@ -274,6 +288,7 @@ FRONTEND_URL=https://roshanvijay.com
 JWT_SECRET=REDACTED-JWT
 
 # Kimi AI (Moonshot) API Key
+# Get from https://platform.moonshot.ai/
 KIMI_API_KEY=sk-your-key-here
 KIMI_MODEL=moonshot:kimi-k2.6
 KIMI_BASE_URL=https://api.moonshot.ai/v1
