@@ -135,7 +135,7 @@ export function CommandCenter() {
             <MetricCard label="Bot Status" value={dashboard.botStatus} icon={Bot} color={dashboard.botStatus === "RUNNING" ? "lime" : "amber"} />
             <MetricCard label="Portfolio P&L" value={`${dashboard.portfolioPnL >= 0 ? "+" : ""}${dashboard.portfolioPnL.toFixed(2)}%`} icon={dashboard.portfolioPnL >= 0 ? TrendingUp : TrendingDown} color={dashboard.portfolioPnL >= 0 ? "lime" : "rose"} />
             <MetricCard label="Today's Trades" value={dashboard.todaysTrades} icon={Activity} color="blue" />
-            <MetricCard label="Risk Status" value={dashboard.riskStatus} icon={Shield} color={dashboard.riskStatus === "NORMAL" ? "lime" : dashboard.riskStatus === "WARNING" ? "amber" : "rose"} />
+            <MetricCard label="Risk Status" value={dashboard.riskStatus} icon={Shield} color={dashboard.riskStatus === "HEALTHY" ? "lime" : dashboard.riskStatus === "WARNING" ? "amber" : "rose"} />
           </div>
 
           {/* Regime + Capital */}
