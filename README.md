@@ -1,8 +1,26 @@
-?# TradingOS — Institutional Grade Autonomous Trading Platform
+# TradingOS — Institutional Grade Autonomous Trading Platform
 
 > **"I do not trade. I supervise."**
 
 TradingOS is an institutional-grade autonomous trading platform designed for hedge funds, quantitative firms, and proprietary trading desks. The system is **completely automation-first** — no manual order placement is supported. The human only configures strategies, supervises execution, analyses performance, and continuously improves the system.
+
+---
+
+## Table of Contents
+
+1. [Philosophy](#philosophy)
+2. [What Was Removed](#what-was-removed)
+3. [Architecture](#architecture)
+4. [Pages](#pages)
+5. [Strategies (17)](#strategies-17)
+6. [AI Decision Engine](#ai-decision-engine)
+7. [Command Center](#command-center)
+8. [Portfolio Risk Engine](#portfolio-risk-engine)
+9. [Tech Stack](#tech-stack)
+10. [Quick Start](#quick-start)
+11. [Operations & Deployment](#operations--deployment)
+12. [Documentation](#documentation)
+13. [License](#license)
 
 ---
 
@@ -213,7 +231,7 @@ npm install
 npm run dev
 ```
 
-## Merged Pages
+### Merged Pages
 
 | Before | After |
 |--------|-------|
@@ -225,15 +243,88 @@ Navigation simplified from 13 items → 10 items.
 
 ---
 
-## Deployment Notes
+## Operations & Deployment
 
-**Frontend** builds to static files. Set API URL for production:
+### Infrastructure
+
+| Layer | Technology | Location |
+|-------|-----------|----------|
+| **Frontend** | React + Vite | GitHub Pages (`https://roshanvijay.com`) |
+| **Backend** | Node.js + Express | Ubuntu EC2 (`api.roshanvijay.com`) |
+| **Process Manager** | PM2 | Ubuntu |
+| **Reverse Proxy** | nginx | Ubuntu |
+| **AI Engine** | Kimi (Moonshot) API | External |
+| **Broker** | FYERS (v3 API) | External |
+
+### Environment Setup
+
+**.env file location:** `~/trading-os/.env` — only ONE file needed.
+
 ```bash
-# .env.production
-VITE_API_URL=https://api.roshanvijay.com
+# FYERS API credentials
+FYERS_APP_ID=REDACTED-APP-ID
+FYERS_SECRET_ID=your-secret-here
+FYERS_REDIRECT_URL=https://roshanvijay.com
+
+# Server settings
+PORT=3001
+FRONTEND_URL=https://roshanvijay.com
+
+# JWT secret for session tokens
+JWT_SECRET=REDACTED-JWT
+
+# Kimi AI (Moonshot) API Key
+KIMI_API_KEY=sk-your-key-here
+KIMI_MODEL=moonshot:kimi-k2.6
+KIMI_BASE_URL=https://api.moonshot.ai/v1
 ```
 
-**Nginx** requires proper proxy headers for WebSocket and API:
+### Quick Deploy (One-Liner)
+
+```bash
+cd ~/trading-os && git pull origin main && npm install && pm2 restart trading-os
+```
+
+Or step by step:
+
+```bash
+cd ~/trading-os
+git pull origin main
+npm install
+pm2 restart trading-os
+```
+
+### Full Reset & Restart
+
+```bash
+cd ~/trading-os
+git fetch origin
+git reset --hard origin/main
+npm install
+pm2 delete trading-os
+pm2 start server/src/index.js --name trading-os
+pm2 save
+```
+
+### Health Checks
+
+```bash
+curl https://api.roshanvijay.com/api/health
+curl https://api.roshanvijay.com/api/auth/login
+curl https://api.roshanvijay.com/api/ai/status
+```
+
+### PM2 Commands
+
+```bash
+pm2 list
+pm2 logs trading-os --lines 50
+pm2 restart trading-os --update-env
+pm2 monit
+```
+
+### Nginx Config
+
 ```nginx
 proxy_set_header Upgrade $http_upgrade;
 proxy_set_header Connection "upgrade";
@@ -242,6 +333,56 @@ proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
+
+### Set KIMI_API_KEY
+
+```bash
+echo "KIMI_API_KEY=sk-your-new-key" >> ~/trading-os/.env
+pm2 restart trading-os --update-env
+```
+
+Or replace existing:
+```bash
+sed -i 's/KIMI_API_KEY=.*/KIMI_API_KEY=sk-your-new-key/' ~/trading-os/.env
+pm2 restart trading-os --update-env
+```
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `502 Bad Gateway` | Backend not running | `pm2 start server/src/index.js --name trading-os` |
+| `Cannot find module` | Missing dependency | `npm install` then restart |
+| `Connection refused` on :3001 | Backend crashed | Check `pm2 logs trading-os` |
+| `FYERS_APP_ID not configured` | `.env` not loaded | Ensure `.env` is at `~/trading-os/.env` |
+| `Kimi API error 401` | Invalid key | Regenerate at platform.moonshot.ai |
+| Port already in use | Old process running | `sudo lsof -i :3001` then `kill -9 <PID>` |
+
+### Swap for npm install
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+### Firewall
+
+```bash
+sudo ufw allow 'Nginx Full'
+sudo ufw allow OpenSSH
+sudo ufw enable
+```
+
+### SSL with Let's Encrypt
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
+```
+
+---
 
 ## Documentation
 
