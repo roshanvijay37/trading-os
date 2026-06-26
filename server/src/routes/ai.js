@@ -25,6 +25,9 @@ async function callKimi(systemPrompt, userMessage, temperature = 0.3) {
     throw new Error("KIMI_API_KEY not configured. Set it in server/.env");
   }
 
+  // kimi-k2.6 only supports temperature=1
+  const effectiveTemp = NORMALIZED_MODEL === "kimi-k2.6" ? 1 : temperature;
+
   const response = await fetch(`${KIMI_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
@@ -33,7 +36,7 @@ async function callKimi(systemPrompt, userMessage, temperature = 0.3) {
     },
     body: JSON.stringify({
       model: NORMALIZED_MODEL,
-      temperature,
+      temperature: effectiveTemp,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
