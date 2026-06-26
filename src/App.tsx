@@ -4,6 +4,7 @@ import { AutoTrade } from "./pages/AutoTrade";
 import { Dashboard } from "./pages/Dashboard";
 import { Journal } from "./pages/Journal";
 import { MarketMonitor } from "./pages/MarketMonitor";
+import { Chart } from "./pages/Chart";
 import { Reports } from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { Backtest } from "./pages/Backtest";
@@ -14,7 +15,8 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
-        <Route path="/market-monitor" element={<MarketMonitor />} />
+          <Route path="/market-monitor" element={<MarketMonitor />} />
+          <Route path="/chart" element={<Chart />} />
         <Route path="/trading-bot" element={<AutoTrade />} />
         <Route path="/journal" element={<Journal />} />
         <Route path="/reports" element={<Reports />} />
