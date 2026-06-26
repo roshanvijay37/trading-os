@@ -22,6 +22,7 @@ const DEFAULT_HOLIDAYS = {
     { date: "2026-04-02", name: "Good Friday" },
     { date: "2026-04-14", name: "Ambedkar Jayanti" },
     { date: "2026-05-01", name: "Labour Day" },
+    { date: "2026-06-26", name: "Moharram" },
     { date: "2026-08-15", name: "Independence Day" },
     { date: "2026-08-28", name: "Ganesh Chaturthi" },
     { date: "2026-10-02", name: "Gandhi Jayanti" },
