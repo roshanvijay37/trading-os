@@ -4,9 +4,9 @@
  * Run once. See both table and chart.
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData } from "lightweight-charts";
-import { Play, RotateCcw, TrendingUp, TrendingDown, Target, Shield, BarChart3, Activity, Table, LineChart, Eye } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { createChart, ColorType, IChartApi, ISeriesApi } from "lightweight-charts";
+import { Play, RotateCcw, TrendingUp, TrendingDown, Shield, BarChart3, Table, LineChart, Eye } from "lucide-react";
 import { backtestApi } from "../services/api";
 
 interface Trade {
@@ -69,7 +69,7 @@ const strategies = [
 ];
 
 export function BacktestLab() {
-  const [symbol, setSymbol] = useState("NSE:NIFTY50-INDEX");
+  const [symbol, setSymbol] = useState("NSE:NIFTYBANK-INDEX");
   const [resolution, setResolution] = useState("5");
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
@@ -78,15 +78,17 @@ export function BacktestLab() {
   });
   const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [strategy, setStrategy] = useState("EMA5");
-  const [capital, setCapital] = useState(100000);
+  const [capital, setCapital] = useState(1000000);
   const [riskPercent, setRiskPercent] = useState(1);
+  const [targetMult, setTargetMult] = useState(2);
+  const [slippage, setSlippage] = useState(0.02);
+  const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [viewMode, setViewMode] = useState<"both" | "table" | "chart">("both");
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
 
   const runBacktest = async () => {
     if (!fromDate || !toDate) return;
@@ -100,6 +102,9 @@ export function BacktestLab() {
         strategy,
         capital,
         riskPercent,
+        targetMultiplier: targetMult,
+        slippage,
+        capitalMode,
       });
       setResult(res);
     } catch (err) {
@@ -114,7 +119,6 @@ export function BacktestLab() {
     if (!result || !chartContainerRef.current || viewMode === "table") return;
     if (!result.equityCurve || result.equityCurve.length === 0) return;
 
-    // Clean up previous chart
     if (chartRef.current) {
       chartRef.current.remove();
       chartRef.current = null;
@@ -130,7 +134,6 @@ export function BacktestLab() {
         height: 400,
       });
 
-      // Equity curve as line chart (not candlestick — equity is a single value per point)
       const lineSeries = chart.addLineSeries({
         color: "#22c55e",
         lineWidth: 2,
@@ -138,19 +141,18 @@ export function BacktestLab() {
         priceLineVisible: true,
       });
 
-      const lineData = result.equityCurve.map((pt) => ({
+      const lineData = result.equityCurve.map((pt: EquityPoint) => ({
         time: pt.date as any,
         value: pt.equity,
       }));
 
       lineSeries.setData(lineData);
 
-      // Add trade markers (collect all first, then set once)
-      const markers = result.trades.map((trade) => ({
+      const markers = result.trades.map((trade: Trade) => ({
         time: trade.entryTime.split("T")[0] as any,
-        position: trade.side === "LONG" ? "belowBar" : "aboveBar" as any,
+        position: (trade.side === "LONG" ? "belowBar" : "aboveBar") as any,
         color: trade.side === "LONG" ? "#22c55e" : "#ef4444",
-        shape: trade.side === "LONG" ? "arrowUp" : "arrowDown" as any,
+        shape: (trade.side === "LONG" ? "arrowUp" : "arrowDown") as any,
         text: `${trade.side[0]} @ ${trade.entryPrice.toFixed(0)}`,
         size: 1,
       }));
@@ -160,7 +162,6 @@ export function BacktestLab() {
       }
 
       chart.timeScale().fitContent();
-
       chartRef.current = chart;
 
       const handleResize = () => {
@@ -236,7 +237,22 @@ export function BacktestLab() {
             <label className="mb-1 block text-xs text-zinc-500">Risk %</label>
             <input type="number" step="0.1" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
           </div>
-          <div className="flex items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">Target R:R</label>
+            <input type="number" step="0.1" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">Slippage %</label>
+            <input type="number" step="0.01" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">Capital Mode</label>
+            <select value={capitalMode} onChange={(e) => setCapitalMode(e.target.value as "COMPOUND" | "FIXED")} className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white">
+              <option value="COMPOUND">Compounding</option>
+              <option value="FIXED">Fixed</option>
+            </select>
+          </div>
+          <div className="flex items-end gap-2 sm:col-span-2">
             <button onClick={runBacktest} disabled={loading} className="flex-1 rounded-lg bg-lime-400/10 py-2 text-sm font-medium text-lime-300 transition hover:bg-lime-400/20 disabled:opacity-50">
               {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={14} /> Run</span>}
             </button>
@@ -300,7 +316,7 @@ export function BacktestLab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.trades.map((t) => (
+                    {result.trades.map((t: Trade) => (
                       <tr key={t.id} className="border-b border-zinc-800/50">
                         <td className="px-2 py-2 text-zinc-500">{t.id}</td>
                         <td className="px-2 py-2">
