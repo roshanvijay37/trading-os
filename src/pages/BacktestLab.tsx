@@ -139,27 +139,47 @@ export function BacktestLab() {
         priceLineVisible: true,
       });
 
-      const lineData = result.equityCurve.map((pt: EquityPoint) => ({
-        time: pt.date as any,
-        value: pt.equity,
-      }));
+      // Sanitize equity curve: convert ISO dates to Unix timestamps (seconds),
+      // filter null/NaN values, deduplicate by time, and sort ascending.
+      const rawLineData = result.equityCurve
+        .map((pt: EquityPoint) => {
+          const ts = pt.date ? Math.floor(new Date(pt.date).getTime() / 1000) : NaN;
+          const value = typeof pt.equity === "number" && !isNaN(pt.equity) ? pt.equity : NaN;
+          return { time: ts, value };
+        })
+        .filter((pt) => !isNaN(pt.time) && !isNaN(pt.value));
 
-      lineSeries.setData(lineData);
+      const timeMap = new Map<number, number>();
+      for (const pt of rawLineData) {
+        timeMap.set(pt.time, pt.value);
+      }
+      const lineData = Array.from(timeMap.entries())
+        .map(([time, value]) => ({ time, value }))
+        .sort((a, b) => a.time - b.time);
 
-      const markers = result.trades.map((trade: Trade) => ({
-        time: trade.entryTime.split("T")[0] as any,
-        position: (trade.side === "LONG" ? "belowBar" : "aboveBar") as any,
-        color: trade.side === "LONG" ? "#10b981" : "#ef4444",
-        shape: (trade.side === "LONG" ? "arrowUp" : "arrowDown") as any,
-        text: `${trade.side[0]} @ ${trade.entryPrice.toFixed(0)}`,
-        size: 1,
-      }));
+      if (lineData.length > 0) {
+        lineSeries.setData(lineData);
+      }
+
+      // Sanitize markers: only include trades with valid entryTime and entryPrice.
+      const markers = result.trades
+        .filter((trade: Trade) => trade.entryTime && typeof trade.entryPrice === "number" && !isNaN(trade.entryPrice))
+        .map((trade: Trade) => ({
+          time: Math.floor(new Date(trade.entryTime).getTime() / 1000),
+          position: (trade.side === "LONG" ? "belowBar" : "aboveBar") as any,
+          color: trade.side === "LONG" ? "#10b981" : "#ef4444",
+          shape: (trade.side === "LONG" ? "arrowUp" : "arrowDown") as any,
+          text: `${trade.side[0]} @ ${trade.entryPrice.toFixed(0)}`,
+          size: 1,
+        }));
 
       if (markers.length > 0) {
         lineSeries.setMarkers(markers);
       }
 
-      chart.timeScale().fitContent();
+      if (lineData.length > 0) {
+        chart.timeScale().fitContent();
+      }
       chartRef.current = chart;
 
       const handleResize = () => {
