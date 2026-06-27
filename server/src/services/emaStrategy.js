@@ -40,36 +40,54 @@ export function calculateEMA(closes) {
  * @param {Object[]} candles - Array of candles [timestamp, open, high, low, close, volume]
  * @returns {Object|null} Alert candle info or null
  */
-export function detectAlertCandle(candles) {
+export function detectAlertCandle(candles, strategy = "EMA5") {
   if (candles.length < 2) return null;
-  
+
   const current = candles[candles.length - 1]; // Latest complete candle
   const previous = candles[candles.length - 2]; // Previous candle
-  
+
   const currentClose = current[4];
   const previousClose = previous[4];
   const currentOpen = current[1];
-  const previousOpen = previous[1];
-  
+  const previousHigh = previous[2];
+  const previousLow = previous[3];
+
   // Calculate 5 EMA for previous candles (need at least 5 candles before current)
   const closesForEMA = candles.slice(0, -1).map(c => c[4]);
   if (closesForEMA.length < 5) return null;
-  
+
   const ema5 = calculateEMA(closesForEMA.slice(-5));
   if (!ema5) return null;
-  
-  // Bullish alert: Previous candle closed below 5 EMA, current candle closes above 5 EMA
-  const bullishAlert = previousClose < ema5 && currentClose > ema5;
-  
-  // Bearish alert: Previous candle closed above 5 EMA, current candle closes below 5 EMA
-  const bearishAlert = previousClose > ema5 && currentClose < ema5;
-  
+
+  let bullishAlert = false;
+  let bearishAlert = false;
+
+  if (strategy === "EMA5_OPTION") {
+    // 5 EMA Option Buying with 20 EMA trend filter
+    if (closesForEMA.length < 20) return null;
+    const ema20 = calculateEMA(closesForEMA.slice(-20));
+    if (!ema20) return null;
+
+    // LONG (CE Buy): trend bullish (close > 20 EMA) + pullback to 5 EMA
+    bullishAlert = previousClose > ema20 && previousClose < ema5 && previousHigh < ema5;
+    // SHORT (PE Buy): trend bearish (close < 20 EMA) + pullback to 5 EMA
+    bearishAlert = previousClose < ema20 && previousClose > ema5 && previousLow > ema5;
+  } else {
+    // Standard 5 EMA crossover alert
+    // Bullish alert: Previous candle closed below 5 EMA, current candle closes above 5 EMA
+    bullishAlert = previousClose < ema5 && currentClose > ema5;
+
+    // Bearish alert: Previous candle closed above 5 EMA, current candle closes below 5 EMA
+    bearishAlert = previousClose > ema5 && currentClose < ema5;
+  }
+
   if (!bullishAlert && !bearishAlert) return null;
-  
+
   return {
     type: bullishAlert ? "BULLISH_ALERT" : "BEARISH_ALERT",
     candle: current,
     ema5: ema5,
+    strategy,
     timestamp: current[0],
     high: current[2],
     low: current[3],

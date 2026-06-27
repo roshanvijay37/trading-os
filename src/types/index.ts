@@ -113,6 +113,7 @@ export interface BotConfig {
   paperTrading: boolean;
   positionSizingMode: string;
   fixedLots: number;
+  selectedStrategies: string[];
 }
 
 export interface BotStatus {
@@ -130,6 +131,7 @@ export interface BotStatus {
   emergencyStop: boolean;
   positionSizingMode?: string;
   fixedLots?: number;
+  selectedStrategies?: string[];
   dailyPnL?: string;
   consecutiveLosses?: number;
 }

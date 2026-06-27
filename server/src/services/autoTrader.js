@@ -47,6 +47,7 @@ const CONFIG = {
   PAPER_TRADING: false,
   BROKERAGE_PER_ORDER: 20,
   EMERGENCY_STOP: false,
+  SELECTED_STRATEGIES: ["EMA5"],
 };
 
 // ΓöÇΓöÇΓöÇ STATE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -459,112 +460,116 @@ async function processCandles(underlying, session) {
       lastUpdated: new Date().toISOString(),
       ltp: candles[candles.length - 1][4],
     };
-    const alert = detectAlertCandle(candles);
-    if (alert) {
-      console.log(`[AUTO-TRADER] ${underlying.name} ${alert.type} detected`);
-      activeAlerts.set(underlying.name, {
-        ...alert,
-        underlying: underlying.name,
-        symbol: underlying.symbol,
-        detectedAt: new Date().toISOString(),
-      });
-    }
-    const currentAlert = activeAlerts.get(underlying.name);
-    if (!currentAlert) return;
-    const signal = detectBreakout(candles, currentAlert);
-    if (!signal) return;
-    if (!canTakeTrade(underlying.name)) {
-      activeAlerts.delete(underlying.name);
-      return;
-    }
-    const signalId = `${underlying.name}-${signal.timestamp}-${signal.type}`;
-    if (processedSignals.has(signalId)) {
-      activeAlerts.delete(underlying.name);
-      return;
-    }
-    processedSignals.add(signalId);
-    if (!checkVIXFilter()) {
-      activeAlerts.delete(underlying.name);
-      return;
-    }
-    const optionChain = await fetchOptionChain(underlying.symbol, session.accessToken, FYERS_APP_ID);
-    const optionType = signal.type === "LONG" ? "CE" : "PE";
-    const optionSymbol = getATMOption(underlying.name, signal.entryPrice, optionType, optionChain);
-    if (!optionSymbol) {
-      activeAlerts.delete(underlying.name);
-      return;
-    }
-    const liquidity = await checkLiquidity(optionSymbol, session);
-    if (!liquidity.pass) {
-      console.log(`[AUTO-TRADER] Liquidity check failed: ${liquidity.reason}`);
-      activeAlerts.delete(underlying.name);
-      return;
-    }
-    const rawQty = calculatePositionSize(signal.entryPrice, signal.stopLoss, underlying);
-    const qty = roundToLotSize(rawQty, underlying);
-    if (qty <= 0) {
-      activeAlerts.delete(underlying.name);
-      return;
-    }
-    const margin = await checkMargin(optionSymbol, qty, session);
-    if (!margin.pass) {
-      console.log(`[AUTO-TRADER] Margin insufficient: need Γé╣${margin.required.toFixed(2)}, have Γé╣${margin.available.toFixed(2)}`);
-      activeAlerts.delete(underlying.name);
-      return;
-    }
-    const tradeSignal = {
-      ...signal,
-      quantity: qty,
-      optionSymbol,
-      underlying: underlying.name,
-      underlyingSymbol: underlying.symbol,
-    };
-    try {
-      const orderResult = await placeLimitOrder(tradeSignal, optionSymbol, qty, session);
-      await new Promise((r) => setTimeout(r, 2000));
-      const validation = await validateOrder(orderResult.orderId, session);
-      if (!validation.valid || validation.status === "REJECTED") {
-        console.log(`[AUTO-TRADER] Order rejected: ${orderResult.orderId}`);
-        logAudit({ type: "ORDER_REJECTED", orderId: orderResult.orderId, validation });
-        activeAlerts.delete(underlying.name);
-        return;
+    for (const strategy of CONFIG.SELECTED_STRATEGIES) {
+      const alert = detectAlertCandle(candles, strategy);
+      if (alert) {
+        console.log(`[AUTO-TRADER] ${underlying.name} ${alert.type} detected`);
+        activeAlerts.set(`${underlying.name}:${strategy}`, {
+          ...alert,
+          underlying: underlying.name,
+          symbol: underlying.symbol,
+          detectedAt: new Date().toISOString(),
+        });
       }
-      const position = {
-        id: orderResult.orderId,
-        signal: tradeSignal,
-        status: "OPEN",
-        entryTime: new Date().toISOString(),
-        orderId: orderResult.orderId,
-        optionSymbol,
+      const currentAlert = activeAlerts.get(`${underlying.name}:${strategy}`);
+      if (!currentAlert) continue;
+      const signal = detectBreakout(candles, currentAlert);
+      if (!signal) continue;
+      if (!canTakeTrade(underlying.name)) {
+        activeAlerts.delete(`${underlying.name}:${strategy}`);
+        continue;
+      }
+      const signalId = `${underlying.name}:${strategy}-${signal.timestamp}-${signal.type}`;
+      if (processedSignals.has(signalId)) {
+        activeAlerts.delete(`${underlying.name}:${strategy}`);
+        continue;
+      }
+      processedSignals.add(signalId);
+      if (!checkVIXFilter()) {
+        activeAlerts.delete(`${underlying.name}:${strategy}`);
+        continue;
+      }
+      const optionChain = await fetchOptionChain(underlying.symbol, session.accessToken, FYERS_APP_ID);
+      const optionType = signal.type === "LONG" ? "CE" : "PE";
+      const optionSymbol = getATMOption(underlying.name, signal.entryPrice, optionType, optionChain);
+      if (!optionSymbol) {
+        activeAlerts.delete(`${underlying.name}:${strategy}`);
+        continue;
+      }
+      const liquidity = await checkLiquidity(optionSymbol, session);
+      if (!liquidity.pass) {
+        console.log(`[AUTO-TRADER] Liquidity check failed: ${liquidity.reason}`);
+        activeAlerts.delete(`${underlying.name}:${strategy}`);
+        continue;
+      }
+      const rawQty = calculatePositionSize(signal.entryPrice, signal.stopLoss, underlying);
+      const qty = roundToLotSize(rawQty, underlying);
+      if (qty <= 0) {
+        activeAlerts.delete(`${underlying.name}:${strategy}`);
+        continue;
+      }
+      const margin = await checkMargin(optionSymbol, qty, session);
+      if (!margin.pass) {
+        console.log(`[AUTO-TRADER] Margin insufficient: need Γé╣${margin.required.toFixed(2)}, have Γé╣${margin.available.toFixed(2)}`);
+        activeAlerts.delete(`${underlying.name}:${strategy}`);
+        continue;
+      }
+      const tradeSignal = {
+        ...signal,
+        strategy,
         quantity: qty,
-        entryPrice: signal.entryPrice,
-        stopLoss: signal.stopLoss,
-        target: signal.target,
-        currentSL: signal.stopLoss,
-        pnl: 0,
-        lastPnl: 0,
-        underlying: underlying.name,
-      };
-      openPositions.push(position);
-      todayTrades++;
-      saveState();
-      logAudit({
-        type: "POSITION_OPENED",
-        orderId: orderResult.orderId,
         optionSymbol,
-        qty,
-        entryPrice: signal.entryPrice,
-        sl: signal.stopLoss,
-        target: signal.target,
-      });
-      console.log(
-        `[AUTO-TRADER] ORDER: ${optionSymbol} Qty:${qty} @ ${signal.entryPrice} SL:${signal.stopLoss} T:${signal.target}`
-      );
-    } catch (orderError) {
-      console.error(`[AUTO-TRADER] Order failed:`, orderError.message);
-      logAudit({ type: "ORDER_FAILED", error: orderError.message, signal: tradeSignal });
+        underlying: underlying.name,
+        underlyingSymbol: underlying.symbol,
+      };
+      try {
+        const orderResult = await placeLimitOrder(tradeSignal, optionSymbol, qty, session);
+        await new Promise((r) => setTimeout(r, 2000));
+        const validation = await validateOrder(orderResult.orderId, session);
+        if (!validation.valid || validation.status === "REJECTED") {
+          console.log(`[AUTO-TRADER] Order rejected: ${orderResult.orderId}`);
+          logAudit({ type: "ORDER_REJECTED", orderId: orderResult.orderId, validation });
+          activeAlerts.delete(`${underlying.name}:${strategy}`);
+          continue;
+        }
+        const position = {
+          id: orderResult.orderId,
+          signal: tradeSignal,
+          status: "OPEN",
+          entryTime: new Date().toISOString(),
+          orderId: orderResult.orderId,
+          optionSymbol,
+          quantity: qty,
+          entryPrice: signal.entryPrice,
+          stopLoss: signal.stopLoss,
+          target: signal.target,
+          currentSL: signal.stopLoss,
+          pnl: 0,
+          lastPnl: 0,
+          underlying: underlying.name,
+        };
+        openPositions.push(position);
+        todayTrades++;
+        saveState();
+        logAudit({
+          type: "POSITION_OPENED",
+          strategy,
+          orderId: orderResult.orderId,
+          optionSymbol,
+          qty,
+          entryPrice: signal.entryPrice,
+          sl: signal.stopLoss,
+          target: signal.target,
+        });
+        console.log(
+          `[AUTO-TRADER] ORDER [${strategy}]: ${optionSymbol} Qty:${qty} @ ${signal.entryPrice} SL:${signal.stopLoss} T:${signal.target}`
+        );
+      } catch (orderError) {
+        console.error(`[AUTO-TRADER] Order failed:`, orderError.message);
+        logAudit({ type: "ORDER_FAILED", error: orderError.message, signal: tradeSignal });
+      }
+      activeAlerts.delete(`${underlying.name}:${strategy}`);
     }
-    activeAlerts.delete(underlying.name);
   } catch (error) {
     console.error(`[AUTO-TRADER] Error:`, error.message);
   }
@@ -677,6 +682,7 @@ export async function startAutoTrader(sessionId) {
       paperTrading: CONFIG.PAPER_TRADING,
       positionSizingMode: CONFIG.POSITION_SIZING_MODE,
       fixedLots: CONFIG.FIXED_LOTS,
+      selectedStrategies: CONFIG.SELECTED_STRATEGIES,
     },
     startedAt: new Date().toISOString(),
   };
@@ -729,6 +735,7 @@ export function getAutoTraderStatus() {
     emergencyStop: CONFIG.EMERGENCY_STOP,
     positionSizingMode: CONFIG.POSITION_SIZING_MODE,
     fixedLots: CONFIG.FIXED_LOTS,
+    selectedStrategies: CONFIG.SELECTED_STRATEGIES,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -777,6 +784,7 @@ export function updateConfig(updates) {
       minOI: CONFIG.MIN_OI,
       maxTimeEntryHour: CONFIG.MAX_TIME_ENTRY_HOUR,
       allowCorrelatedTrades: CONFIG.ALLOW_CORRELATED_TRADES,
+      selectedStrategies: CONFIG.SELECTED_STRATEGIES,
     },
   };
 }

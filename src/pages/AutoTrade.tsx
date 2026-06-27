@@ -33,6 +33,7 @@ export function AutoTrade() {
     paperTrading: false,
     positionSizingMode: "RISK",
     fixedLots: 1,
+    selectedStrategies: ["EMA5"],
   });
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -173,7 +174,7 @@ export function AutoTrade() {
                 {isEmergency ? "System Halted" : isRunning ? "Strategy Active" : "System Idle"}
               </p>
               <p className="text-2xs text-zinc-600">
-                {isRunning ? "Scanning 5 EMA crossovers on NIFTY / BANKNIFTY" : "Ready for operator command"}
+                {isRunning ? `Scanning ${status?.selectedStrategies?.join(", ") || "EMA5"} on NIFTY / BANKNIFTY` : "Ready for operator command"}
               </p>
             </div>
           </div>
@@ -305,6 +306,30 @@ export function AutoTrade() {
                 className="h-3.5 w-3.5 rounded border-border bg-surface"
               />
               <label className="text-2xs text-zinc-600">Paper Trading</label>
+            </div>
+          </div>
+          <div className="mt-3">
+            <label className="text-2xs text-zinc-600">Active Strategies</label>
+            <div className="mt-1.5 flex flex-wrap gap-3">
+              {[
+                { id: "EMA5", label: "5 EMA Trend" },
+                { id: "EMA5_OPTION", label: "5 EMA Option Buying" },
+              ].map((strategy) => (
+                <label key={strategy.id} className="flex items-center gap-2 text-2xs text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={configForm.selectedStrategies.includes(strategy.id)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...configForm.selectedStrategies, strategy.id]
+                        : configForm.selectedStrategies.filter((id) => id !== strategy.id);
+                      setConfigForm({ ...configForm, selectedStrategies: next });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-border bg-surface"
+                  />
+                  {strategy.label}
+                </label>
+              ))}
             </div>
           </div>
         </Card>
