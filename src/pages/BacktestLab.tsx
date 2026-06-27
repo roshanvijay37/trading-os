@@ -50,21 +50,6 @@ interface BacktestResult {
 const strategies = [
   { value: "EMA5", label: "5 EMA Trend" },
   { value: "EMA5_OPTION", label: "5 EMA Option" },
-  { value: "RSI", label: "RSI 2-Period" },
-  { value: "TRAFFIC_LIGHT", label: "Traffic Light" },
-  { value: "INSIDE_CANDLE", label: "Inside Candle" },
-  { value: "VWAP_REVERSAL", label: "VWAP Reversal" },
-  { value: "ORB", label: "Opening Range Breakout" },
-  { value: "CPR_BREAKOUT", label: "CPR Breakout" },
-  { value: "EMA9_20", label: "9/20 EMA Crossover" },
-  { value: "FAILED_BREAKOUT", label: "Failed Breakout" },
-  { value: "OPENING_MOMENTUM", label: "Opening Momentum" },
-  { value: "MEAN_REVERSION", label: "Mean Reversion" },
-  { value: "BOLLINGER_BREAKOUT", label: "Bollinger Breakout" },
-  { value: "SUPERTREND", label: "SuperTrend" },
-  { value: "OPTION_MOMENTUM", label: "Option Momentum" },
-  { value: "PRICE_ACTION", label: "Price Action" },
-  { value: "CUSTOM", label: "Custom Strategy" },
 ];
 
 export function BacktestLab() {

@@ -1,4 +1,4 @@
-# TradingOS — Institutional Grade Autonomous Trading Platform
+﻿# TradingOS — Institutional Grade Autonomous Trading Platform
 
 ## Architecture Overview
 
@@ -47,7 +47,7 @@ The bot does everything. The user only supervises.
 │  └── useInstitutionalStore   Hook for all components         │
 ├─────────────────────────────────────────────────────────────┤
 │  Core Engine (TypeScript - Single Source of Truth)          │
-│  ├── Strategy Registry       All 17 strategies defined       │
+│  ├── Strategy Registry       Both 5 EMA strategies defined       │
 │  ├── Strategy Engine         Unified backtest + live logic   │
 │  ├── AI Reasoning Engine     Trade grade generation          │
 │  └── Indicator Library       EMA, RSI, VWAP, ATR, BB, ST    │
@@ -85,21 +85,6 @@ Every strategy is implemented ONCE. Both backtest and live trading use the exact
 **Strategies Implemented**:
 - EMA5 (Subhasish Pani)
 - EMA5 Option Buying
-- RSI 2-Period (Larry Connors)
-- Traffic Light (Multi-timeframe EMA)
-- Inside Candle Breakout
-- VWAP Reversal (Anant Ladha)
-- Opening Range Breakout (Toby Crabel)
-- CPR Breakout (Vivek Bajaj)
-- 9/20 EMA Crossover
-- Failed Breakout (Al Brooks)
-- Opening Momentum
-- Mean Reversion (Bollinger + RSI)
-- Bollinger Breakout
-- SuperTrend
-- Option Momentum
-- Price Action
-- Custom Strategy
 
 ### 2. AI Reasoning Engine
 
@@ -171,7 +156,7 @@ src/
 │   └── institutional.ts          # Complete type system
 ├── lib/
 │   └── strategies/
-│       ├── registry.ts            # Strategy definitions (17 strategies)
+│       ├── registry.ts            # Strategy definitions (2 strategies)
 │       └── engine.ts              # Unified backtest + live engine
 ├── store/
 │   └── InstitutionalProvider.tsx  # React Context state management

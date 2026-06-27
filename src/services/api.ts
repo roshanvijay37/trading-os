@@ -1,4 +1,4 @@
-/// <reference types="vite/client" />
+﻿/// <reference types="vite/client" />
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 function getSessionId(): string | null {
@@ -106,9 +106,6 @@ export const backtestApi = {
     fromDate: string;
     toDate: string;
     strategy?: string;
-    rsiPeriod?: number;
-    oversoldThreshold?: number;
-    overboughtThreshold?: number;
     capital?: number;
     riskPercent?: number;
     slBuffer?: number;

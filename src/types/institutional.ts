@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TradingOS — Institutional Grade Autonomous Trading Platform
  * Core Type Definitions
  *
@@ -10,29 +10,14 @@
 // ─────────────────────────────────────────────────────────────────
 
 export type StrategyId =
-  | "RSI"
   | "EMA5"
-  | "EMA5_OPTION"
-  | "TRAFFIC_LIGHT"
-  | "INSIDE_CANDLE"
-  | "VWAP_REVERSAL"
-  | "ORB"
-  | "CPR_BREAKOUT"
-  | "EMA9_20"
-  | "FAILED_BREAKOUT"
-  | "OPENING_MOMENTUM"
-  | "MEAN_REVERSION"
-  | "BOLLINGER_BREAKOUT"
-  | "SUPERTREND"
-  | "OPTION_MOMENTUM"
-  | "PRICE_ACTION"
-  | "CUSTOM";
+  | "EMA5_OPTION";
 
 export interface StrategyDefinition {
   id: StrategyId;
   name: string;
   description: string;
-  category: "TREND_FOLLOWING" | "MEAN_REVERSION" | "MOMENTUM" | "BREAKOUT" | "OPTION" | "CUSTOM";
+  category: "TREND_FOLLOWING" | "OPTION";
   author?: string;
   version: string;
   parameters: StrategyParameter[];

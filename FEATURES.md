@@ -1,4 +1,4 @@
-# TradingOS — Institutional Grade Autonomous Trading Platform
+﻿# TradingOS — Institutional Grade Autonomous Trading Platform
 
 > **"I do not trade. I supervise."**
 
@@ -265,27 +265,12 @@ Every trade signal contains an `AIReasoningReport`:
 
 ---
 
-## Strategies (17)
+## Strategies (2)
 
 | # | Strategy | Category | Author |
 |---|----------|----------|--------|
 | 1 | 5 EMA Trend | Trend Following | Subhasish Pani |
 | 2 | 5 EMA Option Buying | Option | Subhasish Pani |
-| 3 | RSI 2-Period | Mean Reversion | Larry Connors |
-| 4 | Traffic Light | Trend Following | Subhasish Pani |
-| 5 | Inside Candle Breakout | Breakout | Price Action |
-| 6 | VWAP Reversal | Mean Reversion | Anant Ladha |
-| 7 | Opening Range Breakout | Breakout | Toby Crabel |
-| 8 | CPR Breakout | Breakout | Vivek Bajaj |
-| 9 | 9/20 EMA Crossover | Trend Following | Power of Stocks |
-| 10 | Failed Breakout | Mean Reversion | Al Brooks |
-| 11 | Opening Momentum | Momentum | Intraday Momentum |
-| 12 | Mean Reversion | Mean Reversion | Statistical |
-| 13 | Bollinger Breakout | Breakout | Volatility |
-| 14 | SuperTrend | Trend Following | ATR-Based |
-| 15 | Option Momentum | Option | OI + Volume |
-| 16 | Price Action | Trend Following | Pattern Based |
-| 17 | Custom Strategy | Custom | User Defined |
 
 ---
 

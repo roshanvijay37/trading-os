@@ -1,20 +1,11 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+﻿import { useEffect, useRef, useState, useCallback } from "react";
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time } from "lightweight-charts";
 import { Play, BarChart3, TrendingUp, TrendingDown, Target, Shield, Activity, Zap, Calendar, Clock, Layers, Settings, Palette, X, RotateCcw, Eye } from "lucide-react";
 import { backtestApi } from "../services/api";
 
 const strategies = [
-  { value: "RSI", label: "RSI 2-Period", desc: "Mean reversion" },
   { value: "EMA5", label: "5 EMA", desc: "Alert Candle breakout" },
   { value: "EMA5_OPTION", label: "5 EMA Option", desc: "Trend + 5 EMA" },
-  { value: "TRAFFIC_LIGHT", label: "Traffic Light", desc: "Pullback continuation" },
-  { value: "INSIDE_CANDLE", label: "Inside Candle", desc: "Mother/Inside BO" },
-  { value: "VWAP_REVERSAL", label: "VWAP Reversal", desc: "Reclaim with volume" },
-  { value: "ORB", label: "ORB", desc: "Opening range breakout" },
-  { value: "CPR_BREAKOUT", label: "CPR Breakout", desc: "Pivot + volume" },
-  { value: "EMA9_20", label: "9/20 EMA", desc: "Pullback to 9 EMA" },
-  { value: "FAILED_BREAKOUT", label: "Failed BO", desc: "Support reclaim" },
-  { value: "OPENING_MOMENTUM", label: "Opening Momentum", desc: "9:20 momentum" },
 ];
 
 const timeframes = [

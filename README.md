@@ -12,7 +12,7 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 2. [What Was Removed](#what-was-removed)
 3. [Architecture](#architecture)
 4. [Pages](#pages)
-5. [Strategies (17)](#strategies-17)
+5. [Strategies (2)](#strategies-17)
 6. [AI Decision Engine](#ai-decision-engine)
 7. [Command Center](#command-center)
 8. [Portfolio Risk Engine](#portfolio-risk-engine)
@@ -73,7 +73,7 @@ All manual trading capabilities have been eliminated:
 │  └── Settings               Platform configuration           │
 ├─────────────────────────────────────────────────────────────┤
 │  Core Engine (TypeScript - Single Source of Truth)          │
-│  ├── Strategy Registry       17 strategies with parameters   │
+│  ├── Strategy Registry       2 strategies with parameters   │
 │  ├── Unified Engine          Same code for backtest + live   │
 │  ├── AI Reasoning Engine     Trade grading A+ to REJECT      │
 │  └── Indicator Library       EMA, RSI, VWAP, ATR, BB, ST    │
@@ -94,7 +94,7 @@ All manual trading capabilities have been eliminated:
 |------|---------|-------|
 | **Command Center** | Bot status, P&L, market regime, AI CIO chat | `/` |
 | **Trading Bot** | Start/stop bot, emergency controls, execution logs, positions, signals | `/trading-bot` |
-| **Strategy Manager** | Enable/disable 17 strategies, configure capital allocation, risk, sessions | `/strategy-manager` |
+| **Strategy Manager** | Enable/disable 2 strategies, configure capital allocation, risk, sessions | `/strategy-manager` |
 | **Live Chart** | SVG candlestick with volume, timeframe selector, market status | `/chart` |
 | **Backtest Lab** | Strategy backtest with table/chart toggle view | `/backtest` |
 | **Market Intelligence** | PCR, IV, institutional flow, gamma exposure analytics | `/market-intelligence` |
@@ -107,27 +107,12 @@ Navigation: 10 items in grouped sidebar sections (Operations, Research, Risk, Re
 
 ---
 
-## Strategies (17)
+## Strategies (2)
 
 | Strategy | Category | Author |
 |----------|----------|--------|
 | 5 EMA Trend | Trend Following | Subhasish Pani |
 | 5 EMA Option Buying | Option | Subhasish Pani |
-| RSI 2-Period | Mean Reversion | Larry Connors |
-| Traffic Light | Trend Following | Subhasish Pani |
-| Inside Candle Breakout | Breakout | Price Action |
-| VWAP Reversal | Mean Reversion | Anant Ladha |
-| Opening Range Breakout | Breakout | Toby Crabel |
-| CPR Breakout | Breakout | Vivek Bajaj |
-| 9/20 EMA Crossover | Trend Following | Power of Stocks |
-| Failed Breakout | Mean Reversion | Al Brooks |
-| Opening Momentum | Momentum | Intraday Momentum |
-| Mean Reversion | Mean Reversion | Statistical |
-| Bollinger Breakout | Breakout | Volatility |
-| SuperTrend | Trend Following | ATR-Based |
-| Option Momentum | Option | OI + Volume |
-| Price Action | Trend Following | Pattern Based |
-| Custom Strategy | Custom | User Defined |
 
 Each strategy supports:
 - **Capital Allocation** — % of portfolio
