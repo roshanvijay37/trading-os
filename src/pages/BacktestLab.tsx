@@ -1,10 +1,10 @@
-/**
+﻿/**
  * TradingOS — Backtest Lab
  * Merged Backtest + Visual Backtest
  */
 
 import { useState, useEffect, useRef } from "react";
-import { createChart, ColorType, IChartApi } from "lightweight-charts";
+import { createChart, ColorType, IChartApi, Time } from "lightweight-charts";
 import { Play, RotateCcw, TrendingUp, TrendingDown, Shield, BarChart3, Table, LineChart, Eye } from "lucide-react";
 import { backtestApi } from "../services/api";
 
@@ -115,7 +115,7 @@ export function BacktestLab() {
 
   useEffect(() => {
     if (!result || !chartContainerRef.current || viewMode === "table") return;
-    if (!result.equityCurve || result.equityCurve.length === 0) return;
+    if (!Array.isArray(result.equityCurve) || result.equityCurve.length === 0) return;
 
     if (chartRef.current) {
       chartRef.current.remove();
@@ -123,12 +123,16 @@ export function BacktestLab() {
     }
 
     try {
-      const chart = createChart(chartContainerRef.current, {
+      const container = chartContainerRef.current;
+      const width = container.clientWidth || container.offsetWidth || 800;
+      if (width <= 0) return;
+
+      const chart = createChart(container, {
         layout: { background: { type: ColorType.Solid, color: "#08080a" }, textColor: "#71717a" },
         grid: { vertLines: { color: "#131318" }, horzLines: { color: "#131318" } },
         rightPriceScale: { borderColor: "#23232a" },
         timeScale: { borderColor: "#23232a" },
-        width: chartContainerRef.current.clientWidth,
+        width,
         height: 380,
       });
 
@@ -139,40 +143,44 @@ export function BacktestLab() {
         priceLineVisible: true,
       });
 
-      // Sanitize equity curve: convert ISO dates to Unix timestamps (seconds),
-      // filter null/NaN values, deduplicate by time, and sort ascending.
+      // Sanitize equity curve: validate every point, convert ISO dates to Unix timestamps (seconds),
+      // deduplicate by time, and sort ascending.
       const rawLineData = result.equityCurve
-        .map((pt: EquityPoint) => {
+        .filter((pt: any): pt is EquityPoint => {
           const ts = pt.date ? Math.floor(new Date(pt.date).getTime() / 1000) : NaN;
           const value = typeof pt.equity === "number" && !isNaN(pt.equity) ? pt.equity : NaN;
-          return { time: ts, value };
+          return !isNaN(ts) && !isNaN(value);
         })
-        .filter((pt) => !isNaN(pt.time) && !isNaN(pt.value));
+        .map((pt) => ({
+          time: Math.floor(new Date(pt.date).getTime() / 1000) as Time,
+          value: pt.equity,
+        }));
 
       const timeMap = new Map<number, number>();
       for (const pt of rawLineData) {
-        timeMap.set(pt.time, pt.value);
+        timeMap.set(pt.time as number, pt.value);
       }
       const lineData = Array.from(timeMap.entries())
-        .map(([time, value]) => ({ time, value }))
-        .sort((a, b) => a.time - b.time);
+        .map(([time, value]) => ({ time: time as Time, value }))
+        .sort((a, b) => (a.time as number) - (b.time as number));
 
       if (lineData.length > 0) {
         lineSeries.setData(lineData);
       }
 
       // Sanitize markers: only include trades with valid entryTime and entryPrice.
-      const markers = result.trades
-        .filter((trade: Trade) => trade.entryTime && typeof trade.entryPrice === "number" && !isNaN(trade.entryPrice))
-        .map((trade: Trade) => ({
-          time: Math.floor(new Date(trade.entryTime).getTime() / 1000),
-          position: (trade.side === "LONG" ? "belowBar" : "aboveBar") as any,
-          color: trade.side === "LONG" ? "#10b981" : "#ef4444",
-          shape: (trade.side === "LONG" ? "arrowUp" : "arrowDown") as any,
-          text: `${trade.side[0]} @ ${trade.entryPrice.toFixed(0)}`,
-          size: 1,
-        }));
-
+      const markers = Array.isArray(result.trades)
+        ? result.trades
+            .filter((trade: Trade) => trade.entryTime && typeof trade.entryPrice === "number" && !isNaN(trade.entryPrice))
+            .map((trade: Trade) => ({
+              time: Math.floor(new Date(trade.entryTime).getTime() / 1000) as Time,
+              position: (trade.side === "LONG" ? "belowBar" : "aboveBar") as any,
+              color: trade.side === "LONG" ? "#10b981" : "#ef4444",
+              shape: (trade.side === "LONG" ? "arrowUp" : "arrowDown") as any,
+              text: `${trade.side[0]} @ ${(trade.entryPrice ?? 0).toFixed(0)}`,
+              size: 1,
+            }))
+        : [];
       if (markers.length > 0) {
         lineSeries.setMarkers(markers);
       }
@@ -184,7 +192,7 @@ export function BacktestLab() {
 
       const handleResize = () => {
         if (chartContainerRef.current && chartRef.current) {
-          chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+          chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth || chartContainerRef.current.offsetWidth || 800 });
         }
       };
       window.addEventListener("resize", handleResize);
@@ -329,16 +337,16 @@ export function BacktestLab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.trades.map((t: Trade) => (
+                    {Array.isArray(result.trades) && result.trades.map((t: Trade) => (
                       <tr key={t.id} className="border-b border-border-subtle">
                         <td className="px-2 py-2 text-zinc-600">{t.id}</td>
                         <td className="px-2 py-2">
                           <span className={`rounded px-1.5 py-0.5 text-2xs font-medium ${t.side === "LONG" ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"}`}>{t.side}</span>
                         </td>
-                        <td className="px-2 py-2 text-right font-mono text-zinc-300">{t.entryPrice.toFixed(2)}</td>
-                        <td className="px-2 py-2 text-right font-mono text-zinc-300">{t.exitPrice.toFixed(2)}</td>
-                        <td className={`px-2 py-2 text-right font-mono ${t.pnl >= 0 ? "text-gain" : "text-loss"}`}>{t.pnl >= 0 ? "+" : ""}{t.pnl.toFixed(0)}</td>
-                        <td className={`px-2 py-2 text-right font-mono ${t.pnlPercent >= 0 ? "text-gain" : "text-loss"}`}>{t.pnlPercent >= 0 ? "+" : ""}{t.pnlPercent.toFixed(2)}%</td>
+                        <td className="px-2 py-2 text-right font-mono text-zinc-300">{(t.entryPrice ?? 0).toFixed(2)}</td>
+                        <td className="px-2 py-2 text-right font-mono text-zinc-300">{(t.exitPrice ?? 0).toFixed(2)}</td>
+                        <td className={`px-2 py-2 text-right font-mono ${t.pnl >= 0 ? "text-gain" : "text-loss"}`}>{t.pnl >= 0 ? "+" : ""}{(t.pnl ?? 0).toFixed(0)}</td>
+                        <td className={`px-2 py-2 text-right font-mono ${t.pnlPercent >= 0 ? "text-gain" : "text-loss"}`}>{t.pnlPercent >= 0 ? "+" : ""}{(t.pnlPercent ?? 0).toFixed(2)}%</td>
                         <td className="px-2 py-2 text-zinc-600">{t.exitReason}</td>
                         <td className="px-2 py-2 text-right text-zinc-600">{t.barsHeld}</td>
                       </tr>

@@ -1,4 +1,4 @@
-# TradingOS — Institutional Grade Autonomous Trading Platform
+﻿# TradingOS — Institutional Grade Autonomous Trading Platform
 
 > **"I do not trade. I supervise."**
 
@@ -18,9 +18,10 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 8. [Portfolio Risk Engine](#portfolio-risk-engine)
 9. [Tech Stack](#tech-stack)
 10. [Quick Start](#quick-start)
-11. [Operations & Deployment](#operations--deployment)
-12. [Documentation](#documentation)
-13. [License](#license)
+11. [Development Workflow](#development-workflow)
+12. [Operations & Deployment](#operations--deployment)
+13. [Documentation](#documentation)
+14. [License](#license)
 
 ---
 
@@ -243,6 +244,14 @@ npm run dev
 Navigation simplified from 13 items → 10 items.
 
 ---
+
+
+## Development Workflow
+
+> All active development is done directly in **VS Code**. Commits and pushes are performed using **Git inside VS Code**.
+> Local build/test tooling is not run during development; validation happens after deployment:
+> - **UI** is deployed to and tested on **GitHub Pages**
+> - **Backend** is deployed to and tested on **Ubuntu**
 
 ## Operations & Deployment
 
