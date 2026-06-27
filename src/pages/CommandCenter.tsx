@@ -32,7 +32,7 @@ interface ChatMessage {
 }
 
 export function CommandCenter() {
-  const { state } = useInstitutionalStore();
+  const { state, applyCIORecommendation } = useInstitutionalStore();
   const { dashboard, portfolioRisk, cioState, strategyStates } = state;
 
   const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);

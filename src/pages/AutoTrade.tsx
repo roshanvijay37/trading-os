@@ -18,6 +18,7 @@ import {
   FileText,
   Lock,
   Clock,
+  Target,
 } from "lucide-react";
 import type { BotPosition, BotSignal, BotConfig, BotStatus } from "../types";
 
