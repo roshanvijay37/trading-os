@@ -1,9 +1,11 @@
+import type { ElementType } from "react";
+
 interface MetricCardProps {
   label: string;
   value: string | number;
   detail?: string;
-  icon: React.ElementType;
   tone?: "green" | "rose" | "amber" | "blue" | "zinc";
+  icon: ElementType;
 }
 
 export function MetricCard({ label, value, detail, icon: Icon, tone = "zinc" }: MetricCardProps) {

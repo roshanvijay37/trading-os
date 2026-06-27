@@ -1,11 +1,12 @@
-import type { ReactNode } from "react";
+import type { ReactNode, ElementType } from "react";
 
 interface CardProps {
+
   children: ReactNode;
   className?: string;
   title?: string;
   subtitle?: string;
-  icon?: React.ElementType;
+  icon?: ElementType;
   action?: ReactNode;
 }
 

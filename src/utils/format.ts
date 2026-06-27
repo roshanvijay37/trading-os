@@ -5,4 +5,3 @@ export const formatCurrency = (value: number): string =>
     maximumFractionDigits: 0,
   }).format(value);
 
-export const formatPercent = (value: number): string => `${value.toFixed(1)}%`;

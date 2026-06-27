@@ -5,7 +5,7 @@
  * Philosophy: "I do not trade. I supervise."
  */
 
-import { useState } from "react";
+import { useState, type ElementType } from "react";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import { STRATEGY_DEFINITIONS, STRATEGY_CATEGORIES, getStrategyById } from "../lib/strategies/registry";
 import type { StrategyId, StrategyConfig } from "../types/institutional";
@@ -345,7 +345,7 @@ function ConfigField({
   min?: number;
   max?: number;
   step?: number;
-  icon: React.ElementType;
+  icon: ElementType;
 }) {
   return (
     <div className="rounded-panel border border-border-subtle bg-surface p-3">

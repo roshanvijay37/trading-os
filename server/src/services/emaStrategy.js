@@ -11,7 +11,6 @@
  * 7. Square off by 3:15 PM
  */
 
-import { getSession } from "../routes/auth.js";
 
 // Store candles in memory (in production, use Redis/DB)
 const candleStore = new Map();

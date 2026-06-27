@@ -3,7 +3,7 @@
  * Merged Dashboard + AI CIO
  */
 
-import { useState } from "react";
+import { useEffect, useState, type ElementType } from "react";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import {
   Brain,
@@ -32,7 +32,7 @@ interface ChatMessage {
 }
 
 export function CommandCenter() {
-  const { state, applyCIORecommendation } = useInstitutionalStore();
+  const { state } = useInstitutionalStore();
   const { dashboard, portfolioRisk, cioState, strategyStates } = state;
 
   const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
@@ -41,12 +41,12 @@ export function CommandCenter() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "ai-cio">("overview");
 
-  useState(() => {
+  useEffect(() => {
     getAIStatus().then(setAiStatus).catch(() => setAiStatus({
       configured: false,
       message: "Unable to check AI status",
     }));
-  });
+  }, []);
 
   async function handleSend() {
     if (!inputValue.trim() || isLoading) return;
@@ -290,7 +290,7 @@ export function CommandCenter() {
   );
 }
 
-function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string | number; icon: React.ElementType; tone?: string }) {
+function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string | number; icon: ElementType; tone?: string }) {
   const tones: Record<string, string> = { green: "text-gain", rose: "text-loss", amber: "text-warn", blue: "text-info" };
   return (
     <div className="rounded-panel border border-border bg-panel p-4">

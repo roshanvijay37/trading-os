@@ -87,7 +87,6 @@ router.get("/candles", async (req, res) => {
 
 // Fetch historical candles from FYERS API
 async function fetchHistoricalCandles(symbol, interval, limit) {
-  const { getSession } = await import("./auth.js");
   const { getAllSessions } = await import("./auth.js");
   
   const sessions = getAllSessions();

@@ -3,8 +3,10 @@
  * Institutional-grade market analytics
  */
 
-import { useInstitutionalStore } from "../store/InstitutionalProvider";
+import type { ElementType } from "react";
 import { Activity, BarChart3, Eye, TrendingUp, Users, Zap } from "lucide-react";
+
+import { useInstitutionalStore } from "../store/InstitutionalProvider";
 
 export function MarketIntelligencePage() {
   const { state } = useInstitutionalStore();
@@ -123,7 +125,7 @@ export function MarketIntelligencePage() {
   );
 }
 
-function MetricCard({ label, value, icon: Icon, color }: { label: string; value: number | string; icon: React.ElementType; color: string }) {
+function MetricCard({ label, value, icon: Icon, color }: { label: string; value: number | string; icon: ElementType; color: string }) {
   const colorClasses: Record<string, string> = {
     gain: "text-gain",
     loss: "text-loss",

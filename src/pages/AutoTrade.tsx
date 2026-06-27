@@ -7,7 +7,6 @@ import {
   Square,
   Activity,
   XCircle,
-  Target,
   Shield,
   Zap,
   BarChart3,

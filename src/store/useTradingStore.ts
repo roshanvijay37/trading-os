@@ -33,13 +33,5 @@ export function useTradingStore() {
       storage.saveSettings(next);
       notifyStorageUpdate();
     },
-    addTrade(trade: Trade) {
-      storage.addTrade(trade);
-      notifyStorageUpdate();
-    },
-    updateTrade(trade: Trade) {
-      storage.updateTrade(trade);
-      notifyStorageUpdate();
-    },
   };
 }

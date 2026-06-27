@@ -1,5 +1,4 @@
 import type { Settings, Trade } from "../types";
-import { toLocalDateKey } from "../utils/date";
 
 const KEYS = {
   settings: "trading-os:settings",
@@ -41,19 +40,5 @@ export const storage = {
 
   saveTrades(trades: Trade[]): void {
     writeJson(KEYS.trades, trades);
-  },
-
-  addTrade(trade: Trade): void {
-    this.saveTrades([trade, ...this.getTrades()]);
-  },
-
-  updateTrade(trade: Trade): void {
-    this.saveTrades(
-      this.getTrades().map((current) => (current.id === trade.id ? trade : current)),
-    );
-  },
-
-  getTradesForDate(date = toLocalDateKey()): Trade[] {
-    return this.getTrades().filter((trade) => trade.date === date);
   },
 };

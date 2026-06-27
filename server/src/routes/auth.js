@@ -9,11 +9,6 @@ const appId = process.env.FYERS_APP_ID;
 const secretId = process.env.FYERS_SECRET_ID;
 const redirectUrl = process.env.FYERS_REDIRECT_URL || "http://127.0.0.1:5173";
 
-// FYERS uses base client_id for OAuth, full appId for API calls
-// OAuth client_id = base part (e.g., NOGKPU94W4)
-// API appId = full with suffix (e.g., NOGKPU94W4-100)
-const clientId = appId ? appId.split('-')[0] : '';
-
 // FYERS API base URL
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 

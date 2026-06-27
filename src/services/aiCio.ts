@@ -21,35 +21,6 @@ export interface CIOQueryResponse {
   fallback?: string;
 }
 
-export interface RegimeDetectRequest {
-  marketData: Record<string, unknown>;
-}
-
-export interface RegimeDetectResponse {
-  success: boolean;
-  regime: string;
-  confidence: number;
-  reasoning: string;
-  keyFactors: string[];
-  recommendedAction: string;
-  riskLevel: string;
-  model: string;
-  timestamp: string;
-  error?: string;
-}
-
-export interface TradeReviewRequest {
-  trade: Record<string, unknown>;
-}
-
-export interface TradeReviewResponse {
-  success: boolean;
-  tradeId: string;
-  review: string;
-  model: string;
-  timestamp: string;
-  error?: string;
-}
 
 export interface AIStatusResponse {
   configured: boolean;
@@ -70,29 +41,6 @@ export async function queryCIO(request: CIOQueryRequest): Promise<CIOQueryRespon
   return res.json();
 }
 
-/**
- * Use LLM to detect market regime from data
- */
-export async function detectRegimeLLM(request: RegimeDetectRequest): Promise<RegimeDetectResponse> {
-  const res = await fetch(`${API_BASE}/cio/regime`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  return res.json();
-}
-
-/**
- * Get AI-powered trade review
- */
-export async function reviewTradeAI(request: TradeReviewRequest): Promise<TradeReviewResponse> {
-  const res = await fetch(`${API_BASE}/trade/review`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  return res.json();
-}
 
 /**
  * Check if Kimi AI is configured and reachable

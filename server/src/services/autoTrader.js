@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PRODUCTION-GRADE AUTOMATED TRADING SYSTEM
  *
  * Institutional-quality risk management for real money trading.
@@ -19,7 +19,7 @@ import {
 import fs from "fs";
 import path from "path";
 
-// ─── CONFIGURATION ───────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ CONFIGURATION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const CONFIG = {
   POLL_INTERVAL_MS: 30000,
   UNDERLYINGS: [
@@ -49,23 +49,23 @@ const CONFIG = {
   EMERGENCY_STOP: false,
 };
 
-// ─── STATE ───────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ STATE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 let isRunning = false;
 let pollInterval = null;
 let activeAlerts = new Map();
 let openPositions = [];
 let todayTrades = 0;
 let lastTradeDate = null;
-let marketStatus = "CLOSED";
+
 let latestData = {};
 let processedSignals = new Set();
 let indiaVIX = 0;
 let dailyPnL = 0;
 let consecutiveLosses = 0;
 let auditLog = [];
-let paperModeTrades = [];
 
-// ─── PERSISTENCE ─────────────────────────────────────────────────
+
+// ΓöÇΓöÇΓöÇ PERSISTENCE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const STATE_FILE = path.join(process.cwd(), "auto-trade-state.json");
 const AUDIT_FILE = path.join(process.cwd(), "auto-trade-audit.jsonl");
 
@@ -109,7 +109,7 @@ function loadState() {
 
 loadState();
 
-// ─── AUDIT LOGGING ───────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ AUDIT LOGGING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function logAudit(event) {
   const entry = { timestamp: new Date().toISOString(), ...event };
   auditLog.push(entry);
@@ -120,7 +120,8 @@ function logAudit(event) {
   }
 }
 
-// ─── FYERS API ───────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ FYERS API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+const FYERS_APP_ID = process.env.FYERS_APP_ID;
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 const FYERS_DATA_BASE = "https://api-t1.fyers.in/data";
 
@@ -144,10 +145,10 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
   return data;
 }
 
-// ─── RISK MANAGEMENT ─────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ RISK MANAGEMENT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function fetchAvailableFunds(session) {
   try {
-    const data = await fyersApiCall("/funds", session.accessToken, session.appId);
+    const data = await fyersApiCall("/funds", session.accessToken, FYERS_APP_ID);
     const funds = data.fund_limit || [];
     const available = funds.find((f) => f.title === "Available Balance");
     return available ? available.equityAmount : 0;
@@ -174,7 +175,7 @@ function checkDailyLossLimit() {
   const limit = -CONFIG.CAPITAL * (CONFIG.MAX_RISK_PER_DAY_PERCENT / 100);
   const hit = dailyPnL <= limit;
   if (hit) {
-    console.log(`[AUTO-TRADER] DAILY LOSS LIMIT HIT: ₹${dailyPnL.toFixed(2)} (limit: ₹${limit.toFixed(2)})`);
+    console.log(`[AUTO-TRADER] DAILY LOSS LIMIT HIT: Γé╣${dailyPnL.toFixed(2)} (limit: Γé╣${limit.toFixed(2)})`);
     logAudit({ type: "CIRCUIT_BREAKER", reason: "DAILY_LOSS_LIMIT", dailyPnL, limit });
   }
   return !hit;
@@ -194,12 +195,12 @@ function roundToLotSize(qty, underlying) {
   return Math.max(rounded, underlying.lotSize);
 }
 
-// ─── MARKET FILTERS ──────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ MARKET FILTERS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function fetchIndiaVIX(session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=NSE:INDIAVIX-INDEX`;
     const response = await fetch(url, {
-      headers: { Authorization: `${session.appId}:${session.accessToken}` },
+      headers: { Authorization: `${FYERS_APP_ID}:${session.accessToken}` },
     });
     const data = await response.json();
     indiaVIX = data.d?.[0]?.v?.lp || 0;
@@ -225,7 +226,7 @@ function checkTimeFilter() {
   const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + istOffset) % (24 * 60);
   const hours = Math.floor(istMinutes / 60);
   if (hours >= CONFIG.MAX_TIME_ENTRY_HOUR) {
-    console.log(`[AUTO-TRADER] After ${CONFIG.MAX_TIME_ENTRY_HOUR}:00 IST — no new entries`);
+    console.log(`[AUTO-TRADER] After ${CONFIG.MAX_TIME_ENTRY_HOUR}:00 IST ΓÇö no new entries`);
     return false;
   }
   return true;
@@ -245,12 +246,15 @@ async function checkLiquidity(optionSymbol, session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(optionSymbol)}`;
     const response = await fetch(url, {
-      headers: { Authorization: `${session.appId}:${session.accessToken}` },
+      headers: { Authorization: `${FYERS_APP_ID}:${session.accessToken}` },
     });
     const data = await response.json();
     const quote = data.d?.[0]?.v;
     if (!quote) return { pass: false, reason: "NO_QUOTE" };
     const oi = quote.oi || 0;
+    if (!quote.bid || !quote.ask || quote.lp <= 0) {
+      return { pass: false, reason: "INVALID_QUOTE" };
+    }
     const spread = ((quote.ask - quote.bid) / quote.lp) * 100;
     if (oi < CONFIG.MIN_OI) {
       logAudit({ type: "FILTER_BLOCKED", reason: "LOW_OI", optionSymbol, oi, minOI: CONFIG.MIN_OI });
@@ -266,9 +270,10 @@ async function checkLiquidity(optionSymbol, session) {
   }
 }
 
-// ─── ORDER EXECUTION ─────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ ORDER EXECUTION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function placeLimitOrder(signal, optionSymbol, qty, session) {
-  const bufferPrice = signal.entryPrice * (1 + CONFIG.LIMIT_BUFFER_PCT / 100);
+  const bufferMultiplier = signal.type === "LONG" ? 1 : -1;
+  const bufferPrice = signal.entryPrice * (1 + bufferMultiplier * CONFIG.LIMIT_BUFFER_PCT / 100);
   const limitPrice =
     signal.type === "LONG"
       ? Math.ceil(bufferPrice * 100) / 100
@@ -295,7 +300,7 @@ async function placeLimitOrder(signal, optionSymbol, qty, session) {
   const response = await fyersApiCall(
     "/orders/async",
     session.accessToken,
-    session.appId,
+    FYERS_APP_ID,
     orderBody,
     "POST"
   );
@@ -305,7 +310,7 @@ async function placeLimitOrder(signal, optionSymbol, qty, session) {
 
 async function validateOrder(orderId, session) {
   try {
-    const data = await fyersApiCall(`/orders/${orderId}`, session.accessToken, session.appId);
+    const data = await fyersApiCall(`/orders/${orderId}`, session.accessToken, FYERS_APP_ID);
     return {
       valid: true,
       status: data.data?.status || "UNKNOWN",
@@ -317,7 +322,7 @@ async function validateOrder(orderId, session) {
   }
 }
 
-// ─── POSITION MANAGEMENT ─────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ POSITION MANAGEMENT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function exitPosition(position, session, reason) {
   try {
     if (CONFIG.PAPER_TRADING) {
@@ -346,7 +351,7 @@ async function exitPosition(position, session, reason) {
     const response = await fyersApiCall(
       "/orders/async",
       session.accessToken,
-      session.appId,
+      FYERS_APP_ID,
       orderBody,
       "POST"
     );
@@ -362,7 +367,7 @@ async function exitPosition(position, session, reason) {
       pnl: position.pnl,
     });
     console.log(
-      `[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: ₹${position.pnl.toFixed(2)} | ${reason}`
+      `[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: Γé╣${position.pnl.toFixed(2)} | ${reason}`
     );
     saveState();
   } catch (error) {
@@ -378,7 +383,7 @@ async function monitorPositions(session) {
     try {
       const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(position.optionSymbol)}`;
       const response = await fetch(url, {
-        headers: { Authorization: `${session.appId}:${session.accessToken}` },
+        headers: { Authorization: `${FYERS_APP_ID}:${session.accessToken}` },
       });
       const data = await response.json();
       const ltp = data.d?.[0]?.v?.lp || 0;
@@ -411,7 +416,7 @@ async function monitorPositions(session) {
   }
 }
 
-// ─── MAIN TRADING LOGIC ──────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ MAIN TRADING LOGIC ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function canTakeTrade(underlyingName) {
   if (CONFIG.EMERGENCY_STOP) {
     console.log("[AUTO-TRADER] EMERGENCY STOP ACTIVE");
@@ -447,7 +452,7 @@ function calculatePositionSize(entryPrice, stopLoss, underlying) {
 
 async function processCandles(underlying, session) {
   try {
-    const candles = await fetchLatestCandles(underlying.symbol, session.accessToken, session.appId);
+    const candles = await fetchLatestCandles(underlying.symbol, session.accessToken, FYERS_APP_ID);
     if (candles.length < 6) return;
     latestData[underlying.name] = {
       candles,
@@ -482,7 +487,7 @@ async function processCandles(underlying, session) {
       activeAlerts.delete(underlying.name);
       return;
     }
-    const optionChain = await fetchOptionChain(underlying.symbol, session.accessToken, session.appId);
+    const optionChain = await fetchOptionChain(underlying.symbol, session.accessToken, FYERS_APP_ID);
     const optionType = signal.type === "LONG" ? "CE" : "PE";
     const optionSymbol = getATMOption(underlying.name, signal.entryPrice, optionType, optionChain);
     if (!optionSymbol) {
@@ -503,7 +508,7 @@ async function processCandles(underlying, session) {
     }
     const margin = await checkMargin(optionSymbol, qty, session);
     if (!margin.pass) {
-      console.log(`[AUTO-TRADER] Margin insufficient: need ₹${margin.required.toFixed(2)}, have ₹${margin.available.toFixed(2)}`);
+      console.log(`[AUTO-TRADER] Margin insufficient: need Γé╣${margin.required.toFixed(2)}, have Γé╣${margin.available.toFixed(2)}`);
       activeAlerts.delete(underlying.name);
       return;
     }
@@ -565,7 +570,7 @@ async function processCandles(underlying, session) {
   }
 }
 
-// ─── DATA FETCHING ───────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ DATA FETCHING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function fetchLatestCandles(symbol, accessToken, appId) {
   const now = Math.floor(Date.now() / 1000);
   const from = now - 3600;
@@ -582,7 +587,7 @@ async function fetchOptionChain(symbol, accessToken, appId) {
   return data.data?.optionsChain || [];
 }
 
-// ─── MARKET STATUS ───────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ MARKET STATUS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 import { getNseMarketStatus } from "../utils/marketHolidays.js";
 
 function getISTTime() {
@@ -597,7 +602,7 @@ function getCurrentMarketStatus() {
   return getNseMarketStatus();
 }
 
-// ─── MAIN LOOP ───────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ MAIN LOOP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function tradingLoop(session) {
   if (!isRunning) return;
   const today = new Date().toDateString();
@@ -607,7 +612,7 @@ async function tradingLoop(session) {
     dailyPnL = 0;
     consecutiveLosses = 0;
     activeAlerts.clear();
-    openPositions = [];
+    openPositions = openPositions.filter((p) => p.status !== "CLOSED");
     processedSignals.clear();
     console.log(`[AUTO-TRADER] New day - all counters reset`);
     saveState();
@@ -638,7 +643,7 @@ async function tradingLoop(session) {
   }
 }
 
-// ─── PUBLIC API ──────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ PUBLIC API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 export async function startAutoTrader(sessionId) {
   if (isRunning) return { status: "ALREADY_RUNNING" };
   const { getSession } = await import("../routes/auth.js");
@@ -647,10 +652,10 @@ export async function startAutoTrader(sessionId) {
   const actualCapital = await fetchAvailableFunds(session);
   if (actualCapital > 0) {
     CONFIG.CAPITAL = actualCapital;
-    console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+    console.log(`[AUTO-TRADER] Capital: Γé╣${CONFIG.CAPITAL.toFixed(2)}`);
   }
   try {
-    const positions = await fyersApiCall("/positions", session.accessToken, session.appId);
+    const positions = await fyersApiCall("/positions", session.accessToken, FYERS_APP_ID);
     console.log(`[AUTO-TRADER] Existing positions: ${positions.netPositions?.length || 0}`);
   } catch (err) {
     console.log("[AUTO-TRADER] Could not fetch existing positions");
