@@ -414,6 +414,8 @@ function runBacktest(candles, config) {
         }
       }
     }
+  }
+
 
 
   if (position) {
