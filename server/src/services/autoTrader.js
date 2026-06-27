@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PRODUCTION-GRADE AUTOMATED TRADING SYSTEM
  *
  * Institutional-quality risk management for real money trading.
@@ -16,10 +16,25 @@ import {
   getRecentSignals,
 } from "./emaStrategy.js";
 
+import {
+  setSession as setExecutionSession,
+  setPaperTrading as setExecutionPaper,
+  isPaperTrading,
+  submitEntry,
+  submitExit,
+  cancelAllOpenOrders,
+  startReconciliation,
+  stopReconciliation,
+  stopAllPollers,
+} from "./execution/ExecutionEngine.js";
+
+import { getOrderStats, getOpenOrders } from "./execution/OrderManager.js";
+
 import fs from "fs";
 import path from "path";
 
-// ─── CONFIGURATION ───────────────────────────────────────────────
+// â”€â”€â”€ CONFIGURATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+import { getNseMarketStatus } from "../utils/marketHolidays.js";
 const CONFIG = {
   POLL_INTERVAL_MS: 30000,
   UNDERLYINGS: [
@@ -49,7 +64,7 @@ const CONFIG = {
   EMERGENCY_STOP: false,
 };
 
-// ─── STATE ───────────────────────────────────────────────────────
+// â”€â”€â”€ STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let isRunning = false;
 let pollInterval = null;
 let activeAlerts = new Map();
@@ -65,7 +80,7 @@ let consecutiveLosses = 0;
 let auditLog = [];
 let paperModeTrades = [];
 
-// ─── PERSISTENCE ─────────────────────────────────────────────────
+// â”€â”€â”€ PERSISTENCE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const STATE_FILE = path.join(process.cwd(), "auto-trade-state.json");
 const AUDIT_FILE = path.join(process.cwd(), "auto-trade-audit.jsonl");
 
@@ -109,7 +124,7 @@ function loadState() {
 
 loadState();
 
-// ─── AUDIT LOGGING ───────────────────────────────────────────────
+// â”€â”€â”€ AUDIT LOGGING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function logAudit(event) {
   const entry = { timestamp: new Date().toISOString(), ...event };
   auditLog.push(entry);
@@ -120,7 +135,7 @@ function logAudit(event) {
   }
 }
 
-// ─── FYERS API ───────────────────────────────────────────────────
+// â”€â”€â”€ FYERS API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 const FYERS_DATA_BASE = "https://api-t1.fyers.in/data";
 
@@ -144,7 +159,7 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
   return data;
 }
 
-// ─── RISK MANAGEMENT ─────────────────────────────────────────────
+// â”€â”€â”€ RISK MANAGEMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function fetchAvailableFunds(session) {
   try {
     const data = await fyersApiCall("/funds", session.accessToken, session.appId);
@@ -174,7 +189,7 @@ function checkDailyLossLimit() {
   const limit = -CONFIG.CAPITAL * (CONFIG.MAX_RISK_PER_DAY_PERCENT / 100);
   const hit = dailyPnL <= limit;
   if (hit) {
-    console.log(`[AUTO-TRADER] DAILY LOSS LIMIT HIT: ₹${dailyPnL.toFixed(2)} (limit: ₹${limit.toFixed(2)})`);
+    console.log(`[AUTO-TRADER] DAILY LOSS LIMIT HIT: â‚¹${dailyPnL.toFixed(2)} (limit: â‚¹${limit.toFixed(2)})`);
     logAudit({ type: "CIRCUIT_BREAKER", reason: "DAILY_LOSS_LIMIT", dailyPnL, limit });
   }
   return !hit;
@@ -194,7 +209,7 @@ function roundToLotSize(qty, underlying) {
   return Math.max(rounded, underlying.lotSize);
 }
 
-// ─── MARKET FILTERS ──────────────────────────────────────────────
+// â”€â”€â”€ MARKET FILTERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function fetchIndiaVIX(session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=NSE:INDIAVIX-INDEX`;
@@ -225,7 +240,7 @@ function checkTimeFilter() {
   const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + istOffset) % (24 * 60);
   const hours = Math.floor(istMinutes / 60);
   if (hours >= CONFIG.MAX_TIME_ENTRY_HOUR) {
-    console.log(`[AUTO-TRADER] After ${CONFIG.MAX_TIME_ENTRY_HOUR}:00 IST — no new entries`);
+    console.log(`[AUTO-TRADER] After ${CONFIG.MAX_TIME_ENTRY_HOUR}:00 IST â€” no new entries`);
     return false;
   }
   return true;
@@ -266,94 +281,35 @@ async function checkLiquidity(optionSymbol, session) {
   }
 }
 
-// ─── ORDER EXECUTION ─────────────────────────────────────────────
+// â”€â”€â”€ ORDER EXECUTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function placeLimitOrder(signal, optionSymbol, qty, session) {
-  const bufferPrice = signal.entryPrice * (1 + CONFIG.LIMIT_BUFFER_PCT / 100);
-  const limitPrice =
-    signal.type === "LONG"
-      ? Math.ceil(bufferPrice * 100) / 100
-      : Math.floor(bufferPrice * 100) / 100;
-  const orderBody = {
-    symbol: optionSymbol,
-    qty,
-    side: signal.type === "LONG" ? 1 : -1,
-    type: 1,
-    productType: "INTRADAY",
-    limitPrice,
-    stopPrice: 0,
-    disclosedQty: 0,
-    validity: "DAY",
-    offlineOrder: false,
-    stopLoss: 0,
-    takeProfit: 0,
-  };
-  if (CONFIG.PAPER_TRADING) {
-    console.log(`[AUTO-TRADER] PAPER TRADE: ${optionSymbol} @ ${limitPrice}`);
-    logAudit({ type: "PAPER_ORDER", optionSymbol, qty, limitPrice, signal });
-    return { orderId: `PAPER-${Date.now()}`, status: "PLACED" };
-  }
-  const response = await fyersApiCall(
-    "/orders/async",
-    session.accessToken,
-    session.appId,
-    orderBody,
-    "POST"
-  );
-  logAudit({ type: "ORDER_PLACED", orderId: response.id, optionSymbol, qty, limitPrice, side: signal.type });
-  return { orderId: response.id, status: "PLACED", limitPrice };
+  setExecutionSession(session);
+  setExecutionPaper(CONFIG.PAPER_TRADING);
+  const result = await submitEntry(signal, optionSymbol, qty, "EMA5");
+  return { orderId: result.orderId, status: result.status, avgPrice: result.avgPrice };
 }
 
 async function validateOrder(orderId, session) {
-  try {
-    const data = await fyersApiCall(`/orders/${orderId}`, session.accessToken, session.appId);
-    return {
-      valid: true,
-      status: data.data?.status || "UNKNOWN",
-      filledQty: data.data?.filledQty || 0,
-    };
-  } catch (err) {
-    console.error("[AUTO-TRADER] Order validation failed:", err.message);
-    return { valid: false };
-  }
+  return { valid: true, status: "OK" };
 }
-
-// ─── POSITION MANAGEMENT ─────────────────────────────────────────
+// â”€â”€â”€ POSITION MANAGEMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function exitPosition(position, session, reason) {
   try {
-    if (CONFIG.PAPER_TRADING) {
-      console.log(`[AUTO-TRADER] PAPER EXIT: ${position.optionSymbol}`);
+    setExecutionSession(session);
+    setExecutionPaper(CONFIG.PAPER_TRADING);
+    const result = await submitExit(position, reason);
+    if (result.paper) {
       position.status = "CLOSED";
       position.exitTime = new Date().toISOString();
       position.exitReason = reason;
+      position.pnl = result.pnl;
       saveState();
       return;
     }
-    const exitSide = position.signal.type === "LONG" ? -1 : 1;
-    const orderBody = {
-      symbol: position.optionSymbol,
-      qty: position.quantity,
-      side: exitSide,
-      type: 2,
-      productType: "INTRADAY",
-      limitPrice: 0,
-      stopPrice: 0,
-      disclosedQty: 0,
-      validity: "DAY",
-      offlineOrder: false,
-      stopLoss: 0,
-      takeProfit: 0,
-    };
-    const response = await fyersApiCall(
-      "/orders/async",
-      session.accessToken,
-      session.appId,
-      orderBody,
-      "POST"
-    );
     position.status = "CLOSED";
     position.exitTime = new Date().toISOString();
     position.exitReason = reason;
-    position.exitOrderId = response.id;
+    position.exitOrderId = result.orderId;
     logAudit({
       type: "POSITION_CLOSED",
       orderId: position.id,
@@ -370,7 +326,6 @@ async function exitPosition(position, session, reason) {
     logAudit({ type: "EXIT_FAILED", optionSymbol: position.optionSymbol, error: error.message });
   }
 }
-
 async function monitorPositions(session) {
   if (openPositions.length === 0) return;
   for (const position of openPositions) {
@@ -411,7 +366,7 @@ async function monitorPositions(session) {
   }
 }
 
-// ─── MAIN TRADING LOGIC ──────────────────────────────────────────
+// â”€â”€â”€ MAIN TRADING LOGIC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function canTakeTrade(underlyingName) {
   if (CONFIG.EMERGENCY_STOP) {
     console.log("[AUTO-TRADER] EMERGENCY STOP ACTIVE");
@@ -503,7 +458,7 @@ async function processCandles(underlying, session) {
     }
     const margin = await checkMargin(optionSymbol, qty, session);
     if (!margin.pass) {
-      console.log(`[AUTO-TRADER] Margin insufficient: need ₹${margin.required.toFixed(2)}, have ₹${margin.available.toFixed(2)}`);
+      console.log(`[AUTO-TRADER] Margin insufficient: need â‚¹${margin.required.toFixed(2)}, have â‚¹${margin.available.toFixed(2)}`);
       activeAlerts.delete(underlying.name);
       return;
     }
@@ -565,7 +520,7 @@ async function processCandles(underlying, session) {
   }
 }
 
-// ─── DATA FETCHING ───────────────────────────────────────────────
+// â”€â”€â”€ DATA FETCHING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function fetchLatestCandles(symbol, accessToken, appId) {
   const now = Math.floor(Date.now() / 1000);
   const from = now - 3600;
@@ -582,8 +537,6 @@ async function fetchOptionChain(symbol, accessToken, appId) {
   return data.data?.optionsChain || [];
 }
 
-// ─── MARKET STATUS ───────────────────────────────────────────────
-import { getNseMarketStatus } from "../utils/marketHolidays.js";
 
 function getISTTime() {
   const now = new Date();
@@ -597,7 +550,7 @@ function getCurrentMarketStatus() {
   return getNseMarketStatus();
 }
 
-// ─── MAIN LOOP ───────────────────────────────────────────────────
+// â”€â”€â”€ MAIN LOOP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function tradingLoop(session) {
   if (!isRunning) return;
   const today = new Date().toDateString();
@@ -638,7 +591,7 @@ async function tradingLoop(session) {
   }
 }
 
-// ─── PUBLIC API ──────────────────────────────────────────────────
+// â”€â”€â”€ PUBLIC API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function startAutoTrader(sessionId) {
   if (isRunning) return { status: "ALREADY_RUNNING" };
   const { getSession } = await import("../routes/auth.js");
@@ -647,7 +600,7 @@ export async function startAutoTrader(sessionId) {
   const actualCapital = await fetchAvailableFunds(session);
   if (actualCapital > 0) {
     CONFIG.CAPITAL = actualCapital;
-    console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+    console.log(`[AUTO-TRADER] Capital: â‚¹${CONFIG.CAPITAL.toFixed(2)}`);
   }
   try {
     const positions = await fyersApiCall("/positions", session.accessToken, session.appId);
@@ -656,15 +609,17 @@ export async function startAutoTrader(sessionId) {
     console.log("[AUTO-TRADER] Could not fetch existing positions");
   }
   console.log(
+  console.log(
     `[AUTO-TRADER] Starting... Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
   );
+  setExecutionSession(session);
+  setExecutionPaper(CONFIG.PAPER_TRADING);
+  startReconciliation();
   isRunning = true;
   todayTrades = 0;
   lastTradeDate = new Date().toDateString();
   dailyPnL = 0;
   consecutiveLosses = 0;
-  tradingLoop(session);
-  return {
     status: "STARTED",
     config: {
       capital: CONFIG.CAPITAL,
@@ -684,11 +639,12 @@ export function stopAutoTrader() {
     clearTimeout(pollInterval);
     pollInterval = null;
   }
+  stopReconciliation();
+  stopAllPollers();
   const openCount = openPositions.filter((p) => p.status === "OPEN").length;
   console.log(`[AUTO-TRADER] Stopped. ${openCount} positions open.`);
   return { status: "STOPPED", openPositions: openCount, stoppedAt: new Date().toISOString() };
 }
-
 export function emergencyStop() {
   CONFIG.EMERGENCY_STOP = true;
   isRunning = false;
@@ -696,11 +652,17 @@ export function emergencyStop() {
     clearTimeout(pollInterval);
     pollInterval = null;
   }
+  stopReconciliation();
+  stopAllPollers();
+  cancelAllOpenOrders().then((res) => {
+    console.log(`[AUTO-TRADER] Cancelled ${res.cancelled} open orders`);
+  }).catch((err) => {
+    console.error("[AUTO-TRADER] Cancel orders failed:", err.message);
+  });
   console.log("[AUTO-TRADER] EMERGENCY STOP ACTIVATED");
   logAudit({ type: "EMERGENCY_STOP", timestamp: new Date().toISOString() });
   return { status: "EMERGENCY_STOPPED", openPositions: openPositions.filter((p) => p.status === "OPEN").length };
 }
-
 export function resetEmergencyStop() {
   if (!CONFIG.EMERGENCY_STOP) {
     return { status: "NOT_IN_EMERGENCY", message: "System was not in emergency state" };
@@ -726,6 +688,8 @@ export function getAutoTraderStatus() {
     fixedLots: CONFIG.FIXED_LOTS,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
+    orderStats: getOrderStats(),
+    openOrders: getOpenOrders(),
     activeAlerts: Object.fromEntries(activeAlerts),
     latestData,
     recentSignals: getRecentSignals(10),
@@ -779,3 +743,7 @@ export function updateConfig(updates) {
 export function getAuditLog(limit = 100) {
   return auditLog.slice(-limit);
 }
+
+
+
+

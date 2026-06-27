@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Play, RotateCcw, TrendingUp, TrendingDown, Target, Shield, DollarSign, BarChart3, Activity, Clock, MessageSquare, Settings2 } from "lucide-react";
 import { backtestApi } from "../services/api";
 
@@ -64,9 +64,7 @@ function parseNaturalLanguage(text: string) {
   // Strategy
   if (t.includes("option buying") || t.includes("ce buy") || t.includes("pe buy")) config.strategy = "EMA5_OPTION";
   else if (t.includes("5 ema") || t.includes("ema 5") || t.includes("subhasish") || t.includes("pani")) config.strategy = "EMA5";
-  else if (t.includes("traffic light") || t.includes("traffic")) config.strategy = "TRAFFIC_LIGHT";
-  else if (t.includes("inside candle") || t.includes("mother candle")) config.strategy = "INSIDE_CANDLE";
-  else config.strategy = "RSI";
+  else config.strategy = "EMA5";
 
   // Timeframe
   if (t.includes("1 min")) config.resolution = "1";
@@ -102,17 +100,9 @@ function parseNaturalLanguage(text: string) {
   config.slBuffer = slMatch ? parseFloat(slMatch[1]) / 100 : 0.005;
 
   // RSI
-  const rsiMatch = text.match(/rsi\s*(?:\()?(\d+)?(?:\))?\s*(?:<|below|under)\s*(\d+)/i);
-  if (rsiMatch) {
-    config.rsiPeriod = rsiMatch[1] ? parseInt(rsiMatch[1]) : 14;
-    config.oversoldThreshold = parseInt(rsiMatch[2]);
   } else {
-    config.rsiPeriod = 2;
-    config.oversoldThreshold = 10;
   }
 
-  const rsiExitMatch = text.match(/(?:sell|exit).*rsi\s*(?:>|above)\s*(\d+)/i);
-  config.overboughtThreshold = rsiExitMatch ? parseInt(rsiExitMatch[1]) : 90;
 
   // Target / R:R
   let rrMatch = text.match(/(\d+(?:\.\d+)?)\s*[:\-]\s*(\d+(?:\.\d+)?)\s*(?:r[:\s]?r|risk\s*reward)/i);
@@ -144,13 +134,10 @@ export function Backtest() {
     return d.toISOString().split("T")[0];
   });
   const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [strategy, setStrategy] = useState<"RSI" | "EMA5" | "EMA5_OPTION" | "TRAFFIC_LIGHT" | "INSIDE_CANDLE" | "VWAP_REVERSAL" | "ORB" | "CPR_BREAKOUT" | "EMA9_20" | "FAILED_BREAKOUT" | "OPENING_MOMENTUM">("RSI");
+  const [strategy, setStrategy] = useState<"EMA5" | "EMA5_OPTION">("EMA5");
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>(["EMA5"]);
   const [multiMode, setMultiMode] = useState(false);
   const [multiResult, setMultiResult] = useState<any>(null);
-  const [rsiPeriod, setRsiPeriod] = useState(2);
-  const [oversold, setOversold] = useState(10);
-  const [overbought, setOverbought] = useState(90);
   const [capital, setCapital] = useState(1000000);
   const [riskPercent, setRiskPercent] = useState(1);
   const [targetMult, setTargetMult] = useState(2);
@@ -172,17 +159,8 @@ export function Backtest() {
   ];
 
   const strategies = [
-    { value: "RSI", label: "RSI 2-Period (Mean Reversion)" },
     { value: "EMA5", label: "5 EMA (Subhasish Pani)" },
     { value: "EMA5_OPTION", label: "5 EMA Option Buying (Subhasish Pani)" },
-    { value: "TRAFFIC_LIGHT", label: "Traffic Light (Subhasish Pani)" },
-    { value: "INSIDE_CANDLE", label: "Inside Candle Breakout" },
-    { value: "VWAP_REVERSAL", label: "VWAP Reversal (Anant Ladha)" },
-    { value: "ORB", label: "Opening Range Breakout" },
-    { value: "CPR_BREAKOUT", label: "CPR Breakout (Vivek Bajaj)" },
-    { value: "EMA9_20", label: "9/20 EMA Crossover" },
-    { value: "FAILED_BREAKOUT", label: "Failed Breakout (Al Brooks)" },
-    { value: "OPENING_MOMENTUM", label: "Opening Momentum" },
   ];
 
   const getMaxDays = (res: string) => timeframes.find((t) => t.value === res)?.maxDays || 90;
@@ -251,9 +229,6 @@ export function Backtest() {
           fromDate,
           toDate,
           strategy,
-          rsiPeriod,
-          oversoldThreshold: oversold,
-          overboughtThreshold: overbought,
           capital,
           riskPercent,
           targetMultiplier: targetMult,
@@ -507,45 +482,6 @@ export function Backtest() {
             />
           </div>
 
-          {strategy === "RSI" && (
-          <>
-          <div>
-            <label className="mb-1.5 block text-xs text-zinc-500">RSI Period</label>
-            <input
-              type="number"
-              value={rsiPeriod}
-              onChange={(e) => setRsiPeriod(Number(e.target.value))}
-              min={1}
-              max={50}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs text-zinc-500">Oversold (less than)</label>
-            <input
-              type="number"
-              value={oversold}
-              onChange={(e) => setOversold(Number(e.target.value))}
-              min={1}
-              max={50}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs text-zinc-500">Overbought (greater than)</label>
-            <input
-              type="number"
-              value={overbought}
-              onChange={(e) => setOverbought(Number(e.target.value))}
-              min={50}
-              max={99}
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 outline-none focus:border-lime-400"
-            />
-          </div>
-          </>
-          )}
 
           {strategy === "EMA5" && (
           <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
@@ -573,32 +509,7 @@ export function Backtest() {
           </div>
           )}
 
-          {strategy === "TRAFFIC_LIGHT" && (
-          <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
-            <p className="text-xs text-zinc-400">
-              <strong className="text-lime-300">Traffic Light Strategy (Subhasish Pani):</strong>
-            </p>
-            <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
-              <li>Trend = 20 EMA vs 50 EMA direction</li>
-              <li>Yellow Light: Pullback to 20 EMA</li>
-              <li>Green Light: Momentum continuation (break prev candle high/low)</li>
-              <li>Only trade WITH the trend</li>
-            </ul>
-          </div>
-          )}
 
-          {strategy === "INSIDE_CANDLE" && (
-          <div className="col-span-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
-            <p className="text-xs text-zinc-400">
-              <strong className="text-lime-300">Inside Candle Breakout:</strong>
-            </p>
-            <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
-              <li>Identify Mother Candle and Inside Candle</li>
-              <li>Buy above Inside Candle high</li>
-              <li>SL below Inside Candle low</li>
-            </ul>
-          </div>
-          )}
 
           <div>
             <label className="mb-1.5 block text-xs text-zinc-500">Capital (₹)</label>

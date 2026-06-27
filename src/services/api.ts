@@ -1,4 +1,4 @@
-/// <reference types="vite/client" />
+﻿/// <reference types="vite/client" />
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 function getSessionId(): string | null {
@@ -96,6 +96,20 @@ export const autoTradeApi = {
   }),
 };
 
+// Execution Engine — order management and live trading
+export const executionApi = {
+  getOrders: () => fetchWithAuth("/execution/orders"),
+  getOpenOrders: () => fetchWithAuth("/execution/orders/open"),
+  getOrder: (id: string) => fetchWithAuth(`/execution/orders/${id}`),
+  reconcileOrders: () => fetchWithAuth("/execution/orders/reconcile", { method: "POST" }),
+  cancelAllOrders: () => fetchWithAuth("/execution/orders/cancel-all", { method: "POST" }),
+  getMode: () => fetchWithAuth("/execution/mode"),
+  setMode: (paper: boolean) => fetchWithAuth("/execution/mode", {
+    method: "POST",
+    body: JSON.stringify({ paper }),
+  }),
+};
+
 export const backtestApi = {
   getSymbols: () => fetchWithAuth("/backtest/symbols"),
   getHolidays: () => fetchWithAuth("/backtest/holidays"),
@@ -106,9 +120,6 @@ export const backtestApi = {
     fromDate: string;
     toDate: string;
     strategy?: string;
-    rsiPeriod?: number;
-    oversoldThreshold?: number;
-    overboughtThreshold?: number;
     capital?: number;
     riskPercent?: number;
     slBuffer?: number;

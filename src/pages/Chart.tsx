@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { LineChart, Activity, Clock, Calendar } from "lucide-react";
 import { backtestApi } from "../services/api";
 
@@ -128,8 +128,7 @@ export function Chart() {
         resolution,
         fromDate: from.toISOString().split("T")[0],
         toDate: to.toISOString().split("T")[0],
-        strategy: "RSI",
-        rsiPeriod: 14,
+        strategy: "EMA5",
         capital: 100000,
         riskPercent: 1,
         capitalMode: "FIXED",

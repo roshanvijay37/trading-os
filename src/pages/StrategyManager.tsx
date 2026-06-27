@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TradingOS — Strategy Manager
  * Institutional-grade strategy configuration and management
  *
@@ -380,11 +380,6 @@ function ConfigField({
 function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
     TREND_FOLLOWING: "border-info/20 bg-info-dim text-info",
-    MEAN_REVERSION: "border-info/20 bg-info-dim text-info",
-    MOMENTUM: "border-warn/20 bg-warn-dim text-warn",
-    BREAKOUT: "border-warn/20 bg-warn-dim text-warn",
-    OPTION: "border-info/20 bg-info-dim text-info",
-    CUSTOM: "border-border-subtle bg-panel text-zinc-500",
   };
   return colors[category] || "border-border-subtle bg-panel text-zinc-500";
 }
