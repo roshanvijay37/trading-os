@@ -12,8 +12,6 @@ import { globalEventBus } from '@infrastructure/events/EventBus';
 export class PortfolioOptimizationEngine {
   private positions: Position[] = [];
   private metrics: PortfolioMetrics | null = null;
-  private correlationMatrix: CorrelationMatrix | null = null;
-  private readonly rebalanceThreshold = 0.05;
   private isRunning = false;
   private optimizationInterval: ReturnType<typeof setInterval> | null = null;
   private currentMethod: OptimizationMethod = 'RISK_PARITY';
@@ -44,8 +42,8 @@ export class PortfolioOptimizationEngine {
     this.calculateMetrics();
   }
 
-  setCorrelationMatrix(matrix: CorrelationMatrix): void {
-    this.correlationMatrix = matrix;
+  setCorrelationMatrix(_matrix: CorrelationMatrix): void {
+    // placeholder
   }
 
   setMethod(method: OptimizationMethod): void {
@@ -252,14 +250,7 @@ export class PortfolioOptimizationEngine {
       sectorAllocations[p.symbol] = (sectorAllocations[p.symbol] || 0) + alloc;
     });
 
-    const tradesToExecute = this.positions.map((p) => ({
-      symbol: p.symbol,
-      strategyId: p.strategyId,
-      action: 'HOLD' as const,
-      targetSize: p.size,
-      currentSize: p.size,
-      urgency: 'patient' as const,
-    })).filter((t) => t.action !== 'HOLD');
+    const tradesToExecute: AllocationResult['tradesToExecute'] = [];
 
     const result: AllocationResult = {
       timestamp: new Date().toISOString(),

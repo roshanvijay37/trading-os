@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Play, RotateCcw, TrendingUp, TrendingDown, Target, Shield, DollarSign, BarChart3, Activity, Clock, MessageSquare, Settings2 } from "lucide-react";
 import { backtestApi } from "../services/api";
 
@@ -243,16 +243,6 @@ export function Backtest() {
     }
   };
 
-  const formatDate = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("en-IN", {
@@ -371,7 +361,7 @@ export function Backtest() {
                 <strong className="text-zinc-400">Supported:</strong> RSI, 5 EMA, Option Buying, Traffic Light, Inside Candle, Stop Loss %, Risk:Reward, Capital (lakh), Timeframes (1m/5m/15m/1h/daily), Periods (1mo/3mo/6mo/1yr)
               </p>
               <p className="mt-1 text-xs text-amber-400">
-                <strong>Tip:</strong> 1 Hour timeframe works best — FYERS provides up to 1 year of 1h data!
+                <strong>Tip:</strong> 1 Hour timeframe works best � FYERS provides up to 1 year of 1h data!
               </p>
             </div>
           </div>
@@ -486,8 +476,8 @@ export function Backtest() {
               <strong className="text-lime-300">5 EMA Strategy (Subhasish Pani):</strong>
             </p>
             <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
-              <li>CE Buy: Candle closes completely BELOW 5 EMA → Break above Alert Candle high</li>
-              <li>PE Buy: Candle closes completely ABOVE 5 EMA → Break below Alert Candle low</li>
+              <li>CE Buy: Candle closes completely BELOW 5 EMA ? Break above Alert Candle high</li>
+              <li>PE Buy: Candle closes completely ABOVE 5 EMA ? Break below Alert Candle low</li>
               <li>SL = Alert Candle high/low | Target = 1:3 R:R minimum</li>
             </ul>
           </div>
@@ -499,8 +489,8 @@ export function Backtest() {
               <strong className="text-lime-300">5 EMA Option Buying (Subhasish Pani):</strong>
             </p>
             <ul className="mt-1 text-xs text-zinc-500 list-disc list-inside">
-              <li>LONG (CE): 15-min trend bullish (price {'>'} 20 EMA) + Alert Candle below 5 EMA → Break high</li>
-              <li>SHORT (PE): 5-min trend bearish (price {'<'} 20 EMA) + Alert Candle above 5 EMA → Break low</li>
+              <li>LONG (CE): 15-min trend bullish (price {'>'} 20 EMA) + Alert Candle below 5 EMA ? Break high</li>
+              <li>SHORT (PE): 5-min trend bearish (price {'<'} 20 EMA) + Alert Candle above 5 EMA ? Break low</li>
               <li>Risk only 1% of capital | Trail stop using previous candle highs/lows</li>
             </ul>
           </div>
@@ -509,7 +499,7 @@ export function Backtest() {
 
 
           <div>
-            <label className="mb-1.5 block text-xs text-zinc-500">Capital (₹)</label>
+            <label className="mb-1.5 block text-xs text-zinc-500">Capital (?)</label>
             <input
               type="number"
               value={capital}
@@ -546,7 +536,7 @@ export function Backtest() {
             </div>
             <p className="mt-1 text-[10px] text-zinc-600">
               {capitalMode === "FIXED"
-                ? "Each trade uses fixed initial capital (₹1L risk per trade)"
+                ? "Each trade uses fixed initial capital (?1L risk per trade)"
                 : "Position size grows/shrinks with equity"}
             </p>
           </div>
@@ -625,7 +615,7 @@ export function Backtest() {
         <div className="space-y-6">
           <div className="rounded-xl border border-lime-500/30 bg-lime-500/5 p-5">
             <h3 className="mb-3 text-sm font-medium text-lime-300">
-              Combined Results — {multiResult.strategies.join(", ")}
+              Combined Results � {multiResult.strategies.join(", ")}
             </h3>
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5 text-xs">
               <div className="rounded bg-zinc-900 p-2">

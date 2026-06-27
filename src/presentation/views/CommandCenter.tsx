@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface SystemStatus {
   mode: 'LIVE' | 'PAPER' | 'STOPPED';
@@ -43,7 +43,7 @@ export default function CommandCenter() {
     circuitBreaker: 'ARMED',
   });
 
-  const [events, setEvents] = useState<Array<{ time: string; event: string; source: string; detail: string }>>([
+  const [events] = useState<Array<{ time: string; event: string; source: string; detail: string }>>([
     { time: '14:32:15', event: 'SIGNAL_APPROVED', source: 'MetaAI', detail: 'RELIANCE trend_long approved by MetaStrategy' },
     { time: '14:32:08', event: 'TRADE_FILLED', source: 'Execution', detail: 'INFY 850 qty @ 1842.50' },
     { time: '14:31:55', event: 'REGIME_CHANGED', source: 'MarketIntel', detail: 'NIFTY50 → trending_up_weak (conf: 0.72)' },

@@ -6,7 +6,7 @@ import {
   MarketRegime,
   StrategyConflict,
 } from '@domain/meta-strategy/MetaStrategyTypes';
-import { EventType, EventEnvelope } from '@domain/events/TradingEvents';
+import { EventType } from '@domain/events/TradingEvents';
 import { globalEventBus } from '@infrastructure/events/EventBus';
 
 interface StrategyHealth {
@@ -142,9 +142,6 @@ export class MetaStrategyEngine {
       };
     }
 
-    const existingPosition = portfolio.positions.find(
-      (p: { symbol: string; strategyId: string }) => p.symbol === signal.symbol && p.strategyId === signal.strategyId
-    );
 
     const positionValue = signal.proposedSize * signal.proposedEntry;
     const portfolioValue = portfolio.totalCapital;
@@ -166,8 +163,8 @@ export class MetaStrategyEngine {
     };
   }
 
-  private assessExecution(signal: SignalEvaluation) {
-    const urgency = signal.confidence > 0.8 ? 'immediate' : signal.confidence > 0.5 ? 'opportunistic' : 'patient';
+  private assessExecution(signal: SignalEvaluation): { expectedSlippage: number; marketImpact: number; timingScore: number; urgency: 'immediate' | 'opportunistic' | 'patient' } {
+    const urgency: 'immediate' | 'opportunistic' | 'patient' = signal.confidence > 0.8 ? 'immediate' : signal.confidence > 0.5 ? 'opportunistic' : 'patient';
 
     return {
       expectedSlippage: 0.0005 + (1 - signal.confidence) * 0.002,

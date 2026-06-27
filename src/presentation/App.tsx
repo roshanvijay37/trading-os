@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import CommandCenter from './views/CommandCenter';
 import MarketIntelligence from './views/MarketIntelligence';
 import PortfolioDefense from './views/PortfolioDefense';

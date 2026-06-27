@@ -15,10 +15,6 @@ import {
   Shield,
   Zap,
   Bot,
-  Clock,
-  DollarSign,
-  BarChart3,
-  Users,
   Send,
 } from "lucide-react";
 import { queryCIO, getAIStatus, type AIStatusResponse } from "../services/aiCio";

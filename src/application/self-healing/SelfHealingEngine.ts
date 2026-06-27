@@ -25,7 +25,6 @@ interface RecoveryProcedure {
 export class SelfHealingEngine {
   private healingLog: HealingAction[] = [];
   private recoveryProcedures = new Map<string, RecoveryProcedure>();
-  private isRunning = false;
   private readonly maxHealingAttempts = 3;
   private healingAttempts = new Map<string, number>();
 
@@ -191,17 +190,17 @@ export class SelfHealingEngine {
     }
   }
 
-  private async simulateCheck(component: string, context: Record<string, unknown>): Promise<boolean> {
+  private async simulateCheck(_component: string, _context: Record<string, unknown>): Promise<boolean> {
     await new Promise((r) => setTimeout(r, 1000));
     return Math.random() > 0.1;
   }
 
-  private async simulateReconnect(component: string, context: Record<string, unknown>): Promise<boolean> {
+  private async simulateReconnect(_component: string, _context: Record<string, unknown>): Promise<boolean> {
     await new Promise((r) => setTimeout(r, 2000));
     return Math.random() > 0.2;
   }
 
-  private async simulateHealthCheck(component: string): Promise<boolean> {
+  private async simulateHealthCheck(_component: string): Promise<boolean> {
     await new Promise((r) => setTimeout(r, 1000));
     return Math.random() > 0.1;
   }

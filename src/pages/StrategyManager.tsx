@@ -1,5 +1,5 @@
-﻿/**
- * TradingOS — Strategy Manager
+/**
+ * TradingOS � Strategy Manager
  * Institutional-grade strategy configuration and management
  *
  * Philosophy: "I do not trade. I supervise."
@@ -216,7 +216,7 @@ export function StrategyManager() {
 }
 
 function StrategyConfigPanel({
-  strategyId,
+  strategyId: _strategyId,
   config,
   def,
   onUpdate,

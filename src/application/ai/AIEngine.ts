@@ -1,4 +1,4 @@
-import { EventType, EventEnvelope } from '@domain/events/TradingEvents';
+import { EventType } from '@domain/events/TradingEvents';
 import { globalEventBus } from '@infrastructure/events/EventBus';
 import { MarketRegime } from '@domain/meta-strategy/MetaStrategyTypes';
 

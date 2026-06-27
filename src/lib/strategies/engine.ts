@@ -1,14 +1,13 @@
-﻿/**
- * TradingOS — Unified Strategy Engine
+/**
+ * TradingOS � Unified Strategy Engine
  * Single source of truth for Backtest AND Live Trading
  *
  * Every strategy is implemented ONCE and used everywhere.
  */
 
 import type { StrategyId, AIReasoningReport, TradeGrade, StrategyPosition } from "../../types/institutional";
-import { getStrategyById } from "./registry";
 
-// ─── Candle Type ─────────────────────────────────────────────────
+// --- Candle Type -------------------------------------------------
 export interface Candle {
   timestamp: number;
   datetime: string;
@@ -20,7 +19,7 @@ export interface Candle {
   symbol?: string;
 }
 
-// ─── Signal Type ─────────────────────────────────────────────────
+// --- Signal Type -------------------------------------------------
 export interface Signal {
   type: "LONG" | "SHORT";
   entryPrice: number;
@@ -33,7 +32,7 @@ export interface Signal {
   aiReasoning?: AIReasoningReport;
 }
 
-// ─── Indicator Calculations ──────────────────────────────────────
+// --- Indicator Calculations --------------------------------------
 export function calculateEMA(closes: number[], period: number): number[] {
   const ema: number[] = [];
   if (closes.length < period) return ema;
@@ -178,7 +177,7 @@ export function calculateSuperTrend(candles: Candle[], period = 10, multiplier =
   return { trend, value };
 }
 
-// ─── AI Reasoning Engine ─────────────────────────────────────────
+// --- AI Reasoning Engine -----------------------------------------
 function generateAIReasoning(
   strategyId: StrategyId,
   candles: Candle[],
@@ -188,7 +187,7 @@ function generateAIReasoning(
   stopLoss: number,
   target: number,
   confidence: number,
-  params: Record<string, number | boolean | string>
+  _params: Record<string, number | boolean | string>
 ): AIReasoningReport {
   const candle = candles[i];
   const prevCandle = candles[i - 1];
@@ -242,7 +241,6 @@ function generateAIReasoning(
     { name: "Market Structure", score: marketStructure.includes(signalType === "LONG" ? "BULLISH" : "BEARISH") ? 1 : 0.3, weight: 0.2, description: "Structure aligns with signal", passed: marketStructure.includes(signalType === "LONG" ? "BULLISH" : "BEARISH") },
   ];
 
-  const passedFactors = factors.filter((f) => f.passed).length;
   const totalWeight = factors.reduce((sum, f) => sum + f.weight, 0);
   const passedWeight = factors.filter((f) => f.passed).reduce((sum, f) => sum + f.weight, 0);
   const finalConfidence = totalWeight > 0 ? passedWeight / totalWeight : 0;
@@ -250,7 +248,7 @@ function generateAIReasoning(
   return {
     confidence: finalConfidence,
     probability: confidence,
-    reason: `${strategyId} signal: ${signalType} at ₹${entryPrice}. ${factors.filter((f) => f.passed).map((f) => f.name).join(", ")} confirmed.`,
+    reason: `${strategyId} signal: ${signalType} at ?${entryPrice}. ${factors.filter((f) => f.passed).map((f) => f.name).join(", ")} confirmed.`,
     trendStrength,
     volumeConfirmation,
     oiConfirmation: false, // Would need OI data
@@ -273,7 +271,7 @@ function generateAIReasoning(
   };
 }
 
-// ─── Strategy Implementations ────────────────────────────────────
+// --- Strategy Implementations ------------------------------------
 export interface StrategyResult {
   signal: Signal | null;
   state: Record<string, unknown>;
@@ -282,11 +280,11 @@ export interface StrategyResult {
 export type StrategyFunction = (
   candles: Candle[],
   i: number,
-  params: Record<string, number | boolean | string>,
+  _params: Record<string, number | boolean | string>,
   prevState: Record<string, unknown>
 ) => StrategyResult;
 
-// ─── EMA5 Strategy ───────────────────────────────────────────────
+// --- EMA5 Strategy -----------------------------------------------
 const ema5Strategy: StrategyFunction = (candles, i, params, prevState) => {
   const emaPeriod = (params.emaPeriod as number) || 5;
   const closes = candles.slice(0, i + 1).map((c) => c.close);
@@ -308,7 +306,6 @@ const ema5Strategy: StrategyFunction = (candles, i, params, prevState) => {
 
   if (!alertCandle) return { signal: null, state: { alertCandle: undefined } };
 
-  const slBuffer = (params.slBuffer as number) || 0.005;
   const targetMultiplier = (params.targetMultiplier as number) || 2;
 
   // Check entry
@@ -358,18 +355,18 @@ const ema5Strategy: StrategyFunction = (candles, i, params, prevState) => {
 
   return { signal: null, state: { alertCandle } };
 };
-// ─── Strategy Registry Map ───────────────────────────────────────
+// --- Strategy Registry Map ---------------------------------------
 const STRATEGY_MAP: Record<StrategyId, StrategyFunction> = {
   EMA5: ema5Strategy,
   EMA5_OPTION: ema5Strategy, // Uses same core logic with trend filter
 };
 
-// ─── Main Entry Point ────────────────────────────────────────────
+// --- Main Entry Point --------------------------------------------
 export function runStrategy(
   strategyId: StrategyId,
   candles: Candle[],
   i: number,
-  params: Record<string, number | boolean | string>,
+  _params: Record<string, number | boolean | string>,
   state: Record<string, unknown>
 ): StrategyResult {
   const strategy = STRATEGY_MAP[strategyId];
@@ -380,7 +377,7 @@ export function runStrategy(
   return strategy(candles, i, params, state);
 }
 
-// ─── Backtest Runner ─────────────────────────────────────────────
+// --- Backtest Runner ---------------------------------------------
 export interface BacktestConfig {
   strategy: StrategyId;
   capital: number;
@@ -457,7 +454,7 @@ export function runBacktestEngine(candles: Candle[], config: BacktestConfig): Ba
       drawdown: Math.round(drawdown * 100) / 100,
     });
 
-    // ── Exit Logic ─────────────────────────────────────────────
+    // -- Exit Logic ---------------------------------------------
     if (position) {
       const barsHeld = i - (position as StrategyPosition & { entryBar: number }).entryBar;
 
@@ -528,7 +525,7 @@ export function runBacktestEngine(candles: Candle[], config: BacktestConfig): Ba
       continue;
     }
 
-    // ── Entry Logic ────────────────────────────────────────────
+    // -- Entry Logic --------------------------------------------
     const result = runStrategy(strategy, candles, i, parameters, state);
     state = result.state;
 

@@ -4,7 +4,6 @@ import {
   MarketPressure,
   VWAPDeviation,
   IcebergDetection,
-  ExecutionFootprint,
   SweepDetection,
   VolumeProfile,
 } from '@domain/market-microstructure/LiquidityMap';

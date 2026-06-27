@@ -17,7 +17,6 @@ import {
 import { useState } from "react";
 import { Link, Outlet, useLocation, useMatch } from "react-router-dom";
 import { FyersConnect } from "./FyersConnect";
-import type { ElementType } from "react";
 
 const navigation = [
   { to: "/", label: "Command Center", icon: LayoutDashboard, group: "Operations" },

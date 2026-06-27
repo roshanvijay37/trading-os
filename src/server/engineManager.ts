@@ -1,7 +1,6 @@
 import { marketMicrostructureEngine } from '@application/market-microstructure/MarketMicrostructureEngine';
 import { portfolioOptimizationEngine } from '@application/portfolio/PortfolioOptimizationEngine';
 import { observabilityEngine } from '@application/observability/ObservabilityEngine';
-import { aiEngine } from '@application/ai/AIEngine';
 import { capitalProtectionEngine } from '@application/capital-protection/CapitalProtectionEngine';
 import { selfHealingEngine } from '@application/self-healing/SelfHealingEngine';
 

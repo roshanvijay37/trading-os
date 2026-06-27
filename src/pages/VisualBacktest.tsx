@@ -1,6 +1,6 @@
-﻿import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Time } from "lightweight-charts";
-import { Play, BarChart3, TrendingUp, TrendingDown, Target, Shield, Activity, Zap, Calendar, Clock, Layers, Settings, Palette, X, RotateCcw, Eye } from "lucide-react";
+import { Play, BarChart3, TrendingUp, Target, Shield, Activity, Zap, Calendar, Clock, Layers, Settings, Palette, X } from "lucide-react";
 import { backtestApi } from "../services/api";
 
 const strategies = [
@@ -264,7 +264,7 @@ function ChartPanel({ title, symbol, result, loading, theme }: { title: string; 
             <StatPill icon={<Target size={13} />} label="Win Rate" value={`${s.winRate.toFixed(0)}%`} positive={s.winRate >= 50} />
             <StatPill icon={<Activity size={13} />} label="Trades" value={`${s.totalTrades}`} />
             <StatPill icon={<BarChart3 size={13} />} label="Profit Factor" value={s.profitFactor.toFixed(2)} positive={s.profitFactor >= 1} />
-            <StatPill icon={<Shield size={13} />} label="Expectancy" value={`₹${s.expectancy?.toFixed(0) || 0}`} />
+            <StatPill icon={<Shield size={13} />} label="Expectancy" value={`?${s.expectancy?.toFixed(0) || 0}`} />
           </div>
         </div>
       )}
@@ -309,7 +309,7 @@ export function VisualBacktest() {
   const [fromDate, setFromDate] = useState("2026-05-01");
   const [toDate, setToDate] = useState("2026-06-24");
   const [capital, setCapital] = useState(1000000);
-  const [riskPercent, setRiskPercent] = useState(1);
+  const [riskPercent] = useState(1);
   const [targetMult, setTargetMult] = useState(2);
   const [running, setRunning] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -501,7 +501,7 @@ export function VisualBacktest() {
             </label>
             <div className="flex items-center gap-2">
               <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="rounded-xl border border-zinc-700/60 bg-zinc-950/80 px-3.5 py-2.5 text-xs text-white outline-none focus:border-lime-400/60" />
-              <span className="text-zinc-600">→</span>
+              <span className="text-zinc-600">?</span>
               <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="rounded-xl border border-zinc-700/60 bg-zinc-950/80 px-3.5 py-2.5 text-xs text-white outline-none focus:border-lime-400/60" />
             </div>
           </div>
