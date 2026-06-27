@@ -485,9 +485,6 @@ export function runBacktestEngine(candles: Candle[], config: BacktestConfig): Ba
       }
 
       // Strategy-specific exits
-          exitReason = "RSI_REVERSE";
-        }
-      }
 
       if (exitPrice !== null) {
         const pnl = position.side === "LONG"

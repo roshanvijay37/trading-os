@@ -99,9 +99,6 @@ function parseNaturalLanguage(text: string) {
   const slMatch = text.match(/stop\s*loss\s+(\d+(?:\.\d+)?)\s*%/i);
   config.slBuffer = slMatch ? parseFloat(slMatch[1]) / 100 : 0.005;
 
-  // RSI
-  } else {
-  }
 
 
   // Target / R:R
