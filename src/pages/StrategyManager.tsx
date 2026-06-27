@@ -316,14 +316,24 @@ function StrategyConfigPanel({
           <TrendingUp size={11} /> Allowed Symbols
         </h4>
         <div className="flex flex-wrap gap-2">
-          {def.supportedInstruments.map((sym) => (
-            <span
-              key={sym}
-              className={`rounded-panel border px-3 py-1.5 text-2xs font-medium ${config.allowedSymbols.includes(sym) ? "border-border-hover bg-surface text-zinc-300" : "border-border-subtle bg-panel text-zinc-600"}`}
-            >
-              {sym.replace("NSE:", "").replace("-INDEX", "")}
-            </span>
-          ))}
+          {def.supportedInstruments.map((sym) => {
+            const selected = config.allowedSymbols.includes(sym);
+            return (
+              <button
+                key={sym}
+                onClick={() =>
+                  onUpdate({
+                    allowedSymbols: selected
+                      ? config.allowedSymbols.filter((s) => s !== sym)
+                      : [...config.allowedSymbols, sym],
+                  })
+                }
+                className={`rounded-panel border px-3 py-1.5 text-2xs font-medium transition ${selected ? "border-border-hover bg-surface text-zinc-300" : "border-border-subtle bg-panel text-zinc-600 hover:border-border-hover"}`}
+              >
+                {sym.replace("NSE:", "").replace("-INDEX", "")}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

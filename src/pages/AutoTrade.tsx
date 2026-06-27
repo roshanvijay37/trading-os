@@ -34,6 +34,7 @@ export function AutoTrade() {
     positionSizingMode: "RISK",
     fixedLots: 1,
     selectedStrategies: ["EMA5"],
+    selectedInstruments: ["NIFTY", "BANKNIFTY"],
   });
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -65,6 +66,21 @@ export function AutoTrade() {
       });
     }
   }, [status?.isRunning, status?.dailyPnL, status?.openPositions?.length]);
+
+  useEffect(() => {
+    if (status && !showConfig) {
+      setConfigForm((prev) => ({
+        ...prev,
+        riskPercent: status.riskPercent ?? prev.riskPercent,
+        maxTradesPerDay: status.maxTrades ?? prev.maxTradesPerDay,
+        paperTrading: status.paperTrading ?? prev.paperTrading,
+        positionSizingMode: status.positionSizingMode ?? prev.positionSizingMode,
+        fixedLots: status.fixedLots ?? prev.fixedLots,
+        selectedStrategies: status.selectedStrategies ?? prev.selectedStrategies,
+        selectedInstruments: status.selectedInstruments ?? prev.selectedInstruments,
+      }));
+    }
+  }, [status, showConfig]);
 
   const handleStart = async () => {
     setLoading(true);
@@ -174,7 +190,9 @@ export function AutoTrade() {
                 {isEmergency ? "System Halted" : isRunning ? "Strategy Active" : "System Idle"}
               </p>
               <p className="text-2xs text-zinc-600">
-                {isRunning ? `Scanning ${status?.selectedStrategies?.join(", ") || "EMA5"} on NIFTY / BANKNIFTY` : "Ready for operator command"}
+                {isRunning
+                  ? `Scanning ${status?.selectedStrategies?.join(", ") || "EMA5"} on ${status?.selectedInstruments?.join(" / ") || "NIFTY / BANKNIFTY"}`
+                  : "Ready for operator command"}
               </p>
             </div>
           </div>
@@ -328,6 +346,30 @@ export function AutoTrade() {
                     className="h-3.5 w-3.5 rounded border-border bg-surface"
                   />
                   {strategy.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3">
+            <label className="text-2xs text-zinc-600">Active Instruments</label>
+            <div className="mt-1.5 flex flex-wrap gap-3">
+              {[
+                { id: "NIFTY", label: "NIFTY" },
+                { id: "BANKNIFTY", label: "BANKNIFTY" },
+              ].map((instrument) => (
+                <label key={instrument.id} className="flex items-center gap-2 text-2xs text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={configForm.selectedInstruments.includes(instrument.id)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...configForm.selectedInstruments, instrument.id]
+                        : configForm.selectedInstruments.filter((id) => id !== instrument.id);
+                      setConfigForm({ ...configForm, selectedInstruments: next });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-border bg-surface"
+                  />
+                  {instrument.label}
                 </label>
               ))}
             </div>

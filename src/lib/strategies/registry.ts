@@ -23,7 +23,7 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
       { name: "slippage", type: "number", label: "Slippage %", description: "Execution slippage estimate", defaultValue: 0.02, min: 0, max: 0.5, step: 0.01 },
     ],
     supportedTimeframes: ["1", "5", "15"],
-    supportedInstruments: ["NSE:NIFTYBANK-INDEX", "NSE:NIFTY50-INDEX", "NSE:FINNIFTY-INDEX"],
+    supportedInstruments: ["NSE:NIFTYBANK-INDEX", "NSE:NIFTY50-INDEX"],
     minConfidence: 0.6,
     defaultAllocation: 20,
   },

@@ -48,7 +48,12 @@ const CONFIG = {
   BROKERAGE_PER_ORDER: 20,
   EMERGENCY_STOP: false,
   SELECTED_STRATEGIES: ["EMA5"],
+  SELECTED_INSTRUMENTS: ["NIFTY", "BANKNIFTY"],
 };
+
+function getActiveUnderlyings() {
+  return CONFIG.UNDERLYINGS.filter((u) => CONFIG.SELECTED_INSTRUMENTS.includes(u.name));
+}
 
 // ΓöÇΓöÇΓöÇ STATE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 let isRunning = false;
@@ -159,9 +164,9 @@ async function fetchAvailableFunds(session) {
   }
 }
 
-async function checkMargin(optionSymbol, qty, session) {
+async function checkMargin(optionSymbol, qty, underlying, session) {
   try {
-    const required = qty * (CONFIG.UNDERLYINGS[0].marginPerLot / CONFIG.UNDERLYINGS[0].lotSize);
+    const required = qty * (underlying.marginPerLot / underlying.lotSize);
     const available = await fetchAvailableFunds(session);
     const safeRequired = required * CONFIG.MARGIN_SAFETY_MULTIPLIER;
     logAudit({ type: "MARGIN_CHECK", optionSymbol, qty, required, available, safeRequired, pass: available >= safeRequired });
@@ -508,7 +513,7 @@ async function processCandles(underlying, session) {
         activeAlerts.delete(`${underlying.name}:${strategy}`);
         continue;
       }
-      const margin = await checkMargin(optionSymbol, qty, session);
+      const margin = await checkMargin(optionSymbol, qty, underlying, session);
       if (!margin.pass) {
         console.log(`[AUTO-TRADER] Margin insufficient: need Γé╣${margin.required.toFixed(2)}, have Γé╣${margin.available.toFixed(2)}`);
         activeAlerts.delete(`${underlying.name}:${strategy}`);
@@ -638,7 +643,7 @@ async function tradingLoop(session) {
     return;
   } else {
     marketStatus = "OPEN";
-    for (const underlying of CONFIG.UNDERLYINGS) {
+    for (const underlying of getActiveUnderlyings()) {
       await processCandles(underlying, session);
     }
     await monitorPositions(session);
@@ -666,7 +671,7 @@ export async function startAutoTrader(sessionId) {
     console.log("[AUTO-TRADER] Could not fetch existing positions");
   }
   console.log(
-    `[AUTO-TRADER] Starting... Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
+    `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
   );
   isRunning = true;
   todayTrades = 0;
@@ -683,6 +688,7 @@ export async function startAutoTrader(sessionId) {
       positionSizingMode: CONFIG.POSITION_SIZING_MODE,
       fixedLots: CONFIG.FIXED_LOTS,
       selectedStrategies: CONFIG.SELECTED_STRATEGIES,
+      selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
     },
     startedAt: new Date().toISOString(),
   };
@@ -736,6 +742,7 @@ export function getAutoTraderStatus() {
     positionSizingMode: CONFIG.POSITION_SIZING_MODE,
     fixedLots: CONFIG.FIXED_LOTS,
     selectedStrategies: CONFIG.SELECTED_STRATEGIES,
+    selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -785,6 +792,7 @@ export function updateConfig(updates) {
       maxTimeEntryHour: CONFIG.MAX_TIME_ENTRY_HOUR,
       allowCorrelatedTrades: CONFIG.ALLOW_CORRELATED_TRADES,
       selectedStrategies: CONFIG.SELECTED_STRATEGIES,
+      selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
     },
   };
 }

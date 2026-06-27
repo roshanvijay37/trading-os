@@ -114,6 +114,7 @@ export interface BotConfig {
   positionSizingMode: string;
   fixedLots: number;
   selectedStrategies: string[];
+  selectedInstruments: string[];
 }
 
 export interface BotStatus {
@@ -132,6 +133,7 @@ export interface BotStatus {
   positionSizingMode?: string;
   fixedLots?: number;
   selectedStrategies?: string[];
+  selectedInstruments?: string[];
   dailyPnL?: string;
   consecutiveLosses?: number;
 }
