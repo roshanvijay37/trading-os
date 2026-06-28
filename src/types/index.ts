@@ -1,4 +1,4 @@
-export type TradeSide = "LONG" | "SHORT";
+﻿export type TradeSide = "LONG" | "SHORT";
 export type TradeOutcome = "OPEN" | "WIN" | "LOSS" | "BREAKEVEN";
 
 export interface Settings {

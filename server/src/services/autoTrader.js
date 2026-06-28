@@ -140,6 +140,34 @@ function loadState() {
 
 loadState();
 
+// ─── TICK DATA HELPERS ────────────────────────────────────────────────
+function getSymbolShortName(symbol) {
+  if (symbol.includes("NIFTY50")) return "NIFTY";
+  if (symbol.includes("NIFTYBANK")) return "BANKNIFTY";
+  return symbol;
+}
+
+async function fetchCandlesWithTickFallback(symbol, session) {
+  const shortName = getSymbolShortName(symbol);
+  const tickCandles = aggregateOHLC(shortName, "5m", 25);
+  if (tickCandles.length >= 6) {
+    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, count: tickCandles.length });
+    return tickCandles.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
+  }
+  logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, reason: "insufficient_tick_data", tickCount: tickCandles.length });
+  return fetchLatestCandles(symbol, session.accessToken, FYERS_APP_ID);
+}
+
+async function fetchOptionQuoteWithTickFallback(optionSymbol, session) {
+  const tick = getLatestTick(optionSymbol);
+  if (tick && tick.ltp > 0) {
+    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol: optionSymbol, ltp: tick.ltp });
+    return { lp: tick.ltp, bid: tick.ltp, ask: tick.ltp, oi: 0 };
+  }
+  logAudit({ type: "DATA_SOURCE", source: "quotes_api", symbol: optionSymbol, reason: "no_tick" });
+  return fetchOptionQuote(optionSymbol, session);
+}
+
 // ─── AUDIT LOGGING ────────────────────────────────────────────────────
 function logAudit(event) {
   const entry = { timestamp: new Date().toISOString(), ...event };
@@ -556,7 +584,7 @@ async function monitorPositions(session) {
   for (const position of openPositions) {
     if (position.status !== "OPEN") continue;
     try {
-      const quote = await fetchOptionQuote(position.optionSymbol, session);
+      const quote = await fetchOptionQuoteWithTickFallback(position.optionSymbol, session);
       const ltp = quote?.lp || 0;
       if (ltp <= 0) continue;
 
@@ -619,7 +647,7 @@ function calculatePositionSize(entryPrice, stopLoss, underlying) {
 
 async function processCandles(underlying, session) {
   try {
-    const candles = await fetchLatestCandles(underlying.symbol, session.accessToken, FYERS_APP_ID);
+    const candles = await fetchCandlesWithTickFallback(underlying.symbol, session);
     if (candles.length < 6) return;
     latestData[underlying.name] = {
       candles,

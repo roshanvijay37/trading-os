@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Real-Time Tick Service
  * 
  * Connects to FYERS WebSocket for live tick data,
@@ -14,15 +14,9 @@ const FYERS_WS_URL = "wss://socket.fyers.in";
 const RECONNECT_DELAY_MS = 5000;
 
 // ─── In-Memory Storage ────────────────────────────────────────────
-const tickStore = {
-  NIFTY: [],
-  BANKNIFTY: [],
-};
+const tickStore = {};
 
-const latestTick = {
-  NIFTY: null,
-  BANKNIFTY: null,
-};
+const latestTick = {};
 
 let wsConnection = null;
 let isConnected = false;
@@ -39,6 +33,17 @@ const REVERSE_SYMBOL_MAP = {
   NIFTY: "NSE:NIFTY50-INDEX",
   BANKNIFTY: "NSE:NIFTYBANK-INDEX",
 };
+
+// Symbols we always keep subscribed to (indices for signal generation)
+const subscribedSymbols = new Set(Object.keys(SYMBOL_MAP));
+
+function normalizeSymbol(fyersSymbol) {
+  return SYMBOL_MAP[fyersSymbol] || fyersSymbol;
+}
+
+function ensureStore(symbol) {
+  if (!tickStore[symbol]) tickStore[symbol] = [];
+}
 
 // ─── WebSocket Clients (for broadcasting) ─────────────────────────
 const wsClients = new Set();
@@ -69,7 +74,7 @@ export function connectFyersWebSocket(accessToken, appId) {
       const subscribeMsg = {
         method: "sub",
         data: {
-          symbols: Object.keys(SYMBOL_MAP),
+          symbols: Array.from(subscribedSymbols),
         },
       };
       wsConnection.send(JSON.stringify(subscribeMsg));
@@ -115,9 +120,11 @@ export function connectFyersWebSocket(accessToken, appId) {
 function handleFyersMessage(msg) {
   // FYERS v3 format: msg has ltp, vol, symbol directly
   const symbol = msg.symbol;
-  const shortName = SYMBOL_MAP[symbol];
-  
-  if (!shortName) return;
+  if (!symbol) return;
+  if (!subscribedSymbols.has(symbol)) return;
+
+  const shortName = normalizeSymbol(symbol);
+  ensureStore(shortName);
 
   const tick = {
     symbol: shortName,
@@ -215,8 +222,8 @@ export function getWsStatus() {
   return {
     isConnected,
     clientCount: wsClients.size,
-    niftyTickCount: tickStore.NIFTY.length,
-    bankNiftyTickCount: tickStore.BANKNIFTY.length,
+    subscribedSymbols: Array.from(subscribedSymbols),
+    tickCounts: Object.fromEntries(Object.keys(tickStore).map((k) => [k, tickStore[k].length])),
   };
 }
 
@@ -363,9 +370,37 @@ export function getDayStats(symbol) {
 
 // ─── Clear All Data ───────────────────────────────────────────────
 export function clearTickData() {
-  tickStore.NIFTY = [];
-  tickStore.BANKNIFTY = [];
-  latestTick.NIFTY = null;
-  latestTick.BANKNIFTY = null;
+  Object.keys(tickStore).forEach((k) => (tickStore[k] = []));
+  Object.keys(latestTick).forEach((k) => (latestTick[k] = null));
   console.log("[TICK-SERVICE] All tick data cleared");
+}
+
+// ─── Dynamic Symbol Subscription ──────────────────────────────────
+export function subscribeToSymbols(symbols) {
+  let added = false;
+  for (const symbol of symbols) {
+    if (!subscribedSymbols.has(symbol)) {
+      subscribedSymbols.add(symbol);
+      ensureStore(normalizeSymbol(symbol));
+      added = true;
+    }
+  }
+  if (added && wsConnection?.readyState === WebSocket.OPEN) {
+    wsConnection.send(JSON.stringify({ method: "sub", data: { symbols: Array.from(subscribedSymbols) } }));
+    console.log("[TICK-SERVICE] Subscribed to:", symbols);
+  }
+}
+
+export function unsubscribeFromSymbols(symbols) {
+  let removed = false;
+  for (const symbol of symbols) {
+    if (subscribedSymbols.has(symbol) && !SYMBOL_MAP[symbol]) {
+      subscribedSymbols.delete(symbol);
+      removed = true;
+    }
+  }
+  if (removed && wsConnection?.readyState === WebSocket.OPEN) {
+    wsConnection.send(JSON.stringify({ method: "unsub", data: { symbols } }));
+    console.log("[TICK-SERVICE] Unsubscribed from:", symbols);
+  }
 }
