@@ -7,6 +7,12 @@
  */
 
 import WebSocket from "ws";
+import { startSdkDataSocket, sdkSubscribe, sdkDisconnect } from "./fyersDataSocketV3.js";
+
+// Data-feed mode: "raw" (legacy hand-rolled WS, default) | "sdk" (official fyers-api-v3
+// dataSocket, which decodes the v3 protobuf frames). Flag-gated so production stays on the
+// current path until DATA_FEED_MODE=sdk is set AND `npm install fyers-api-v3` is run.
+const DATA_FEED_MODE = (process.env.DATA_FEED_MODE || "raw").toLowerCase();
 
 // ─── Configuration ────────────────────────────────────────────────
 const MAX_TICKS_PER_SYMBOL = 100000;
@@ -61,6 +67,16 @@ const wsClients = new Set();
 
 // ─── Connect to FYERS WebSocket ───────────────────────────────────
 export function connectFyersWebSocket(accessToken, appId) {
+  if (DATA_FEED_MODE === "sdk") {
+    startSdkDataSocket({
+      accessToken,
+      appId,
+      symbols: Array.from(subscribedSymbols),
+      onTick: ingestTick,
+      onStatus: setSdkConnected,
+    });
+    return;
+  }
   if (wsConnection?.readyState === WebSocket.OPEN) {
     console.log("[TICK-SERVICE] Already connected");
     return;
@@ -146,25 +162,32 @@ function handleFyersMessage(msg) {
   const symbol = msg.symbol;
   if (!symbol) return;
   if (!subscribedSymbols.has(symbol)) return;
+  ingestTick(symbol, msg.ltp ?? msg.lt ?? 0, msg.vol ?? msg.v ?? 0);
+}
 
-  const shortName = normalizeSymbol(symbol);
+/**
+ * Store a tick from ANY feed source (raw WS or the SDK data socket): normalize the symbol,
+ * append to the buffer, update the latest tick, and broadcast to UI clients.
+ */
+export function ingestTick(fyersSymbol, ltp, vol) {
+  if (!fyersSymbol) return null;
+  const shortName = normalizeSymbol(fyersSymbol);
   ensureStore(shortName);
-
   const tick = {
     symbol: shortName,
-    ltp: msg.ltp || msg.lt || 0,
-    volume: msg.vol || msg.v || 0,
+    ltp: Number(ltp) || 0,
+    volume: Number(vol) || 0,
     timestamp: Date.now(),
   };
-
-  // Store tick
   storeTick(shortName, tick);
-  
-  // Update latest
   latestTick[shortName] = tick;
-
-  // Broadcast to all connected WebSocket clients
   broadcastToClients(tick);
+  return tick;
+}
+
+/** Let the SDK data socket report its connection state into getWsStatus(). */
+export function setSdkConnected(connected) {
+  isConnected = !!connected;
 }
 
 // ─── Store Tick with FIFO Cleanup ─────────────────────────────────
@@ -227,6 +250,11 @@ function scheduleReconnect(accessToken, appId) {
 
 // ─── Disconnect ───────────────────────────────────────────────────
 export function disconnectFyersWebSocket() {
+  if (DATA_FEED_MODE === "sdk") {
+    sdkDisconnect();
+    isConnected = false;
+    return;
+  }
   stopHeartbeat();
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -434,9 +462,14 @@ export function subscribeToSymbols(symbols) {
       added = true;
     }
   }
-  if (added && wsConnection?.readyState === WebSocket.OPEN) {
-    wsConnection.send(JSON.stringify({ method: "sub", data: { symbols: Array.from(subscribedSymbols) } }));
-    console.log("[TICK-SERVICE] Subscribed to:", symbols);
+  if (added) {
+    if (DATA_FEED_MODE === "sdk") {
+      sdkSubscribe(symbols);
+      console.log("[TICK-SERVICE] (SDK) Subscribed to:", symbols);
+    } else if (wsConnection?.readyState === WebSocket.OPEN) {
+      wsConnection.send(JSON.stringify({ method: "sub", data: { symbols: Array.from(subscribedSymbols) } }));
+      console.log("[TICK-SERVICE] Subscribed to:", symbols);
+    }
   }
 }
 
