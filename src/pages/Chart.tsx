@@ -199,7 +199,9 @@ export function Chart() {
     const minL = Math.min(...lows);
     const range = maxH - minL || 1;
 
-    const maxVol = Math.max(...visibleCandles.map((c) => c.volume));
+    // Index instruments (the default symbol) often report volume 0 for every candle, which
+    // would make maxVol 0 and yVol produce NaN (0/0) SVG coordinates. Floor at 1.
+    const maxVol = Math.max(1, ...visibleCandles.map((c) => c.volume || 0));
     const volH = chartH * 0.12;
 
     const xScale = (i: number) => padding.left + (i / (visibleCandles.length - 1)) * chartW;

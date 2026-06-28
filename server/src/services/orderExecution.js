@@ -36,6 +36,8 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
       Authorization: `${appId}:${accessToken}`,
     },
     body: body ? JSON.stringify(body) : null,
+    // Bound every broker call so a hung connection can't stall an order/fill poll forever.
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok) {
@@ -119,6 +121,25 @@ export async function placeOrder({
   paperFillPrice = 0,
   auditLogger = null,
 }) {
+  // Validate order parameters before anything hits the broker. A malformed qty/price/side
+  // must throw here rather than become a wrong live order or a silent 0-price limit order.
+  const qtyNum = Number(qty);
+  if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
+    throw new Error(`Invalid order qty: ${qty}`);
+  }
+  if (side !== ORDER_SIDE.BUY && side !== ORDER_SIDE.SELL) {
+    throw new Error(`Invalid order side: ${side}`);
+  }
+  if (![ORDER_TYPE.LIMIT, ORDER_TYPE.MARKET, ORDER_TYPE.STOP, ORDER_TYPE.STOPLIMIT].includes(type)) {
+    throw new Error(`Invalid order type: ${type}`);
+  }
+  if ((type === ORDER_TYPE.LIMIT || type === ORDER_TYPE.STOPLIMIT) && !(Number(limitPrice) > 0)) {
+    throw new Error(`Limit order requires a positive limitPrice (got ${limitPrice})`);
+  }
+  if ((type === ORDER_TYPE.STOP || type === ORDER_TYPE.STOPLIMIT) && !(Number(stopPrice) > 0)) {
+    throw new Error(`Stop order requires a positive stopPrice (got ${stopPrice})`);
+  }
+
   const orderBody = {
     symbol,
     qty,
@@ -161,6 +182,12 @@ export async function placeOrder({
     };
   }
 
+  // TODO(verify FYERS v3 docs): (1) Confirm the /orders/async response actually exposes the
+  // order id at `response.id` (vs response.data.id / orderNumbers). If it doesn't, a live
+  // order IS placed but `orderId` is undefined, so waitForFill can't track it and no SL is
+  // attached. Consider the synchronous /orders endpoint for orders that must be tracked.
+  // (2) Confirm the numeric status mapping in normalizeStatus() (1=Pending,2=Filled,
+  // 3=Rejected,4=Cancelled) against current docs — a wrong map could misreport a fill.
   const response = await fyersApiCall("/orders/async", session.accessToken, session.appId ?? process.env.FYERS_APP_ID, orderBody, "POST");
 
   if (auditLogger) {

@@ -6,7 +6,6 @@
  */
 
 import type { StrategyId, AIReasoningReport, TradeGrade, StrategyPosition } from "../../types/institutional";
-import { getStrategyById } from "./registry";
 
 // ─── Candle Type ─────────────────────────────────────────────────
 export interface Candle {
@@ -102,7 +101,13 @@ function generateAIReasoning(
   const closes = candles.slice(0, i + 1).map((c) => c.close);
   const ema20 = calculateEMA(closes, 20);
   const currentEMA20 = ema20[ema20.length - 1] || candle.close;
-  const trendStrength = Math.min(Math.abs(candle.close - currentEMA20) / currentEMA20 * 100, 1);
+  // Deviation of price from EMA20 as a 0..1 score. Previously this multiplied the fraction
+  // by 100 before capping at 1, so any move >1% from the EMA saturated to 1.0 — making the
+  // "Trend Alignment" factor effectively binary. Normalize over a 0–2% band instead so the
+  // score increases smoothly (2%+ deviation = full strength; the 0.3 "passed" threshold ≈
+  // 0.6% deviation).
+  const deviationFraction = currentEMA20 > 0 ? Math.abs(candle.close - currentEMA20) / currentEMA20 : 0;
+  const trendStrength = Math.min(deviationFraction / 0.02, 1);
 
   // Volume confirmation
   const avgVolume = prev5.reduce((sum, c) => sum + c.volume, 0) / prev5.length;
@@ -192,6 +197,10 @@ export type StrategyFunction = (
 
 // ─── EMA5 Strategy ───────────────────────────────────────────────
 const ema5Strategy: StrategyFunction = (candles, i, params, prevState) => {
+  // Needs a previous candle (candles[i - 1]) to detect an alert candle. Guard against i < 1
+  // so the exported runStrategy can be reused for live tick processing without crashing on
+  // the first bar.
+  if (i < 1) return { signal: null, state: prevState };
   const emaPeriod = (params.emaPeriod as number) || 5;
   const closes = candles.slice(0, i + 1).map((c) => c.close);
   const ema = calculateEMA(closes, emaPeriod);
@@ -463,7 +472,6 @@ export function runBacktestEngine(candles: Candle[], config: BacktestConfig): Ba
           status: "OPEN",
           aiReasoning: signal.aiReasoning,
           tradeGrade: signal.aiReasoning?.tradeGrade,
-          ...(position as unknown as Record<string, unknown>),
           entryBar: i,
         } as unknown as StrategyPosition;
       }
@@ -507,11 +515,16 @@ export function runBacktestEngine(candles: Candle[], config: BacktestConfig): Ba
   const avgLossAbs = Math.abs(avgLoss);
   const expectancyRatio = avgLossAbs > 0 ? ((winPct * avgWin) - (lossPct * avgLossAbs)) / avgLossAbs : 0;
 
-  // Sharpe and Sortino
-  const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
-  const returnStd = Math.sqrt(returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length);
+  // Sharpe and Sortino — guard against empty arrays so 0–1 trade backtests don't produce
+  // NaN (division by returns.length / downsideReturns.length === 0).
+  const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+  const returnStd = returns.length > 0
+    ? Math.sqrt(returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length)
+    : 0;
   const downsideReturns = returns.filter((r) => r < 0);
-  const downsideStd = Math.sqrt(downsideReturns.reduce((sum, r) => sum + Math.pow(r, 2), 0) / downsideReturns.length);
+  const downsideStd = downsideReturns.length > 0
+    ? Math.sqrt(downsideReturns.reduce((sum, r) => sum + Math.pow(r, 2), 0) / downsideReturns.length)
+    : 0;
   const sharpeRatio = returnStd > 0 ? (avgReturn / returnStd) * Math.sqrt(252) : 0;
   const sortinoRatio = downsideStd > 0 ? (avgReturn / downsideStd) * Math.sqrt(252) : 0;
 

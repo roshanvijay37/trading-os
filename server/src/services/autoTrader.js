@@ -25,6 +25,13 @@ import {
   getOrderDetails,
 } from "./orderExecution.js";
 
+// Real-time tick data (WebSocket) — used as the primary candle/quote source with a
+// REST history fallback. These MUST be imported or every data fetch throws ReferenceError
+// (silently swallowed by the surrounding try/catch), leaving the engine permanently idle.
+import { aggregateOHLC, getLatestTick } from "./tickService.js";
+
+import { isNseMarketOpen } from "../utils/marketHolidays.js";
+
 import fs from "fs";
 import path from "path";
 
@@ -169,9 +176,15 @@ async function fetchOptionQuoteWithTickFallback(optionSymbol, session) {
 }
 
 // ─── AUDIT LOGGING ────────────────────────────────────────────────────
+const MAX_IN_MEMORY_AUDIT = 5000;
 function logAudit(event) {
   const entry = { timestamp: new Date().toISOString(), ...event };
   auditLog.push(entry);
+  // Cap the in-memory audit buffer so a long-running session can't grow it without bound
+  // (the full history is still appended to the audit file on disk).
+  if (auditLog.length > MAX_IN_MEMORY_AUDIT) {
+    auditLog.splice(0, auditLog.length - MAX_IN_MEMORY_AUDIT);
+  }
   try {
     fs.appendFileSync(AUDIT_FILE, JSON.stringify(entry) + "\n");
   } catch (err) {
@@ -217,9 +230,14 @@ async function fetchAvailableFunds(session) {
   }
 }
 
-async function checkMargin(optionSymbol, qty, underlying, session) {
+async function checkMargin(optionSymbol, qty, underlying, session, entryPremium = 0) {
   try {
-    const required = qty * (underlying.marginPerLot / underlying.lotSize);
+    // Buying options costs the premium (premium x qty), not index SPAN margin. Fall back to
+    // the conservative index margin only if the premium is unknown.
+    const required =
+      entryPremium > 0
+        ? entryPremium * qty
+        : qty * (underlying.marginPerLot / underlying.lotSize);
     const available = await fetchAvailableFunds(session);
     const safeRequired = required * CONFIG.MARGIN_SAFETY_MULTIPLIER;
     logAudit({ type: "MARGIN_CHECK", optionSymbol, qty, required, available, safeRequired, pass: available >= safeRequired });
@@ -250,8 +268,10 @@ function checkConsecutiveLosses() {
 }
 
 function roundToLotSize(qty, underlying) {
-  const rounded = Math.floor(qty / underlying.lotSize) * underlying.lotSize;
-  return Math.max(rounded, underlying.lotSize);
+  // Floor to a whole number of lots. Do NOT force a minimum of one lot — when the
+  // risk-based size rounds below a lot the caller's `qty <= 0` guard must be allowed
+  // to skip the trade, otherwise the risk model is silently overridden.
+  return Math.floor(qty / underlying.lotSize) * underlying.lotSize;
 }
 
 // ΓöÇΓöÇΓöÇ MARKET FILTERS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -346,11 +366,18 @@ function computeEntryLimitPrice(quote) {
 }
 
 function computeOptionSLAndTarget(avgFillPrice, signal) {
-  const slPct = Math.abs(signal.entryPrice - signal.stopLoss) / signal.entryPrice;
-  const targetPct = Math.abs(signal.target - signal.entryPrice) / signal.entryPrice;
+  // An option premium moves ~delta rupees per 1 rupee move in the underlying. Convert the
+  // strategy's underlying-point risk/target into option-premium points and apply them as
+  // absolute rupee distances from the fill price. (The previous version multiplied a
+  // fraction-of-index by delta and applied it as a fraction-of-premium, which put the stop
+  // a fraction of a percent from entry — stopped out instantly on normal noise.)
   const delta = CONFIG.OPTION_DELTA_ESTIMATE;
-  const optionSL = Math.max(0.05, avgFillPrice * (1 - slPct * delta));
-  const optionTarget = avgFillPrice * (1 + targetPct * delta);
+  const underlyingRiskPts = Math.abs(signal.entryPrice - signal.stopLoss);
+  const underlyingTargetPts = Math.abs(signal.target - signal.entryPrice);
+  const optionRiskPts = underlyingRiskPts * delta;
+  const optionTargetPts = underlyingTargetPts * delta;
+  const optionSL = Math.max(0.05, avgFillPrice - optionRiskPts);
+  const optionTarget = avgFillPrice + optionTargetPts;
   return {
     optionSL: Math.round(optionSL * 100) / 100,
     optionTarget: Math.round(optionTarget * 100) / 100,
@@ -591,11 +618,15 @@ async function monitorPositions(session) {
       position.currentLTP = ltp;
       position.unrealizedPnl = (ltp - position.avgFillPrice) * position.quantity;
 
-      // In paper mode we also monitor the stop-loss ourselves.
-      const paperSLHit = CONFIG.PAPER_TRADING && ltp <= position.stopLoss;
+      // Local stop-loss check. In paper mode this is the only stop. In live mode the broker
+      // SL-M order is primary, but we keep a local backstop: if the broker SL is stuck
+      // PENDING through a fast move/gap, this flattens the position rather than leaving it
+      // unprotected. reconcileStopLossOrders cancels the broker SL on close to avoid a
+      // double exit.
+      const slHit = ltp <= position.currentSL;
       const targetHit = ltp >= position.target;
 
-      if (paperSLHit) {
+      if (slHit) {
         await closePosition(position, session, "STOPLOSS");
       } else if (targetHit) {
         await closePosition(position, session, "TARGET");
@@ -640,9 +671,13 @@ function calculatePositionSize(entryPrice, stopLoss, underlying) {
     return CONFIG.FIXED_LOTS * underlying.lotSize;
   }
   const riskAmount = CONFIG.CAPITAL * (CONFIG.RISK_PERCENT / 100);
-  const riskPerUnit = Math.abs(entryPrice - stopLoss);
-  if (riskPerUnit <= 0) return 0;
-  return Math.floor(riskAmount / riskPerUnit);
+  // We trade the OPTION, so size against the option-premium risk per unit, not the raw
+  // index points. Option risk per unit ~= underlying point risk x delta (matches the
+  // option stop distance in computeOptionSLAndTarget). Using raw index points here made
+  // qty ~1/delta too small, so the real rupee risk never matched the configured risk %.
+  const optionRiskPerUnit = Math.abs(entryPrice - stopLoss) * CONFIG.OPTION_DELTA_ESTIMATE;
+  if (optionRiskPerUnit <= 0) return 0;
+  return Math.floor(riskAmount / optionRiskPerUnit);
 }
 
 async function processCandles(underlying, session) {
@@ -702,7 +737,8 @@ async function processCandles(underlying, session) {
         activeAlerts.delete(`${underlying.name}:${strategy}`);
         continue;
       }
-      const margin = await checkMargin(optionSymbol, qty, underlying, session);
+      const entryPremium = liquidity.quote?.ask || liquidity.quote?.lp || 0;
+      const margin = await checkMargin(optionSymbol, qty, underlying, session, entryPremium);
       if (!margin.pass) {
         console.log(`[AUTO-TRADER] Margin insufficient: need Γé╣${margin.required.toFixed(2)}, have Γé╣${margin.available.toFixed(2)}`);
         activeAlerts.delete(`${underlying.name}:${strategy}`);
@@ -716,6 +752,7 @@ async function processCandles(underlying, session) {
         underlying: underlying.name,
         underlyingSymbol: underlying.symbol,
       };
+      storeSignal(tradeSignal);
       try {
         const position = await openPosition(tradeSignal, optionSymbol, qty, session, liquidity.quote);
         if (!position) {
@@ -768,6 +805,12 @@ function getCurrentMarketStatus() {
 // ΓöÇΓöÇΓöÇ MAIN LOOP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function tradingLoop(session) {
   if (!isRunning) return;
+  // Clear any previously scheduled tick so the loop can never double-arm into two
+  // concurrent timer chains (which would double order flow).
+  if (pollInterval) {
+    clearTimeout(pollInterval);
+    pollInterval = null;
+  }
   const today = new Date().toDateString();
   if (lastTradeDate !== today) {
     todayTrades = 0;
@@ -795,6 +838,14 @@ async function tradingLoop(session) {
     }
     pollInterval = setTimeout(() => tradingLoop(session), 60000);
     return;
+  } else if (!isNseMarketOpen()) {
+    // Within market hours by the clock, but the exchange is closed (weekend or holiday).
+    // The time-of-day branches above only know the clock, not the NSE calendar.
+    marketStatus = "CLOSED";
+    console.log(`[AUTO-TRADER] Exchange holiday/weekend - no trading IST (${timeStr})`);
+    for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
+      await closePosition(pos, session, "MARKET_CLOSE");
+    }
   } else {
     marketStatus = "OPEN";
     for (const underlying of getActiveUnderlyings()) {
@@ -829,11 +880,17 @@ export async function startAutoTrader(sessionId) {
     `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
   );
   isRunning = true;
-  todayTrades = 0;
-  lastTradeDate = new Date().toDateString();
-  dailyPnL = 0;
-  dailyRealizedPnL = 0;
-  consecutiveLosses = 0;
+  // Preserve same-day risk counters across a restart so circuit breakers (daily-loss,
+  // consecutive-losses, max-trades) are not silently reset mid-session. loadState() has
+  // already restored them; only roll over when the persisted state is from a prior day.
+  const today = new Date().toDateString();
+  if (lastTradeDate !== today) {
+    todayTrades = 0;
+    dailyPnL = 0;
+    dailyRealizedPnL = 0;
+    consecutiveLosses = 0;
+    lastTradeDate = today;
+  }
   tradingLoop(session);
   return {
     status: "STARTED",

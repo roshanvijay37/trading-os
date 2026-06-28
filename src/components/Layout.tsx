@@ -86,7 +86,11 @@ function StatusBar() {
 
 function Header() {
   const location = useLocation();
-  const current = navigation.find((n) => n.to === location.pathname);
+  // Match by prefix (like the sidebar's useMatch) so nested/deep-linked routes still resolve
+  // to the right title instead of falling back to "Command Center".
+  const current = navigation.find((n) =>
+    n.to === "/" ? location.pathname === "/" : location.pathname.startsWith(n.to)
+  );
   const label = current?.label || "Command Center";
 
   return (

@@ -130,6 +130,10 @@ function runBacktest(candles, config) {
     emaPeriod = 5,
     capital = 1000000,
     riskPercent = 1,
+    // TODO(backtest): slBuffer is accepted from the UI but never applied to the stop-loss in
+    // this engine (the SL is the alert-candle low/high). Either widen the SL by slBuffer here
+    // to honour the control, or remove the knob from the UI. Left unchanged to avoid silently
+    // altering existing backtest results — confirm intended SL-buffer behaviour first.
     slBuffer = 0.005,
     targetMultiplier = 2,
     maxHoldBars = 12,

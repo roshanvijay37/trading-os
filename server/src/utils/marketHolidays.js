@@ -148,10 +148,20 @@ function convertNseDate(nseDate) {
 }
 
 /**
+ * Get the IST calendar date (YYYY-MM-DD) and day-of-week (0=Sun) for an instant.
+ * NSE operates in IST; deriving the date/day from UTC can be off by one near midnight IST
+ * and misclassify weekends/holidays.
+ */
+function getIstDateParts(date = new Date()) {
+  const ist = new Date(date.getTime() + 330 * 60 * 1000);
+  return { iso: ist.toISOString().split("T")[0], day: ist.getUTCDay() };
+}
+
+/**
  * Check if a specific date is a market holiday
  */
 export function isMarketHoliday(date = new Date()) {
-  const iso = date.toISOString().split("T")[0];
+  const { iso } = getIstDateParts(date);
   const { holidays } = getHolidays();
   return holidays.some((h) => h.date === iso);
 }
@@ -160,7 +170,7 @@ export function isMarketHoliday(date = new Date()) {
  * Get holiday name for a date (null if not a holiday)
  */
 export function getHolidayName(date = new Date()) {
-  const iso = date.toISOString().split("T")[0];
+  const { iso } = getIstDateParts(date);
   const { holidays } = getHolidays();
   const found = holidays.find((h) => h.date === iso);
   return found ? found.name : null;
@@ -171,9 +181,9 @@ export function getHolidayName(date = new Date()) {
  */
 export function isNseMarketOpen() {
   const now = new Date();
-  
-  // Weekend
-  const day = now.getUTCDay();
+
+  // Weekend (IST)
+  const { day } = getIstDateParts(now);
   if (day === 0 || day === 6) return false;
   
   // Holiday
@@ -197,9 +207,9 @@ export function isNseMarketOpen() {
  */
 export function getNseMarketStatus() {
   const now = new Date();
-  const day = now.getUTCDay();
-  
-  // Weekend
+  const { day } = getIstDateParts(now);
+
+  // Weekend (IST)
   if (day === 0) return "SUNDAY_CLOSED";
   if (day === 6) return "SATURDAY_CLOSED";
   
