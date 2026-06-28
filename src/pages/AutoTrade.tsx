@@ -1,25 +1,3 @@
-  const fetchAuditLogs = async () => {
-    try {
-      const data = await autoTradeApi.getAuditLog(50);
-      if (Array.isArray(data.logs)) {
-        setAuditLogs(data.logs);
-      }
-    } catch (err: any) {
-      // Silent — audit logs are optional UI candy
-    }
-  };
-
-
-  const fetchAuditLogs = async () => {
-    try {
-      const data = await autoTradeApi.getAuditLog(50);
-      if (Array.isArray(data.logs)) {
-        setAuditLogs(data.logs);
-      }
-    } catch (err: any) {
-      // Silent — audit logs are optional UI candy
-    }
-  };
 import { useEffect, useState } from "react";
 import { Card } from "../components/Card";
 import { MetricCard } from "../components/MetricCard";

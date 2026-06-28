@@ -149,4 +149,8 @@ export interface BotStatus {
   selectedInstruments?: string[];
   dailyPnL?: string;
   consecutiveLosses?: number;
+  tickStatus?: {
+    isConnected: boolean;
+    tickCounts?: Record<string, number>;
+  };
 }
