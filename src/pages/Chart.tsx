@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LineChart, Activity, Clock, Calendar } from "lucide-react";
 import { backtestApi } from "../services/api";
 
@@ -120,7 +120,7 @@ export function Chart() {
     try {
       const to = new Date();
       const from = new Date();
-      const daysBack = resolution === "D" ? 90 : 2;
+      const daysBack = resolution === "D" ? 90 : 7;
       from.setDate(from.getDate() - daysBack);
 
       const data = await backtestApi.run({
@@ -147,6 +147,10 @@ export function Chart() {
         setCandles(parsed);
         setLastUpdate(new Date().toLocaleTimeString("en-IN"));
         setError("");
+      } else if (data.error) {
+        setError(data.error);
+      } else {
+        setError("No candle data returned for this symbol/timeframe. If today is a weekend or holiday, the last trading session may not be in the requested range.");
       }
     } catch (err: any) {
       setError(err.message || "Failed to load chart data");
