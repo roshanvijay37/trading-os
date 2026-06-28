@@ -1,8 +1,11 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { computeIvStats, extractVixValue, recordVix, getHistory } from "./ivHistory.js";
+import {
+  computeIvStats, extractVixValue, recordVix, getHistory,
+  parseVixCandles, mergeSamples,
+} from "./ivHistory.js";
 
 describe("extractVixValue", () => {
   it("reads number, numeric string, and object forms", () => {
@@ -60,13 +63,44 @@ describe("computeIvStats", () => {
   });
 });
 
+describe("parseVixCandles", () => {
+  it("maps [time, o, h, l, close, v] candles to {date, vix} using the close", () => {
+    const ts = Math.floor(Date.parse("2026-04-01T06:00:00Z") / 1000); // epoch seconds
+    expect(parseVixCandles([[ts, 14.1, 14.9, 13.8, 14.5, 0]])).toEqual([{ date: "2026-04-01", vix: 14.5 }]);
+  });
+  it("skips malformed / non-positive rows", () => {
+    expect(parseVixCandles([[123, 1, 2, 3], "x", null, [123, 1, 2, 3, 0]])).toEqual([]);
+    expect(parseVixCandles(null)).toEqual([]);
+  });
+});
+
+describe("mergeSamples (backfill, fills gaps only)", () => {
+  const tmpFile = path.join(os.tmpdir(), `iv-merge-test-${process.pid}.json`);
+  beforeAll(() => { process.env.IV_HISTORY_FILE = tmpFile; });
+  afterAll(() => {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    delete process.env.IV_HISTORY_FILE;
+  });
+
+  it("seeds an empty store, then only adds missing dates (existing samples win)", () => {
+    expect(mergeSamples([{ date: "2026-05-01", vix: 12 }, { date: "2026-05-02", vix: 13 }])).toBe(2);
+    // 2026-05-02 already present -> NOT overwritten; 2026-05-03 is new -> added
+    expect(mergeSamples([{ date: "2026-05-02", vix: 99 }, { date: "2026-05-03", vix: 14 }])).toBe(3);
+    expect(getHistory()).toEqual([
+      { date: "2026-05-01", vix: 12 },
+      { date: "2026-05-02", vix: 13 },
+      { date: "2026-05-03", vix: 14 },
+    ]);
+  });
+});
+
 describe("recordVix (file-backed upsert)", () => {
   const tmpFile = path.join(os.tmpdir(), `iv-history-test-${process.pid}.json`);
-  process.env.IV_HISTORY_FILE = tmpFile;
   const day1 = Date.parse("2026-04-01T06:00:00Z"); // ~11:30 IST, same IST day
   const day1b = Date.parse("2026-04-01T09:00:00Z");
   const day2 = Date.parse("2026-04-02T06:00:00Z");
 
+  beforeAll(() => { process.env.IV_HISTORY_FILE = tmpFile; });
   afterAll(() => {
     try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
     delete process.env.IV_HISTORY_FILE;

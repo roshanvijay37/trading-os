@@ -1,6 +1,7 @@
 import express from "express";
 import { requireAuth } from "./auth.js";
 import { recordVix } from "../services/ivHistory.js";
+import { maybeBackfillVix } from "../services/vixBackfill.js";
 
 const router = express.Router();
 
@@ -239,6 +240,12 @@ router.get("/option-chain", requireAuth, async (req, res) => {
     } catch (err) {
       console.error("[option-chain] VIX record failed:", err.message);
     }
+
+    // One-time backfill of a year of daily India VIX from FYERS history so IV Rank is meaningful
+    // immediately. Fire-and-forget (don't delay this response) and self-guarded against re-runs.
+    maybeBackfillVix(req.fyers.appId, req.fyers.accessToken).catch((err) =>
+      console.error("[option-chain] VIX backfill failed:", err.message),
+    );
 
     // Return optionsChain array and expiry data
     res.json({

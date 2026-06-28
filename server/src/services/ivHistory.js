@@ -16,6 +16,9 @@ const MAX_ENTRIES = 400; // ~16 months of trading days
 const DEFAULT_LOOKBACK = 252; // 1 trading year
 const DEFAULT_MIN_SAMPLES = 20; // below this, rank/percentile are not meaningful
 
+// Sample count below which a one-time FYERS backfill is worth attempting (see vixBackfill.js).
+export const MIN_SAMPLES = DEFAULT_MIN_SAMPLES;
+
 // Resolved lazily (not at import time) so tests can redirect it via env before calling in.
 function filePath() {
   return process.env.IV_HISTORY_FILE || path.join(process.cwd(), "data", "iv-history.json");
@@ -117,6 +120,44 @@ export function recordVix(rawIndiaVix, nowMs = Date.now()) {
   const trimmed = arr.slice(-MAX_ENTRIES);
   save(trimmed);
   return { date, vix };
+}
+
+/**
+ * Map FYERS daily history candles ([time, open, high, low, close, volume]) into {date, vix}
+ * samples, using the close as the day's VIX. `time` is epoch seconds (date_format=0). Pure.
+ */
+export function parseVixCandles(candles) {
+  const rows = Array.isArray(candles) ? candles : [];
+  const out = [];
+  for (const c of rows) {
+    if (!Array.isArray(c) || c.length < 5) continue;
+    const ts = Number(c[0]);
+    const close = Number(c[4]);
+    if (!Number.isFinite(ts) || ts <= 0 || !Number.isFinite(close) || close <= 0) continue;
+    const ms = ts < 1e12 ? ts * 1000 : ts; // seconds -> ms (guard if already ms)
+    out.push({ date: istDateStr(ms), vix: round2(close) });
+  }
+  return out;
+}
+
+/**
+ * Merge backfilled samples into the store, ONLY filling dates that are not already present —
+ * live recordVix() samples (closer to real-time) always win over a historical daily close.
+ * Returns the resulting total sample count.
+ */
+export function mergeSamples(newSamples) {
+  const byDate = new Map();
+  for (const s of load()) byDate.set(s.date, s.vix);
+  for (const s of Array.isArray(newSamples) ? newSamples : []) {
+    if (!s || !s.date || byDate.has(s.date)) continue;
+    const v = extractVixValue(s.vix);
+    if (v != null) byDate.set(s.date, v);
+  }
+  const merged = Array.from(byDate, ([date, vix]) => ({ date, vix }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .slice(-MAX_ENTRIES);
+  save(merged);
+  return merged.length;
 }
 
 export function getHistory() {
