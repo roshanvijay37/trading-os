@@ -54,6 +54,19 @@ app.use(
   })
 );
 
+// Handle preflight OPTIONS requests explicitly so every route (including /api/auth/login)
+// responds with the correct CORS headers before any auth or route logic runs.
+app.options("*", (req, res) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, x-session-id, Authorization");
+  }
+  res.sendStatus(204);
+});
+
 // Safety-net middleware: ensures allowed origins always get CORS headers,
 // even if a downstream route errors before the cors package finishes.
 app.use((req, res, next) => {
