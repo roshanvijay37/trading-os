@@ -1,6 +1,15 @@
 ﻿import express from "express";
 import { getSession, getAllSessions } from "./auth.js";
 import { getHolidays, refreshHolidays } from "../utils/marketHolidays.js";
+import {
+  bsPrice,
+  roundToStrike,
+  yearsToExpiry,
+  getOptionDefaults,
+  computeOptionCosts,
+} from "../services/blackScholes.js";
+// Shared 5-EMA + alert rule — same definition the live engine uses (single source of truth).
+import { calculateEMA, detectAlert } from "../services/signalCore.js";
 
 const router = express.Router();
 
@@ -11,27 +20,8 @@ const FYERS_DATA_BASE = "https://api-t1.fyers.in/data";
 const dataCache = new Map();
 
 // ─── EMA Calculation ──────────────────────────────────────────────
-function calculateEMA(closes, period) {
-  const ema = [];
-  if (closes.length < period) return ema;
-
-  // Start with SMA
-  let sum = 0;
-  for (let i = 0; i < period; i++) {
-    sum += closes[i];
-  }
-  let prevEMA = sum / period;
-  ema.push(prevEMA);
-
-  const multiplier = 2 / (period + 1);
-
-  for (let i = period; i < closes.length; i++) {
-    prevEMA = (closes[i] - prevEMA) * multiplier + prevEMA;
-    ema.push(prevEMA);
-  }
-
-  return ema;
-}
+// calculateEMA now lives in ../services/signalCore.js so the backtest and live engine
+// share one definition (imported above).
 
 // ─── Fetch Historical Data from FYERS ─────────────────────────────
 // FYERS limits: max 100 days for intraday resolutions (1,2,3,5,10,15,20,30,45,60,120,180,240)
@@ -123,9 +113,27 @@ function parseCandles(rawCandles) {
   }));
 }
 
+// Fetch the India VIX series aligned to a backtest range, as [{ timestamp(ms), iv(decimal) }]
+// (iv = VIX/100). Returns null — so the engine falls back to a flat IV — when not requested
+// or when VIX history is unavailable.
+async function fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs, accessToken }) {
+  if (pricingModel !== "BLACK_SCHOLES" || ivSource !== "INDIA_VIX") return null;
+  try {
+    const raw = await fetchHistoricalData("NSE:INDIAVIX-INDEX", resolution, fromTs, toTs, accessToken);
+    const vix = parseCandles(raw)
+      .filter((c) => c.close > 0)
+      .map((c) => ({ timestamp: c.timestamp, iv: c.close / 100 }));
+    return vix.length > 0 ? vix : null;
+  } catch (err) {
+    console.error("[backtest] India VIX history fetch failed; using flat IV:", err.message);
+    return null;
+  }
+}
+
 // ─── Backtest Engine ──────────────────────────────────────────────
 function runBacktest(candles, config) {
   const {
+    symbol = "NSE:NIFTYBANK-INDEX",
     strategy = "EMA5",
     emaPeriod = 5,
     capital = 1000000,
@@ -139,7 +147,57 @@ function runBacktest(candles, config) {
     maxHoldBars = 12,
     slippage = 0.0002, // 0.02% slippage (~10 pts on BANKNIFTY, ~5 pts on NIFTY)
     capitalMode = "COMPOUND",
+    // ── Pricing model ───────────────────────────────────────────────
+    // "INDEX"         → original engine: trade the index itself, P&L in index points.
+    // "BLACK_SCHOLES" → trade ATM options on the SAME signals; P&L is option-premium
+    //                   based with delta capture, theta decay, spread and statutory costs.
+    pricingModel = "INDEX",
+    annualizedIV,      // decimal, e.g. 0.18; falls back to per-symbol default
+    riskFreeRate,      // decimal, default 0.065
+    strikeInterval,    // points between strikes; per-symbol default
+    lotSize,           // contract lot size; per-symbol default
+    expiryWeekday,     // 0=Sun..6=Sat IST; default 4 (Thu)
+    optionSpreadPct = 1.0, // round-trip bid/ask as % of premium (half applied each side)
+    brokeragePerOrder = 20,
+    // IV source for the BS model: "FLAT" (use annualizedIV / per-symbol default) or
+    // "INDIA_VIX" (use the India VIX level at each bar, supplied as ivSeries). ivMultiplier
+    // scales VIX → instrument IV (BankNifty realised IV runs above India VIX).
+    ivSource = "FLAT",
+    ivMultiplier = 1,
+    ivSeries = null, // [{ timestamp(ms), iv(decimal) }], same resolution as candles
   } = config;
+
+  const isBS = pricingModel === "BLACK_SCHOLES";
+  const symDefaults = getOptionDefaults(symbol);
+  const bs = {
+    iv: Number(annualizedIV) > 0 ? Number(annualizedIV) : symDefaults.iv,
+    strikeInterval: Number(strikeInterval) > 0 ? Number(strikeInterval) : symDefaults.strikeInterval,
+    lotSize: Number(lotSize) > 0 ? Number(lotSize) : symDefaults.lotSize,
+    riskFreeRate: Number(riskFreeRate) > 0 ? Number(riskFreeRate) : 0.065,
+    expiryWeekday: Number.isInteger(expiryWeekday) ? expiryWeekday : 4,
+    halfSpread: (Number(optionSpreadPct) >= 0 ? Number(optionSpreadPct) : 1.0) / 100 / 2,
+  };
+  const round2 = (n) => Math.round(n * 100) / 100;
+
+  // Resolve the IV to use at every bar. With INDIA_VIX we align the VIX series to the price
+  // candles by timestamp and carry the last known VIX forward across any gaps; otherwise the
+  // flat IV is used everywhere. candleIv[i] is the volatility fed to Black-Scholes at bar i,
+  // so IV evolves through a trade (e.g. an intraday VIX spike) instead of being a single guess.
+  const ivMult = Number(ivMultiplier) > 0 ? Number(ivMultiplier) : 1;
+  const isVixSource = isBS && ivSource === "INDIA_VIX" && Array.isArray(ivSeries) && ivSeries.length > 0;
+  const candleIv = new Array(candles.length).fill(bs.iv);
+  if (isVixSource) {
+    const ivMap = new Map();
+    for (const p of ivSeries) {
+      if (p && p.iv > 0) ivMap.set(p.timestamp, p.iv);
+    }
+    let last = bs.iv; // fallback until the first VIX bar is seen
+    for (let k = 0; k < candles.length; k++) {
+      const v = ivMap.get(candles[k].timestamp);
+      if (v > 0) last = v * ivMult;
+      candleIv[k] = last;
+    }
+  }
 
   // Pre-calculate indicators
   const closes = candles.map((c) => c.close);
@@ -167,7 +225,76 @@ function runBacktest(candles, config) {
   // Alert Candle tracking for 5 EMA strategy
   let alertCandle = null;
 
+  // Build a position from an index breakout, identically triggered in both modes.
+  // INDEX mode reproduces the original engine exactly. BLACK_SCHOLES mode trades an ATM
+  // option on the same signal: entry/SL/target levels stay in INDEX points (they remain
+  // the exit triggers), but qty is sized against option-premium risk and the recorded
+  // entryPrice is the BUY premium (mid + half-spread).
+  function buildPosition(side, rawEntry, sl, i, candle) {
+    const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
+    const stopDistance = Math.abs(rawEntry - sl);
+    if (stopDistance <= 0) return null;
+    const targetDistance = stopDistance * targetMultiplier;
+    const indexTarget = side === "LONG" ? rawEntry + targetDistance : rawEntry - targetDistance;
 
+    if (isBS) {
+      const optionType = side === "LONG" ? "CE" : "PE";
+      const strike = roundToStrike(rawEntry, bs.strikeInterval);
+      const t = yearsToExpiry(candle.timestamp, bs.expiryWeekday);
+      const iv = candleIv[i];
+      const entryMid = bsPrice({ type: optionType, spot: rawEntry, strike, t, r: bs.riskFreeRate, sigma: iv });
+      if (!(entryMid > 0)) return null;
+      const entryPremium = round2(entryMid * (1 + bs.halfSpread)); // pay the ask
+      // Option-premium risk per unit ≈ premium drop if the index reaches the SL level.
+      const slMid = bsPrice({ type: optionType, spot: sl, strike, t, r: bs.riskFreeRate, sigma: iv });
+      const slPremium = Math.max(0, slMid * (1 - bs.halfSpread));
+      const optionRiskPerUnit = Math.max(0.05, entryPremium - slPremium);
+      let qty = Math.floor(riskAmount / optionRiskPerUnit / bs.lotSize) * bs.lotSize;
+      // Never deploy more premium than available capital.
+      const maxByCapital = Math.floor(currentCapital / entryPremium / bs.lotSize) * bs.lotSize;
+      qty = Math.min(qty, maxByCapital);
+      if (qty <= 0) return null;
+      return {
+        mode: "BS", side, optionType, strike,
+        entryPrice: entryPremium, entryPremium,
+        indexEntry: round2(rawEntry),
+        qty,
+        sl: round2(sl),
+        target: round2(indexTarget),
+        entryBar: i,
+        entryTime: candle.datetime,
+      };
+    }
+
+    // INDEX mode — original arithmetic preserved (slippage on entry, qty by index points).
+    const entryPrice = side === "LONG"
+      ? round2(rawEntry * (1 + slippage))
+      : round2(rawEntry * (1 - slippage));
+    const idxStop = side === "LONG" ? entryPrice - sl : sl - entryPrice;
+    if (idxStop <= 0) return null;
+    const qty = Math.floor(riskAmount / idxStop);
+    if (qty <= 0) return null;
+    const idxTargetDist = idxStop * targetMultiplier;
+    return {
+      mode: "INDEX", side,
+      entryPrice,
+      qty,
+      sl: round2(sl),
+      target: side === "LONG" ? round2(entryPrice + idxTargetDist) : round2(entryPrice - idxTargetDist),
+      entryBar: i,
+      entryTime: candle.datetime,
+    };
+  }
+
+  // Price the option leg at exit and return { entryRec, exitRec, pnl } for a BS position.
+  function settleBSExit(pos, exitSpot, candle, iv) {
+    const tExit = yearsToExpiry(candle.timestamp, bs.expiryWeekday);
+    const exitMid = bsPrice({ type: pos.optionType, spot: exitSpot, strike: pos.strike, t: tExit, r: bs.riskFreeRate, sigma: iv });
+    const exitPremium = Math.max(0, round2(exitMid * (1 - bs.halfSpread))); // hit the bid
+    const gross = (exitPremium - pos.entryPremium) * pos.qty;
+    const costs = computeOptionCosts(pos.entryPremium, exitPremium, pos.qty, { brokeragePerOrder });
+    return { entryRec: pos.entryPremium, exitRec: exitPremium, pnl: gross - costs };
+  }
 
   const warmup = Math.max(emaOffset, 50);
 
@@ -183,36 +310,52 @@ function runBacktest(candles, config) {
     // ── Exit Logic (common for all strategies) ────────────────────
     if (position) {
       const barsHeld = i - position.entryBar;
-      let exitPrice = null;
       let exitReason = "";
+      let indexExitLevel = null; // clean index level the position exits at
 
       if (position.side === "LONG" && candle.low <= position.sl) {
-        const rawExit = Math.max(candle.open, position.sl);
-        exitPrice = Math.round(rawExit * (1 - slippage) * 100) / 100;
         exitReason = "SL";
+        indexExitLevel = position.sl;
       } else if (position.side === "SHORT" && candle.high >= position.sl) {
-        const rawExit = Math.min(candle.open, position.sl);
-        exitPrice = Math.round(rawExit * (1 + slippage) * 100) / 100;
         exitReason = "SL";
+        indexExitLevel = position.sl;
       } else if (position.side === "LONG" && candle.high >= position.target) {
-        const rawExit = Math.min(candle.open, position.target);
-        exitPrice = Math.round(rawExit * (1 - slippage) * 100) / 100;
         exitReason = "TARGET";
+        indexExitLevel = position.target;
       } else if (position.side === "SHORT" && candle.low <= position.target) {
-        const rawExit = Math.max(candle.open, position.target);
-        exitPrice = Math.round(rawExit * (1 + slippage) * 100) / 100;
         exitReason = "TARGET";
+        indexExitLevel = position.target;
       } else if (barsHeld >= maxHoldBars) {
-        exitPrice = candle.close;
         exitReason = "TIME";
+        indexExitLevel = candle.close;
       }
 
-      if (exitPrice !== null) {
-        const pnl = position.side === "LONG"
-          ? (exitPrice - position.entryPrice) * position.qty
-          : (position.entryPrice - exitPrice) * position.qty;
+      if (exitReason) {
+        let entryRec, exitRec, pnl;
 
-        const pnlPercent = (pnl / (position.entryPrice * position.qty)) * 100;
+        if (position.mode === "BS") {
+          // Same trigger & exit index level; P&L is option-premium based (delta + theta + costs).
+          ({ entryRec, exitRec, pnl } = settleBSExit(position, indexExitLevel, candle, candleIv[i]));
+        } else {
+          // INDEX mode — original open-aware fill + slippage arithmetic preserved.
+          let exitPrice;
+          if (exitReason === "TIME") {
+            exitPrice = candle.close;
+          } else if (exitReason === "SL") {
+            const rawExit = position.side === "LONG" ? Math.max(candle.open, position.sl) : Math.min(candle.open, position.sl);
+            exitPrice = Math.round(rawExit * (position.side === "LONG" ? (1 - slippage) : (1 + slippage)) * 100) / 100;
+          } else {
+            const rawExit = position.side === "LONG" ? Math.min(candle.open, position.target) : Math.max(candle.open, position.target);
+            exitPrice = Math.round(rawExit * (position.side === "LONG" ? (1 - slippage) : (1 + slippage)) * 100) / 100;
+          }
+          pnl = position.side === "LONG"
+            ? (exitPrice - position.entryPrice) * position.qty
+            : (position.entryPrice - exitPrice) * position.qty;
+          entryRec = position.entryPrice;
+          exitRec = exitPrice;
+        }
+
+        const pnlPercent = (pnl / (entryRec * position.qty)) * 100;
 
         currentCapital += pnl;
         totalTrades++;
@@ -234,14 +377,15 @@ function runBacktest(candles, config) {
           entryTime: position.entryTime,
           exitTime: candle.datetime,
           side: position.side,
-          entryPrice: position.entryPrice,
-          exitPrice,
+          entryPrice: entryRec,
+          exitPrice: exitRec,
           qty: position.qty,
           pnl: Math.round(pnl * 100) / 100,
           pnlPercent: Math.round(pnlPercent * 100) / 100,
           exitReason,
           barsHeld,
           capitalAfter: Math.round(currentCapital * 100) / 100,
+          ...(position.mode === "BS" ? { optionType: position.optionType, strike: position.strike, indexEntry: position.indexEntry } : {}),
         });
 
         equityCurve.push({
@@ -261,80 +405,25 @@ function runBacktest(candles, config) {
 
     // ── 5 EMA Strategy (Subhasish Pani) ──────────────────────────
     else if (strategy === "EMA5" && ema !== null) {
-      // Bullish Setup: Candle closes COMPLETELY BELOW 5 EMA
-      if (prevCandle.close < ema && prevCandle.high < ema) {
-        // New Alert Candle
-        alertCandle = {
-          candle: prevCandle,
-          type: "BULLISH",
-          index: i - 1,
-        };
-      }
-      // Bearish Setup: Candle closes COMPLETELY ABOVE 5 EMA
-      else if (prevCandle.close > ema && prevCandle.low > ema) {
-        alertCandle = {
-          candle: prevCandle,
-          type: "BEARISH",
-          index: i - 1,
-        };
+      // Alert candle = a candle ENTIRELY beyond the 5 EMA (shared rule). Persists until a
+      // new qualifying candle overwrites it or an entry consumes it.
+      const at = detectAlert({ close: prevCandle.close, high: prevCandle.high, low: prevCandle.low, ema });
+      if (at) {
+        alertCandle = { candle: prevCandle, type: at, index: i - 1 };
       }
 
       // Check for entry on current candle
       if (alertCandle) {
         const ac = alertCandle.candle;
-        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
-
         // Bullish Entry: Break above Alert Candle high
         if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
-          const rawEntry = ac.high;
-          const entryPrice = Math.round(rawEntry * (1 + slippage) * 100) / 100;
-          const sl = ac.low;
-          const stopDistance = entryPrice - sl;
-          
-          if (stopDistance > 0) {
-            const qty = Math.floor(riskAmount / stopDistance);
-            if (qty > 0) {
-              const targetDistance = stopDistance * targetMultiplier;
-              const target = Math.round((entryPrice + targetDistance) * 100) / 100;
-
-              position = {
-                side: "LONG",
-                entryPrice,
-                qty,
-                sl: Math.round(sl * 100) / 100,
-                target,
-                entryBar: i,
-                entryTime: candle.datetime,
-              };
-              alertCandle = null;
-            }
-          }
+          const pos = buildPosition("LONG", ac.high, ac.low, i, candle);
+          if (pos) { position = pos; alertCandle = null; }
         }
         // Bearish Entry: Break below Alert Candle low
         else if (alertCandle.type === "BEARISH" && candle.low < ac.low) {
-          const rawEntry = ac.low;
-          const entryPrice = Math.round(rawEntry * (1 - slippage) * 100) / 100;
-          const sl = ac.high;
-          const stopDistance = sl - entryPrice;
-
-          if (stopDistance > 0) {
-            const qty = Math.floor(riskAmount / stopDistance);
-            if (qty > 0) {
-              const targetDistance = stopDistance * targetMultiplier;
-              const target = Math.round((entryPrice - targetDistance) * 100) / 100;
-
-              position = {
-                side: "SHORT",
-                entryPrice,
-                qty,
-                sl: Math.round(sl * 100) / 100,
-                target,
-                entryBar: i,
-                entryTime: candle.datetime,
-              };
-              alertCandle = null;
-            }
-          }
+          const pos = buildPosition("SHORT", ac.low, ac.high, i, candle);
+          if (pos) { position = pos; alertCandle = null; }
         }
       }
     }
@@ -345,76 +434,23 @@ function runBacktest(candles, config) {
       const ema20 = calculateEMA(closes.slice(0, i + 1), 20);
       const trendEMA20 = ema20[ema20.length - 1];
 
-      // LONG (CE Buy): 15-min bullish trend + Alert Candle setup
-      if (prevCandle.close > trendEMA20) {
-        // Trend is bullish - look for CE buy setup
-        if (prevCandle.close < ema && prevCandle.high < ema) {
-          alertCandle = { candle: prevCandle, type: "BULLISH", index: i - 1 };
-        }
-      }
-      // SHORT (PE Buy): 5-min bearish trend + Alert Candle setup
-      else if (prevCandle.close < trendEMA20) {
-        // Trend is bearish - look for PE buy setup
-        if (prevCandle.close > ema && prevCandle.low > ema) {
-          alertCandle = { candle: prevCandle, type: "BEARISH", index: i - 1 };
-        }
+      // Same alert rule, gated by the higher-timeframe 20-EMA trend (shared detectAlert).
+      const at = detectAlert({ close: prevCandle.close, high: prevCandle.high, low: prevCandle.low, ema, trendEma: trendEMA20 });
+      if (at) {
+        alertCandle = { candle: prevCandle, type: at, index: i - 1 };
       }
 
       if (alertCandle) {
         const ac = alertCandle.candle;
-        const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
-
         // CE Entry: Break above Alert Candle high
         if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
-          const entryPrice = ac.high;
-          const sl = ac.low;
-          const stopDistance = entryPrice - sl;
-
-          if (stopDistance > 0) {
-            const qty = Math.floor(riskAmount / stopDistance);
-            if (qty > 0) {
-              const targetDistance = stopDistance * targetMultiplier;
-              const target = Math.round((entryPrice + targetDistance) * 100) / 100;
-
-              position = {
-                side: "LONG",
-                entryPrice,
-                qty,
-                sl: Math.round(sl * 100) / 100,
-                target,
-                entryBar: i,
-                entryTime: candle.datetime,
-                trailSL: true, // Enable trailing stop
-              };
-              alertCandle = null;
-            }
-          }
+          const pos = buildPosition("LONG", ac.high, ac.low, i, candle);
+          if (pos) { position = pos; alertCandle = null; }
         }
         // PE Entry: Break below Alert Candle low
         else if (alertCandle.type === "BEARISH" && candle.low < ac.low) {
-          const entryPrice = ac.low;
-          const sl = ac.high;
-          const stopDistance = sl - entryPrice;
-
-          if (stopDistance > 0) {
-            const qty = Math.floor(riskAmount / stopDistance);
-            if (qty > 0) {
-              const targetDistance = stopDistance * targetMultiplier;
-              const target = Math.round((entryPrice - targetDistance) * 100) / 100;
-
-              position = {
-                side: "SHORT",
-                entryPrice,
-                qty,
-                sl: Math.round(sl * 100) / 100,
-                target,
-                entryBar: i,
-                entryTime: candle.datetime,
-                trailSL: true, // Enable trailing stop
-              };
-              alertCandle = null;
-            }
-          }
+          const pos = buildPosition("SHORT", ac.low, ac.high, i, candle);
+          if (pos) { position = pos; alertCandle = null; }
         }
       }
     }
@@ -424,10 +460,16 @@ function runBacktest(candles, config) {
 
   if (position) {
     const lastCandle = candles[candles.length - 1];
-    const exitPrice = lastCandle.close;
-    const pnl = position.side === "LONG"
-      ? (exitPrice - position.entryPrice) * position.qty
-      : (position.entryPrice - exitPrice) * position.qty;
+    let entryRec, exitRec, pnl;
+    if (position.mode === "BS") {
+      ({ entryRec, exitRec, pnl } = settleBSExit(position, lastCandle.close, lastCandle, candleIv[candles.length - 1]));
+    } else {
+      exitRec = lastCandle.close;
+      entryRec = position.entryPrice;
+      pnl = position.side === "LONG"
+        ? (exitRec - position.entryPrice) * position.qty
+        : (position.entryPrice - exitRec) * position.qty;
+    }
 
     currentCapital += pnl;
     totalTrades++;
@@ -439,14 +481,15 @@ function runBacktest(candles, config) {
       entryTime: position.entryTime,
       exitTime: lastCandle.datetime,
       side: position.side,
-      entryPrice: position.entryPrice,
-      exitPrice,
+      entryPrice: entryRec,
+      exitPrice: exitRec,
       qty: position.qty,
       pnl: Math.round(pnl * 100) / 100,
-      pnlPercent: Math.round((pnl / (position.entryPrice * position.qty)) * 100 * 100) / 100,
+      pnlPercent: Math.round((pnl / (entryRec * position.qty)) * 100 * 100) / 100,
       exitReason: "END_OF_DATA",
       barsHeld: candles.length - position.entryBar,
       capitalAfter: Math.round(currentCapital * 100) / 100,
+      ...(position.mode === "BS" ? { optionType: position.optionType, strike: position.strike, indexEntry: position.indexEntry } : {}),
     });
   }
 
@@ -477,7 +520,23 @@ function runBacktest(candles, config) {
       expectancyRatio: Math.round(expectancyRatio * 100) / 100,
       finalCapital: Math.round(currentCapital * 100) / 100,
       maxConsecutiveLosses,
+      pricingModel: isBS ? "BLACK_SCHOLES" : "INDEX",
     },
+    // Echo the effective option assumptions so the UI can show exactly what was simulated.
+    optionModel: isBS
+      ? {
+          iv: bs.iv,
+          strikeInterval: bs.strikeInterval,
+          lotSize: bs.lotSize,
+          riskFreeRate: bs.riskFreeRate,
+          expiryWeekday: bs.expiryWeekday,
+          spreadPct: bs.halfSpread * 2 * 100,
+          brokeragePerOrder,
+          ivSource: isVixSource ? "INDIA_VIX" : "FLAT",
+          ivMultiplier: ivMult,
+          vixPoints: isVixSource ? ivSeries.length : 0,
+        }
+      : null,
     trades,
     equityCurve,
   };
@@ -497,6 +556,18 @@ router.post("/run", async (req, res) => {
     slBuffer = 0.005,
     targetMultiplier = 2,
     maxHoldBars = 12,
+    // Pricing-model controls (see runBacktest). pricingModel defaults to INDEX so existing
+    // callers are unaffected.
+    pricingModel = "INDEX",
+    annualizedIV,
+    riskFreeRate,
+    strikeInterval,
+    lotSize,
+    expiryWeekday,
+    optionSpreadPct,
+    brokeragePerOrder,
+    ivSource = "FLAT",
+    ivMultiplier,
   } = req.body;
 
   if (!fromDate || !toDate) {
@@ -524,7 +595,10 @@ router.post("/run", async (req, res) => {
       return res.status(400).json({ error: `Insufficient data for backtest (${candles.length} candles). FYERS returned no data for ${symbol} between ${fromDate} and ${toDate}. Try a different date range or symbol.` });
     }
 
+    const ivSeries = await fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs, accessToken: session.accessToken });
+
     const result = runBacktest(candles, {
+      symbol,
       strategy,
       emaPeriod,
       capital,
@@ -533,6 +607,17 @@ router.post("/run", async (req, res) => {
       targetMultiplier,
       maxHoldBars,
       capitalMode: req.body.capitalMode || "COMPOUND",
+      pricingModel,
+      annualizedIV,
+      riskFreeRate,
+      strikeInterval,
+      lotSize,
+      expiryWeekday,
+      optionSpreadPct,
+      brokeragePerOrder,
+      ivSource,
+      ivMultiplier,
+      ivSeries,
     });
 
     res.json({
@@ -612,6 +697,16 @@ router.post("/run-multi", async (req, res) => {
     slBuffer = 0.005,
     targetMultiplier = 2,
     maxHoldBars = 12,
+    pricingModel = "INDEX",
+    annualizedIV,
+    riskFreeRate,
+    strikeInterval,
+    lotSize,
+    expiryWeekday,
+    optionSpreadPct,
+    brokeragePerOrder,
+    ivSource = "FLAT",
+    ivMultiplier,
   } = req.body;
 
   if (!fromDate || !toDate) {
@@ -639,9 +734,12 @@ router.post("/run-multi", async (req, res) => {
       return res.status(400).json({ error: `Insufficient data for backtest (${candles.length} candles). FYERS returned no data for ${symbol} between ${fromDate} and ${toDate}. Try a different date range or symbol.` });
     }
 
+    const ivSeries = await fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs, accessToken: session.accessToken });
+
     const results = [];
     for (const strat of strategies) {
     const result = runBacktest(candles, {
+      symbol,
       strategy: strat,
       emaPeriod,
       capital,
@@ -650,6 +748,17 @@ router.post("/run-multi", async (req, res) => {
       targetMultiplier,
       maxHoldBars,
       capitalMode: req.body.capitalMode || "COMPOUND",
+      pricingModel,
+      annualizedIV,
+      riskFreeRate,
+      strikeInterval,
+      lotSize,
+      expiryWeekday,
+      optionSpreadPct,
+      brokeragePerOrder,
+      ivSource,
+      ivMultiplier,
+      ivSeries,
     });
       results.push({
         strategy: strat,

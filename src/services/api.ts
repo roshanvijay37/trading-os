@@ -135,6 +135,20 @@ export const backtestApi = {
     maxHoldBars?: number;
     slippage?: number;
     capitalMode?: "COMPOUND" | "FIXED";
+    // Pricing model: "INDEX" (trade the index, P&L in points) or "BLACK_SCHOLES"
+    // (trade ATM options on the same signals, P&L in option premium with theta/delta/costs).
+    pricingModel?: "INDEX" | "BLACK_SCHOLES";
+    annualizedIV?: number;
+    riskFreeRate?: number;
+    strikeInterval?: number;
+    lotSize?: number;
+    expiryWeekday?: number;
+    optionSpreadPct?: number;
+    brokeragePerOrder?: number;
+    // IV source for the BS model: "FLAT" (use annualizedIV) or "INDIA_VIX" (use the India VIX
+    // level at each bar). ivMultiplier scales VIX → instrument IV (BankNifty runs above VIX).
+    ivSource?: "FLAT" | "INDIA_VIX";
+    ivMultiplier?: number;
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",

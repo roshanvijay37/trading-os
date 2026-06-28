@@ -13,53 +13,67 @@ import {
 
 // Candle shape used throughout: [timestamp, open, high, low, close, volume]
 
-describe("calculateEMA (live EMA)", () => {
+describe("calculateEMA (shared with backtest, SMA-seeded)", () => {
   it("returns null with fewer than 5 closes", () => {
     expect(calculateEMA([1, 2, 3, 4])).toBeNull();
   });
 
-  it("seeds from the FIRST close (live behaviour)", () => {
-    // [10,11,12,13,14] -> 12.4 with first-close seeding.
-    // The backtest engine (src/lib/strategies/engine.ts) yields 12 (SMA seed) for the same
-    // input. This divergence is roadmap item #2 (unify live + backtest). Pinned on purpose.
-    expect(calculateEMA([10, 11, 12, 13, 14])).toBe(12.4);
+  it("seeds from the SMA of the first 5 closes (now unified with the backtest)", () => {
+    // [10,11,12,13,14] -> SMA(5) = 12, matching src/lib/strategies/engine.ts. The live engine
+    // previously first-close-seeded and returned 12.4; unifying the signal path is the fix
+    // (roadmap item #2). The two engines now agree.
+    expect(calculateEMA([10, 11, 12, 13, 14])).toBe(12);
+  });
+
+  it("continues smoothing after the seed", () => {
+    // (15 - 12) * (2/6) + 12 = 13
+    expect(calculateEMA([10, 11, 12, 13, 14, 15])).toBe(13);
   });
 });
 
-describe("detectAlertCandle (EMA5)", () => {
-  it("returns null with fewer than 2 candles", () => {
+describe("detectAlertCandle (EMA5 — 'entirely beyond EMA' rule, unified with backtest)", () => {
+  it("returns null without enough candles to seed the EMA", () => {
     expect(detectAlertCandle([[1, 100, 101, 99, 100, 1000]], "EMA5")).toBeNull();
   });
 
-  it("flags a bullish alert when price closes back above the 5 EMA", () => {
+  it("flags a BULLISH alert when the prior candle is ENTIRELY below the 5 EMA", () => {
     const candles = [
       [1, 100, 101, 99, 100, 1000],
       [2, 100, 101, 99, 100, 1000],
       [3, 100, 101, 99, 100, 1000],
       [4, 100, 101, 99, 100, 1000],
-      [5, 100, 101, 94, 95, 1000], // prior close 95 (below EMA)
-      [6, 96, 100, 95, 99, 1000], // current close 99 (above EMA ~98.33)
+      [5, 100, 97, 93, 95, 1000], // ALERT candle: high 97 & close 95 both < EMA (~98.67)
+      [6, 96, 99, 95, 98, 1000], // latest = breakout reference
     ];
     const alert = detectAlertCandle(candles, "EMA5");
     expect(alert).not.toBeNull();
     expect(alert.type).toBe("BULLISH_ALERT");
-    expect(alert.ema5).toBeCloseTo(98.33, 2);
-    expect(alert.high).toBe(100);
-    expect(alert.low).toBe(95);
+    expect(alert.ema5).toBeCloseTo(98.67, 1);
+    expect(alert.high).toBe(97);
+    expect(alert.low).toBe(93);
+    expect(alert.timestamp).toBe(5); // alert candle is candles[length-2], not the latest
   });
 
-  it("flags a bearish alert when price closes back below the 5 EMA", () => {
+  it("flags a BEARISH alert when the prior candle is ENTIRELY above the 5 EMA", () => {
     const candles = [
       [1, 100, 101, 99, 100, 1000],
       [2, 100, 101, 99, 100, 1000],
       [3, 100, 101, 99, 100, 1000],
       [4, 100, 101, 99, 100, 1000],
-      [5, 100, 106, 100, 105, 1000], // prior close 105 (above EMA)
-      [6, 104, 106, 100, 101, 1000], // current close 101 (below EMA ~101.67)
+      [5, 100, 107, 103, 105, 1000], // ALERT candle: low 103 & close 105 both > EMA (~101.33)
+      [6, 104, 106, 100, 102, 1000], // latest
     ];
     const alert = detectAlertCandle(candles, "EMA5");
     expect(alert).not.toBeNull();
     expect(alert.type).toBe("BEARISH_ALERT");
+    expect(alert.high).toBe(107);
+    expect(alert.low).toBe(103);
+  });
+
+  it("does NOT flag when the prior candle straddles the 5 EMA (cross-over is no longer an alert)", () => {
+    const candles = Array.from({ length: 6 }, (_, i) => [i + 1, 100, 101, 99, 100, 1000]);
+    // Every candle straddles a flat 100 EMA (high 101 > ema, low 99 < ema) — not entirely beyond.
+    expect(detectAlertCandle(candles, "EMA5")).toBeNull();
   });
 
   it("returns null for EMA5_OPTION without the 20-candle warmup", () => {

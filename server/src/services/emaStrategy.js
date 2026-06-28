@@ -12,6 +12,8 @@
  */
 
 import { randomUUID } from "crypto";
+// Shared 5-EMA + alert rule — the SAME definition the backtest uses (single source of truth).
+import { calculateEMA as emaSeries, detectAlert } from "./signalCore.js";
 
 // Store candles in memory (in production, use Redis/DB)
 const candleStore = new Map();
@@ -19,28 +21,18 @@ const signalStore = [];
 const MAX_STORED_SIGNALS = 100;
 
 /**
- * Calculate 5-period EMA
- * @param {number[]} closes - Array of closing prices
- * @returns {number} EMA value
+ * Last EMA value over the provided closes, SMA-seeded — now IDENTICAL to the backtest engine.
+ * Previously this seeded from the first close and was fed only 5 closes (slice(-5)), so the
+ * live 5-EMA diverged from the backtested one and the bot fired on different candles. Pass the
+ * full recent close history; returns null when there are fewer than `period` closes.
+ * @param {number[]} closes
+ * @param {number} [period]
+ * @returns {number|null}
  */
-export function calculateEMA(closes) {
-  if (closes.length < 5) return null;
-
-  // TODO(strategy-validation): This seeds the EMA with the first close and is fed exactly
-  // 5 closes (slice(-5)) at the call sites, whereas the backtest (src/lib/strategies/engine.ts
-  // and server/src/routes/backtest.js) seeds with an SMA over a longer warm-up. As a result
-  // the LIVE 5-EMA differs slightly from the BACKTESTED 5-EMA, so live alert/breakout signals
-  // can diverge from validated results. Aligning these requires confirming the intended EMA
-  // definition with the strategy owner before changing live signal generation — left as-is to
-  // avoid silently altering live entries.
-  const multiplier = 2 / (5 + 1);
-  let ema = closes[0];
-  
-  for (let i = 1; i < closes.length; i++) {
-    ema = (closes[i] - ema) * multiplier + ema;
-  }
-  
-  return Math.round(ema * 100) / 100;
+export function calculateEMA(closes, period = 5) {
+  const series = emaSeries(closes, period);
+  if (series.length === 0) return null;
+  return Math.round(series[series.length - 1] * 100) / 100;
 }
 
 /**
@@ -49,58 +41,48 @@ export function calculateEMA(closes) {
  * @returns {Object|null} Alert candle info or null
  */
 export function detectAlertCandle(candles, strategy = "EMA5") {
-  if (candles.length < 2) return null;
+  // Need the alert candle (the latest completed candle) plus enough history to seed the EMA.
+  if (candles.length < 6) return null;
 
-  const current = candles[candles.length - 1]; // Latest complete candle
-  const previous = candles[candles.length - 2]; // Previous candle
+  const closes = candles.map((c) => c[4]);
 
-  const currentClose = current[4];
-  const previousClose = previous[4];
-  const currentOpen = current[1];
-  const previousHigh = previous[2];
-  const previousLow = previous[3];
+  // 5-EMA at the most recent close — the same bar the backtest uses to judge the alert candle
+  // (backtest: alert = bar i-1 judged against the EMA at bar i). Computed over the FULL close
+  // history via the shared SMA-seeded EMA, not a 5-close window.
+  const ema5Series = emaSeries(closes, 5);
+  if (ema5Series.length === 0) return null;
+  const ema5 = ema5Series[ema5Series.length - 1];
 
-  // Calculate 5 EMA for previous candles (need at least 5 candles before current)
-  const closesForEMA = candles.slice(0, -1).map(c => c[4]);
-  if (closesForEMA.length < 5) return null;
+  // Alert candle = the candle just before the latest one. detectBreakout then checks whether
+  // the latest candle takes out its high/low — mirroring the backtest exactly (alert = i-1,
+  // breakout = i) and replacing the old cross-over rule with the "entirely beyond EMA" rule.
+  const alertBar = candles[candles.length - 2];
+  const close = alertBar[4];
+  const high = alertBar[2];
+  const low = alertBar[3];
+  const open = alertBar[1];
 
-  const ema5 = calculateEMA(closesForEMA.slice(-5));
-  if (!ema5) return null;
-
-  let bullishAlert = false;
-  let bearishAlert = false;
-
+  let trendEma = null;
   if (strategy === "EMA5_OPTION") {
-    // 5 EMA Option Buying with 20 EMA trend filter
-    if (closesForEMA.length < 20) return null;
-    const ema20 = calculateEMA(closesForEMA.slice(-20));
-    if (!ema20) return null;
-
-    // LONG (CE Buy): trend bullish (close > 20 EMA) + pullback to 5 EMA
-    bullishAlert = previousClose > ema20 && previousClose < ema5 && previousHigh < ema5;
-    // SHORT (PE Buy): trend bearish (close < 20 EMA) + pullback to 5 EMA
-    bearishAlert = previousClose < ema20 && previousClose > ema5 && previousLow > ema5;
-  } else {
-    // Standard 5 EMA crossover alert
-    // Bullish alert: Previous candle closed below 5 EMA, current candle closes above 5 EMA
-    bullishAlert = previousClose < ema5 && currentClose > ema5;
-
-    // Bearish alert: Previous candle closed above 5 EMA, current candle closes below 5 EMA
-    bearishAlert = previousClose > ema5 && currentClose < ema5;
+    // 5 EMA option buying needs the 20-EMA higher-timeframe trend filter.
+    const ema20Series = emaSeries(closes, 20);
+    if (ema20Series.length === 0) return null;
+    trendEma = ema20Series[ema20Series.length - 1];
   }
 
-  if (!bullishAlert && !bearishAlert) return null;
+  const type = detectAlert({ close, high, low, ema: ema5, trendEma });
+  if (!type) return null;
 
   return {
-    type: bullishAlert ? "BULLISH_ALERT" : "BEARISH_ALERT",
-    candle: current,
-    ema5: ema5,
+    type: type === "BULLISH" ? "BULLISH_ALERT" : "BEARISH_ALERT",
+    candle: alertBar,
+    ema5: Math.round(ema5 * 100) / 100,
     strategy,
-    timestamp: current[0],
-    high: current[2],
-    low: current[3],
-    close: currentClose,
-    open: currentOpen,
+    timestamp: alertBar[0],
+    high,
+    low,
+    close,
+    open,
   };
 }
 

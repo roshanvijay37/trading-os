@@ -42,7 +42,20 @@ interface BacktestResult {
     avgWin: number;
     avgLoss: number;
     finalCapital: number;
+    pricingModel?: "INDEX" | "BLACK_SCHOLES";
   };
+  optionModel?: {
+    iv: number;
+    strikeInterval: number;
+    lotSize: number;
+    riskFreeRate: number;
+    expiryWeekday: number;
+    spreadPct: number;
+    brokeragePerOrder: number;
+    ivSource?: "FLAT" | "INDIA_VIX";
+    ivMultiplier?: number;
+    vixPoints?: number;
+  } | null;
   trades: Trade[];
   equityCurve: EquityPoint[];
 }
@@ -67,6 +80,16 @@ export function BacktestLab() {
   const [targetMult, setTargetMult] = useState(2);
   const [slippage, setSlippage] = useState(0.02);
   const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
+  // Pricing model: INDEX (trade the index, P&L in points) vs BLACK_SCHOLES (trade ATM
+  // options on the same signals — P&L in option premium with delta capture, theta decay,
+  // spread and statutory costs). IV in % (0 = use the per-symbol default on the server).
+  const [pricingModel, setPricingModel] = useState<"INDEX" | "BLACK_SCHOLES">("INDEX");
+  const [ivPct, setIvPct] = useState(0);
+  const [optionSpreadPct, setOptionSpreadPct] = useState(1.0);
+  // IV source: FLAT uses the IV % above; INDIA_VIX uses the historical India VIX at each bar
+  // (ivMultiplier scales it — BankNifty IV runs above India VIX).
+  const [ivSource, setIvSource] = useState<"FLAT" | "INDIA_VIX">("FLAT");
+  const [ivMultiplier, setIvMultiplier] = useState(1.0);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [viewMode, setViewMode] = useState<"both" | "table" | "chart">("both");
@@ -89,6 +112,15 @@ export function BacktestLab() {
         targetMultiplier: targetMult,
         slippage,
         capitalMode,
+        pricingModel,
+        ...(pricingModel === "BLACK_SCHOLES"
+          ? {
+              annualizedIV: ivPct > 0 ? ivPct / 100 : undefined,
+              optionSpreadPct,
+              ivSource,
+              ...(ivSource === "INDIA_VIX" ? { ivMultiplier } : {}),
+            }
+          : {}),
       });
       setResult(res);
     } catch (err) {
@@ -260,6 +292,38 @@ export function BacktestLab() {
               <option value="FIXED">Fixed</option>
             </select>
           </div>
+          <div>
+            <label className="mb-1 block text-2xs text-zinc-600">Pricing Model</label>
+            <select value={pricingModel} onChange={(e) => setPricingModel(e.target.value as "INDEX" | "BLACK_SCHOLES")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
+              <option value="INDEX">Index (points)</option>
+              <option value="BLACK_SCHOLES">Black-Scholes (options)</option>
+            </select>
+          </div>
+          {pricingModel === "BLACK_SCHOLES" && (
+            <>
+              <div>
+                <label className="mb-1 block text-2xs text-zinc-600">IV Source</label>
+                <select value={ivSource} onChange={(e) => setIvSource(e.target.value as "FLAT" | "INDIA_VIX")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
+                  <option value="FLAT">Flat IV</option>
+                  <option value="INDIA_VIX">India VIX (historical)</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-2xs text-zinc-600">{ivSource === "INDIA_VIX" ? "IV % (fallback)" : "IV % (0 = auto)"}</label>
+                <input type="number" step="0.5" value={ivPct} onChange={(e) => setIvPct(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+              </div>
+              {ivSource === "INDIA_VIX" && (
+                <div>
+                  <label className="mb-1 block text-2xs text-zinc-600">VIX Multiplier</label>
+                  <input type="number" step="0.05" value={ivMultiplier} onChange={(e) => setIvMultiplier(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-2xs text-zinc-600">Option Spread %</label>
+                <input type="number" step="0.1" value={optionSpreadPct} onChange={(e) => setOptionSpreadPct(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+              </div>
+            </>
+          )}
           <div className="flex items-end gap-2 sm:col-span-2">
             <button onClick={runBacktest} disabled={loading} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">
               {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run</span>}
@@ -295,6 +359,24 @@ export function BacktestLab() {
       {/* Results */}
       {result && sum && (
         <>
+          {sum.pricingModel === "BLACK_SCHOLES" ? (
+            <div className="rounded-panel border border-gain/20 bg-gain-dim px-3 py-2 text-2xs text-zinc-300">
+              <span className="font-semibold text-gain">Black-Scholes option model.</span> Entry/Exit prices are option <span className="font-semibold">premiums</span> (incl. delta, theta, spread &amp; charges).
+              {result.optionModel && (
+                <span className="text-zinc-500">
+                  {" "}
+                  {result.optionModel.ivSource === "INDIA_VIX"
+                    ? `IV India VIX ×${(result.optionModel.ivMultiplier ?? 1).toFixed(2)} (${result.optionModel.vixPoints ?? 0} bars)`
+                    : `IV ${(result.optionModel.iv * 100).toFixed(1)}%`}
+                  {" "}· strike step {result.optionModel.strikeInterval} · lot {result.optionModel.lotSize} · spread {result.optionModel.spreadPct.toFixed(1)}%
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-500">
+              <span className="font-semibold text-zinc-300">Index model.</span> P&amp;L is on the index in points — not what an option buyer would realise. Switch Pricing Model to Black-Scholes to simulate the actual option trade.
+            </div>
+          )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryCard label="Total Trades" value={sum.totalTrades} icon={BarChart3} />
             <SummaryCard label="Win Rate" value={`${sum.winRate.toFixed(1)}%`} icon={sum.winRate >= 50 ? TrendingUp : TrendingDown} color={sum.winRate >= 50 ? "gain" : "loss"} />
