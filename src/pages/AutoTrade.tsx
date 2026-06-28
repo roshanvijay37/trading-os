@@ -1,4 +1,22 @@
-﻿import { useEffect, useState } from "react";
+              </div>
+                </div>
+                  )}
+                    </p>
+                      {Object.entries(status.tickStatus.tickCounts || {}).map(([k, v]) => `${k}:${v}`).join(" ")}
+                    <p className="text-3xs text-zinc-600">
+                  {status.tickStatus?.isConnected && (
+                  </p>
+                    {status.tickStatus?.isConnected ? "LIVE" : "REST"}
+                  <p className={`font-mono text-base font-semibold ${status.tickStatus?.isConnected ? "text-gain" : "text-warn"}`}>
+                  <p className="text-2xs text-zinc-600">Tick Feed</p>
+                <div>
+                </div>
+                  <Radio size={18} />
+                <div className={`rounded-panel p-2 ${status.tickStatus?.isConnected ? "bg-gain-dim text-gain" : "bg-warn-dim text-warn"}`}>
+              <div className="flex items-center gap-3">
+            <Card>
+            </Card>
+import { useEffect, useState } from "react";
 import { Card } from "../components/Card";
 import { MetricCard } from "../components/MetricCard";
 import { autoTradeApi } from "../services/api";
@@ -459,7 +477,7 @@ export function AutoTrade() {
           </Card>
 
           {/* Risk & Performance */}
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <div className="flex items-center gap-3">
                 <div className={`rounded-panel p-2 ${parseFloat(status.dailyPnL || "0") >= 0 ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"}`}>
@@ -496,6 +514,24 @@ export function AutoTrade() {
                   <p className={`font-mono text-base font-semibold ${status.paperTrading ? "text-warn" : "text-gain"}`}>
                     {status.paperTrading ? "PAPER" : "LIVE"}
                   </p>
+                </div>
+              </div>
+            </Card>
+            <Card>
+              <div className="flex items-center gap-3">
+                <div className={`rounded-panel p-2 ${status.tickStatus?.isConnected ? "bg-gain-dim text-gain" : "bg-warn-dim text-warn"}`}>
+                  <Radio size={18} />
+                </div>
+                <div>
+                  <p className="text-2xs text-zinc-600">Tick Feed</p>
+                  <p className={`font-mono text-base font-semibold ${status.tickStatus?.isConnected ? "text-gain" : "text-warn"}`}>
+                    {status.tickStatus?.isConnected ? "LIVE" : "REST"}
+                  </p>
+                  {status.tickStatus?.isConnected && (
+                    <p className="text-3xs text-zinc-600">
+                      {Object.entries(status.tickStatus.tickCounts || {}).map(([k, v]) => `${k}:${v}`).join(" ")}
+                    </p>
+                  )}
                 </div>
               </div>
             </Card>
