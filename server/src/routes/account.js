@@ -158,25 +158,28 @@ router.post("/quote", requireAuth, async (req, res) => {
 });
 
 // Market breadth (advance / decline) over the NIFTY 50 constituent basket.
-// Derived live from FYERS /quotes — FYERS has no breadth endpoint, but it quotes the constituents.
+// Derived live from FYERS quotes — FYERS has no breadth endpoint, but it quotes the constituents.
+// NB: quotes live on the DATA host (GET /data/quotes?symbols=a,b,c), not /api/v3 — same call the
+// live engine (autoTrader.js) uses. Each symbol is URL-encoded so '&' in NSE:M&M-EQ is preserved.
 router.get("/breadth", requireAuth, async (req, res) => {
   try {
-    // /quotes caps at 50 symbols/request; chunk so the basket can grow past 50 later.
-    const chunks = [];
-    for (let i = 0; i < NIFTY50_SYMBOLS.length; i += 50) {
-      chunks.push(NIFTY50_SYMBOLS.slice(i, i + 50));
-    }
-
+    // /data/quotes caps at 50 symbols/request; chunk so the basket can grow past 50 later.
     const quotes = [];
-    for (const symbols of chunks) {
-      const response = await fyersApiCall(
-        "/quotes",
-        req.fyers.accessToken,
-        req.fyers.appId,
-        { symbols },
-        "POST",
-      );
-      if (Array.isArray(response.d)) quotes.push(...response.d);
+    for (let i = 0; i < NIFTY50_SYMBOLS.length; i += 50) {
+      const chunk = NIFTY50_SYMBOLS.slice(i, i + 50);
+      const url = `https://api-t1.fyers.in/data/quotes?symbols=${chunk.map(encodeURIComponent).join(",")}`;
+      const response = await fetch(url, {
+        headers: { Authorization: `${req.fyers.appId}:${req.fyers.accessToken}` },
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        const err = new Error(`FYERS quotes ${response.status}: ${text.slice(0, 120)}`);
+        err.status = response.status;
+        throw err;
+      }
+      const data = await response.json();
+      if (data.s !== "ok") throw new Error(data.message || "FYERS quotes error");
+      if (Array.isArray(data.d)) quotes.push(...data.d);
     }
 
     const breadth = computeBreadth(quotes);
