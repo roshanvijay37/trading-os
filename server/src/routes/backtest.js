@@ -101,7 +101,7 @@ async function fetchSingleRange(symbol, resolution, fromTs, toTs, accessToken) {
   const data = await response.json();
   console.log("FYERS response:", JSON.stringify(data).slice(0, 500));
 
-  if (data.s !== "ok") {
+  if (data.s !== "ok" && data.s !== "no_data") {
     throw new Error(data.message || `FYERS error: ${JSON.stringify(data)}`);
   }
 
@@ -517,7 +517,7 @@ router.post("/run", async (req, res) => {
     const candles = parseCandles(rawCandles);
 
     if (candles.length < 20) {
-      return res.status(400).json({ error: "Insufficient data for backtest" });
+      return res.status(400).json({ error: `Insufficient data for backtest (${candles.length} candles). FYERS returned no data for ${symbol} between ${fromDate} and ${toDate}. Try a different date range or symbol.` });
     }
 
     const result = runBacktest(candles, {
@@ -632,7 +632,7 @@ router.post("/run-multi", async (req, res) => {
     const candles = parseCandles(rawCandles);
 
     if (candles.length < 20) {
-      return res.status(400).json({ error: "Insufficient data for backtest" });
+      return res.status(400).json({ error: `Insufficient data for backtest (${candles.length} candles). FYERS returned no data for ${symbol} between ${fromDate} and ${toDate}. Try a different date range or symbol.` });
     }
 
     const results = [];
