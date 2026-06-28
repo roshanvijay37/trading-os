@@ -1,5 +1,6 @@
 import express from "express";
 import { requireAuth } from "./auth.js";
+import { recordVix } from "../services/ivHistory.js";
 
 const router = express.Router();
 
@@ -229,6 +230,14 @@ router.get("/option-chain", requireAuth, async (req, res) => {
 
     if (data.s !== "ok") {
       throw new Error(data.message || "FYERS option chain error");
+    }
+
+    // Persist today's India VIX so IV Rank/Percentile can be computed against a real series.
+    // Best-effort: never let a storage hiccup break the option-chain response.
+    try {
+      recordVix(data.data?.indiavixData);
+    } catch (err) {
+      console.error("[option-chain] VIX record failed:", err.message);
     }
 
     // Return optionsChain array and expiry data

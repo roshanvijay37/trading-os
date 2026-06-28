@@ -36,6 +36,36 @@ export function normalizeOptionChain(raw: unknown): OptionLeg[] {
   return legs;
 }
 
+export interface IndiaVix {
+  value: number;
+  change: number;
+  changePercent: number;
+}
+
+/**
+ * India VIX from the FYERS option-chain `indiavixData` field. FYERS has shipped this as either
+ * a bare number or an object ({ ltp/lp, ltpch, ltpchp }), so accept both. Returns null when the
+ * field is absent or unparseable — callers render an honest "unavailable" state rather than 0.
+ */
+export function extractIndiaVix(raw: unknown): IndiaVix | null {
+  if (raw == null) return null;
+  if (typeof raw === "number" || typeof raw === "string") {
+    const v = num(raw);
+    return v > 0 ? { value: v, change: 0, changePercent: 0 } : null;
+  }
+  if (typeof raw === "object") {
+    const r = raw as RawRow;
+    const value = num(r.ltp ?? r.lp ?? r.value ?? r.vix);
+    if (!(value > 0)) return null;
+    return {
+      value,
+      change: num(r.ltpch ?? r.ch ?? r.change),
+      changePercent: num(r.ltpchp ?? r.chp ?? r.changePercent),
+    };
+  }
+  return null;
+}
+
 /** Underlying spot from the chain's non-option row (FYERS includes it with ltp = spot). */
 export function extractSpot(raw: unknown): number {
   const rows = Array.isArray(raw) ? (raw as RawRow[]) : [];

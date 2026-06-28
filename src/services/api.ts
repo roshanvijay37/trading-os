@@ -171,6 +171,12 @@ export const backtestApi = {
     }),
 };
 
+// Market — public aggregate analytics (no broker session required)
+export const marketApi = {
+  getStatus: () => fetchWithAuth("/market/status"),
+  getIvHistory: () => fetchWithAuth("/market/iv-history"),
+};
+
 export function isFyersConnected(): boolean {
   return !!getSessionId();
 }

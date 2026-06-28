@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeOptionChain,
   extractSpot,
+  extractIndiaVix,
   computePCR,
   computeMaxPain,
   computeExpectedMove,
@@ -26,6 +27,28 @@ describe("normalizeOptionChain / extractSpot", () => {
   it("extracts spot from the underlying row", () => {
     expect(extractSpot(raw)).toBe(20000);
     expect(extractSpot([])).toBe(0);
+  });
+});
+
+describe("extractIndiaVix", () => {
+  it("parses the object form ({ ltp, ltpch, ltpchp })", () => {
+    expect(extractIndiaVix({ ltp: 13.45, ltpch: -0.2, ltpchp: -1.47 })).toEqual({
+      value: 13.45,
+      change: -0.2,
+      changePercent: -1.47,
+    });
+  });
+
+  it("parses a bare number (no change data)", () => {
+    expect(extractIndiaVix(14.2)).toEqual({ value: 14.2, change: 0, changePercent: 0 });
+  });
+
+  it("returns null for missing / unusable data", () => {
+    expect(extractIndiaVix(null)).toBeNull();
+    expect(extractIndiaVix(undefined)).toBeNull();
+    expect(extractIndiaVix(0)).toBeNull();
+    expect(extractIndiaVix({ ltp: 0 })).toBeNull();
+    expect(extractIndiaVix({})).toBeNull();
   });
 });
 
