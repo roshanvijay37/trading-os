@@ -251,6 +251,12 @@ When editing files on the Windows development machine (VS Code), keep the follow
   C:\Users\RoshanV\AppData\Local\Programs\Git\bin\bash.exe
   ```
   then use `perl -0777 -i -pe` or `sed` to make the change.
+
+- **Pitfalls even with Git Bash/perl** — these traps still apply:
+  - **Perl replacement strings are double-quoted**, so backslash-r, backslash-n, backslash-t, and `@` are interpreted. To write literal backslash-r-backslash-n in a file you must often pass four backslashes through the shell.
+  - **`@` is a Perl array sigil** — text like `ubuntu@api...` must be escaped as `ubuntu\@api...` in replacements.
+  - **Backticks in JSX/JS** conflict with shell command substitution. Wrap the whole Perl command in single quotes or switch delimiters.
+  - **`perl -0777` treats the file as one string**, but CRLF can still break patterns that assume LF-only line endings. Match CR+LF explicitly or use broader regex patterns.
 - **Git `index.lock` can appear transiently** — if a commit fails with "Unable to create .git/index.lock", wait a few seconds and retry.
 - **Recommended fix for line-ending warnings**:
   ```bash
@@ -281,10 +287,10 @@ The backend runs on an **AWS Lightsail Ubuntu instance** in the `ap-south-1` (Mu
 
 ```bash
 # From the project root
-ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api.roshanvijay.com
+ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api@api.roshanvijay.com
 
 # Or using the server's public IP if the domain is not resolving
-# ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@<LIGHTSAIL_PUBLIC_IP>
+# ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api@<LIGHTSAIL_PUBLIC_IP>
 ```
 
 > **Note:** On macOS/Linux you may need to fix key permissions first:
