@@ -329,9 +329,9 @@ curl https://api.roshanvijay.com/api/health
 # Kimi Model (override if needed)
 # Options: moonshot-v1-8k | moonshot-v1-32k | moonshot-v1-128k | moonshot:kimi-k2.6
 KIMI_MODEL=moonshot:kimi-k2.6
-KIMI_API_KEY=REDACTED-KIMI-KEY
-FYERS_APP_ID=REDACTED-APP-ID
-FYERS_SECRET_ID=REDACTED-SECRET
+KIMI_API_KEY=sk-REDACTED-ROTATE-IMMEDIATELY
+FYERS_APP_ID=<your-fyers-app-id>
+FYERS_SECRET_ID=<your-fyers-secret-id>
 FYERS_REDIRECT_URL=https://roshanvijay.com
 PORT=3001
 KIMI_BASE_URL=https://api.moonshot.ai/v1
@@ -340,7 +340,7 @@ KIMI_BASE_URL=https://api.moonshot.ai/v1
 **Template for new setups:**
 ```bash
 # FYERS API credentials
-FYERS_APP_ID=REDACTED-APP-ID
+FYERS_APP_ID=<your-fyers-app-id>
 FYERS_SECRET_ID=your-secret-here
 FYERS_REDIRECT_URL=https://roshanvijay.com
 
@@ -349,7 +349,7 @@ PORT=3001
 FRONTEND_URL=https://roshanvijay.com
 
 # JWT secret for session tokens
-JWT_SECRET=REDACTED-JWT
+JWT_SECRET=<long-random-secret>
 
 # Kimi AI (Moonshot) API Key
 # Get from https://platform.moonshot.ai/

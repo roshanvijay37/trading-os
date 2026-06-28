@@ -2,5 +2,15 @@ node_modules
 dist
 .DS_Store
 *.local
-server/.env
 *.pem
+
+# Secrets — never commit any .env (root or nested). .env.example / .env.production are kept.
+.env
+**/.env
+
+# Runtime state/artifacts written to the server's working dir
+sessions.json
+auto-trade-state.json
+auto-trade-audit.jsonl
+alerts.jsonl
+data/
