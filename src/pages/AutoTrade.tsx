@@ -520,6 +520,7 @@ export function AutoTrade() {
                   </p>
                 </div>
               </div>
+            </Card>
             <Card>
               <div className="flex items-center gap-3">
                 <div className={`rounded-panel p-2 ${status.tickStatus?.isConnected ? "bg-gain-dim text-gain" : "bg-warn-dim text-warn"}`}>
