@@ -37,6 +37,7 @@ export function AutoTrade() {
     selectedInstruments: ["NIFTY", "BANKNIFTY"],
   });
   const [logs, setLogs] = useState<string[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const fetchStatus = async () => {
     try {
@@ -48,10 +49,23 @@ export function AutoTrade() {
     }
   };
 
+  const fetchAuditLogs = async () => {
+    try {
+      const data = await autoTradeApi.getAuditLog(50);
+      if (Array.isArray(data.logs)) {
+        setAuditLogs(data.logs);
+      }
+    } catch (err: any) {
+      // Silent — audit logs are optional UI candy
+    }
+  };
+
   useEffect(() => {
     fetchStatus();
+    fetchAuditLogs();
     const interval = setInterval(() => {
       fetchStatus();
+      fetchAuditLogs();
     }, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -486,6 +500,39 @@ export function AutoTrade() {
               </div>
             </Card>
           </div>
+
+          {/* Data Source Visibility */}
+          <Card className="mt-5" title="Data Sources" icon={Radio}>
+            {auditLogs.filter((log) => log.type === "DATA_SOURCE").length > 0 ? (
+              <div className="space-y-1.5">
+                {auditLogs
+                  .filter((log) => log.type === "DATA_SOURCE")
+                  .slice(-5)
+                  .map((log: any, i: number) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between rounded border border-border-subtle bg-surface px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-3xs font-semibold ${
+                            log.source === "websocket" ? "bg-gain-dim text-gain" : "bg-warn-dim text-warn"
+                          }`}
+                        >
+                          {log.source === "websocket" ? "WS" : log.source?.toUpperCase() || "REST"}
+                        </span>
+                        <span className="text-2xs text-zinc-300">{log.symbol}</span>
+                      </div>
+                      <span className="text-3xs text-zinc-600">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <p className="text-2xs text-zinc-600">No data source events yet.</p>
+            )}
+          </Card>
 
           {/* Recent Signals */}
           {status.recentSignals && status.recentSignals.length > 0 && (
