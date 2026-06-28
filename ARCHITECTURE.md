@@ -32,7 +32,7 @@ The bot does everything. The user only supervises.
 ├─────────────────────────────────────────────────────────────┤
 │  UI Layer (React + Tailwind)                                │
 │  ├── Command Center         Dashboard + AI CIO merged       │
-│  ├── Strategy Manager       Enable/disable/configure (17)   │
+│  ├── Strategy Manager       Enable/disable/configure (2)    │
 │  ├── Risk Dashboard         Portfolio risk monitoring       │
 │  ├── Market Intelligence    PCR, OI, IV, Flow, Gamma        │
 │  ├── Trading Bot            Start/stop, emergency, logs     │
@@ -85,6 +85,12 @@ Every strategy is implemented ONCE. Both backtest and live trading use the exact
 **Strategies Implemented**:
 - EMA5 (Subhasish Pani)
 - EMA5 Option Buying
+
+> **Where the canonical logic lives:** the live bot (`server/src/services/autoTrader.js`) and the
+> server-side backtest (`server/src/routes/backtest.js`) both share the 5-EMA + alert rule in
+> **`server/src/services/signalCore.js`** — that is the real single source of truth. The TypeScript
+> `src/lib/strategies/engine.ts` (unit-tested) mirrors the same math for the frontend; keep the two
+> definitions identical so live and backtest never diverge.
 
 ### 2. AI Reasoning Engine
 
@@ -275,7 +281,7 @@ stopAllStrategies()
 
 TradingOS has been transformed from a single-strategy bot into a multi-strategy institutional platform with:
 
-- **17 trading strategies** with unified implementation
+- **2 trading strategies** (5 EMA trend + 5 EMA option) with unified implementation
 - **AI reasoning** on every trade
 - **AI CIO** for market regime management
 - **Portfolio risk engine** with circuit breakers

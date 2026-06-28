@@ -48,7 +48,7 @@ Merged **Dashboard** + **AI CIO** with two tabs:
 - **Natural Language Chat** powered by Kimi K2.6
 
 ### Strategy Manager
-- **17 Strategies** with enable/disable checkboxes
+- **2 Strategies** with enable/disable checkboxes
 - Capital Allocation % per strategy
 - Risk % per strategy
 - Max Trades per strategy
@@ -108,16 +108,13 @@ Merged **Market Monitor** + **Market Intelligence**:
 - Auto-refreshing read-only data
 - **No trading actions — surveillance only**
 
-**Analytics Tab:**
-- **Advance/Decline** metrics
-- **Put/Call Ratio (PCR)** with percentile
-- **Max Pain** strike
-- **Expected Move** with confidence
-- **IV Rank** and **IV Percentile**
-- **IV Skew** and ATM IV
-- **Institutional Flow**: FII/DII Cash & F&O
-- **OI Heatmap** visualization
-- Market breadth indicators
+**Analytics Tab** (honest sourcing — never fabricated zeros):
+- **Put/Call Ratio (PCR)** — live from the NIFTY option chain
+- **Max Pain** strike and **Expected Move**
+- **India VIX** + **IV Rank / Percentile** — from a persisted VIX series (shows "building history" until enough samples accrue)
+- **Market Breadth (NIFTY 50)** — advance/decline derived live from constituent quotes (FYERS has no breadth endpoint)
+- **Dealer Gamma Exposure (GEX)** — Black-Scholes model estimate, badged "Model"
+- **Institutional Flow (FII/DII)** — NSE end-of-day cash-market participant data (labelled EOD; shows an "unreachable" state if NSE blocks the fetch)
 
 ### Live Chart
 - SVG candlestick chart with volume bars
@@ -131,8 +128,8 @@ Merged **Market Monitor** + **Market Intelligence**:
 ### Backtest Lab
 Merged **Backtest** + **Visual Backtest**:
 
-- Strategy backtesting using **unified engine** (same code as live trading)
-- **17 strategies** available
+- Strategy backtesting using **unified engine** (same signal core as live trading)
+- **2 strategies** available
 - Configurable parameters
 - Default date range: **5 years ago → today**
 - **View Toggle**: Both | Table | Chart
@@ -190,7 +187,13 @@ Merged **Backtest** + **Visual Backtest**:
 - `GET /api/account/holdings`
 - `GET /api/account/positions`
 - `POST /api/account/quote` — Live quotes
-- `GET /api/account/option-chain` — Options data
+- `GET /api/account/option-chain` — Options data (+ India VIX)
+- `GET /api/account/breadth` — NIFTY-50 advance/decline breadth
+
+### Market (Public — no broker session)
+- `GET /api/market/status` — NSE market open/closed/holiday status
+- `GET /api/market/iv-history` — India VIX rank/percentile from the persisted series
+- `GET /api/market/fii-dii` — FII/DII end-of-day cash flow (NSE participant data)
 
 ### Orders (Read-Only Audit)
 - `GET /api/orders/history` — Order book

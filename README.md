@@ -12,7 +12,7 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 2. [What Was Removed](#what-was-removed)
 3. [Architecture](#architecture)
 4. [Pages](#pages)
-5. [Strategies (2)](#strategies-17)
+5. [Strategies (2)](#strategies-2)
 6. [AI Decision Engine](#ai-decision-engine)
 7. [Command Center](#command-center)
 8. [Portfolio Risk Engine](#portfolio-risk-engine)
@@ -64,7 +64,7 @@ All manual trading capabilities have been eliminated:
 ├─────────────────────────────────────────────────────────────┤
 │  UI Layer (React + TypeScript + Tailwind CSS)               │
 │  ├── Command Center         Dashboard + AI CIO merged        │
-│  ├── Strategy Manager       Enable/disable/configure (17)    │
+│  ├── Strategy Manager       Enable/disable/configure (2)     │
 │  ├── Risk Dashboard         Portfolio risk monitoring        │
 │  ├── Market Intelligence    Live data + analytics merged     │
 │  ├── Trading Bot            Automated execution control      │
@@ -99,7 +99,7 @@ All manual trading capabilities have been eliminated:
 | **Strategy Manager** | Enable/disable 2 strategies, configure capital allocation, risk, sessions | `/strategy-manager` |
 | **Live Chart** | SVG candlestick with volume, timeframe selector, market status | `/chart` |
 | **Backtest Lab** | Strategy backtest with table/chart toggle view | `/backtest` |
-| **Market Intelligence** | PCR, IV, institutional flow, gamma exposure analytics | `/market-intelligence` |
+| **Market Intelligence** | PCR, Max Pain, India VIX, IV Rank, NIFTY-50 breadth, dealer gamma (model), FII/DII (EOD) | `/market-intelligence` |
 | **Risk Dashboard** | Portfolio risk monitoring, VaR, circuit breakers, stress tests | `/risk-dashboard` |
 | **Journal** | Automated trade audit trail | `/journal` |
 | **Reports** | Performance analytics (discipline, win rate, P&L) | `/reports` |
@@ -287,10 +287,10 @@ The backend runs on an **AWS Lightsail Ubuntu instance** in the `ap-south-1` (Mu
 
 ```bash
 # From the project root
-ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api@api.roshanvijay.com
+ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api.roshanvijay.com
 
 # Or using the server's public IP if the domain is not resolving
-# ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api@<LIGHTSAIL_PUBLIC_IP>
+# ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@<LIGHTSAIL_PUBLIC_IP>
 ```
 
 > **Note:** On macOS/Linux you may need to fix key permissions first:
@@ -324,12 +324,12 @@ curl https://api.roshanvijay.com/api/health
 
 **.env file location:** `~/trading-os/.env` — only ONE file needed.
 
-**Current production `.env`:**
+**Production `.env` (shape — fill in your own secrets, never commit real values):**
 ```bash
 # Kimi Model (override if needed)
 # Options: moonshot-v1-8k | moonshot-v1-32k | moonshot-v1-128k | moonshot:kimi-k2.6
 KIMI_MODEL=moonshot:kimi-k2.6
-KIMI_API_KEY=sk-REDACTED-ROTATE-IMMEDIATELY
+KIMI_API_KEY=<your-kimi-api-key>
 FYERS_APP_ID=<your-fyers-app-id>
 FYERS_SECRET_ID=<your-fyers-secret-id>
 FYERS_REDIRECT_URL=https://roshanvijay.com

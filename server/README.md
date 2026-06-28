@@ -72,6 +72,15 @@ Server will start on `http://localhost:3001`
 | POST | `/api/account/quote` | Get market quotes |
 | POST | `/api/account/depth` | Get market depth |
 | GET | `/api/account/search` | Search instruments |
+| GET | `/api/account/option-chain` | Option chain (+ India VIX) |
+| GET | `/api/account/breadth` | NIFTY-50 advance/decline breadth |
+
+### Market (public — no session required)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/market/status` | NSE market open/closed/holiday status |
+| GET | `/api/market/iv-history` | India VIX rank/percentile (persisted series) |
+| GET | `/api/market/fii-dii` | FII/DII end-of-day cash flow (NSE) |
 
 ## FYERS Order Parameters
 
