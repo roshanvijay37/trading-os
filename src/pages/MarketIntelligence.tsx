@@ -382,19 +382,31 @@ export function MarketIntelligencePage() {
         )}
       </div>
 
-      {/* ─── Not available from the FYERS feed ───────────────────── */}
-      <SectionTitle>Not available from the FYERS feed</SectionTitle>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Unavailable
-          icon={TrendingUp}
-          title="Market Breadth (Advance / Decline)"
-          reason="Requires an NSE advance/decline / index-constituent feed. FYERS does not expose market breadth, so no breadth source is wired."
-        />
-        <Unavailable
-          icon={Users}
-          title="Institutional Flow (FII / DII)"
-          reason="FII/DII cash & F&O figures come from NSE end-of-day participant data, which is not connected to this backend."
-        />
+      {/* ─── End-of-day institutional flow (NSE) ─────────────────── */}
+      <SectionTitle>Institutional Flow — End of Day (NSE)</SectionTitle>
+      <div className="rounded-panel border border-border bg-panel p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Users size={12} className="text-zinc-600" />
+          <h3 className="text-2xs font-semibold uppercase tracking-wider text-zinc-400">FII / DII Cash Flow</h3>
+          <span className="ml-auto rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-zinc-500">EOD</span>
+        </div>
+        {fiiDii?.available && (fiiDii.fii || fiiDii.dii) ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FlowLeg label="FII / FPI (Foreign)" leg={fiiDii.fii} />
+              <FlowLeg label="DII (Domestic)" leg={fiiDii.dii} />
+            </div>
+            <p className="mt-3 text-2xs leading-relaxed text-zinc-700">
+              Net cash buy/sell in ₹ crore{fiiDii.date ? ` · as of ${fiiDii.date}` : ""}. Source: NSE participant data
+              {fiiDii.stale ? " · cached (latest NSE refresh failed)" : ""}. End-of-day figures, not live.
+            </p>
+          </>
+        ) : (
+          <p className="text-2xs leading-relaxed text-zinc-600">
+            NSE end-of-day FII/DII data is currently unreachable{fiiDii?.error ? ` (${fiiDii.error})` : ""}. NSE rate-limits
+            non-browser clients, so this can fail from some hosts; it retries automatically.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -437,15 +449,20 @@ function Row({ label, value, mono, valueClass }: { label: string; value: string;
   );
 }
 
-function Unavailable({ icon: Icon, title, reason }: { icon: ElementType; title: string; reason: string }) {
+function FlowLeg({ label, leg }: { label: string; leg?: FiiDiiLeg | null }) {
+  const net = leg?.net ?? null;
+  const netClass = net == null ? "text-zinc-700" : net >= 0 ? "text-gain" : "text-loss";
   return (
-    <div className="rounded-panel border border-border bg-panel/60 p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon size={12} className="text-zinc-700" />
-        <h3 className="text-2xs font-semibold uppercase tracking-wider text-zinc-600">{title}</h3>
-        <span className="ml-auto rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-zinc-500">No data source</span>
-      </div>
-      <p className="text-2xs leading-relaxed text-zinc-600">{reason}</p>
+    <div>
+      <p className="text-2xs text-zinc-600">{label}</p>
+      <p className={`font-mono text-lg font-semibold ${netClass}`}>
+        {net == null ? "—" : `${net >= 0 ? "+" : "-"}₹${Math.abs(net).toLocaleString("en-IN")} Cr`}
+      </p>
+      {leg && leg.buy != null && leg.sell != null && (
+        <p className="text-2xs text-zinc-700">
+          Buy ₹{leg.buy.toLocaleString("en-IN")} · Sell ₹{leg.sell.toLocaleString("en-IN")} Cr
+        </p>
+      )}
     </div>
   );
 }
