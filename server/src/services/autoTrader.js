@@ -16,6 +16,15 @@ import {
   getRecentSignals,
 } from "./emaStrategy.js";
 
+import {
+  placeLimitEntry,
+  placeMarketExit,
+  placeStopLossOrder,
+  waitForFill,
+  cancelOrder,
+  getOrderDetails,
+} from "./orderExecution.js";
+
 import fs from "fs";
 import path from "path";
 
@@ -42,6 +51,9 @@ const CONFIG = {
   MAX_SPREAD_PCT: 2,
   MIN_OI: 100000,
   MAX_TIME_ENTRY_HOUR: 14,
+  ORDER_FILL_TIMEOUT_MS: 30000,
+  ORDER_POLL_INTERVAL_MS: 1000,
+  OPTION_DELTA_ESTIMATE: 0.5,
   ALLOW_CORRELATED_TRADES: false,
   TRAILING_SL_ENABLED: false,
   PAPER_TRADING: false,
@@ -55,7 +67,10 @@ function getActiveUnderlyings() {
   return CONFIG.UNDERLYINGS.filter((u) => CONFIG.SELECTED_INSTRUMENTS.includes(u.name));
 }
 
-// ΓöÇΓöÇΓöÇ STATE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── SESSION REFERENCE ────────────────────────────────────────────────
+let currentSession = null;
+
+// ─── STATE ────────────────────────────────────────────────────────────
 let isRunning = false;
 let pollInterval = null;
 let activeAlerts = new Map();
@@ -66,7 +81,9 @@ let lastTradeDate = null;
 let latestData = {};
 let processedSignals = new Set();
 let indiaVIX = 0;
+let marketStatus = "CLOSED";
 let dailyPnL = 0;
+let dailyRealizedPnL = 0;
 let consecutiveLosses = 0;
 let auditLog = [];
 
@@ -86,6 +103,7 @@ function saveState() {
           lastTradeDate,
           processedSignals: Array.from(processedSignals),
           dailyPnL,
+          dailyRealizedPnL,
           consecutiveLosses,
         },
         null,
@@ -101,11 +119,18 @@ function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
       const s = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-      openPositions = s.openPositions || [];
+      openPositions = (s.openPositions || []).map((p) => ({
+        ...p,
+        avgFillPrice: p.avgFillPrice ?? p.entryPrice ?? 0,
+        unrealizedPnl: p.unrealizedPnl ?? 0,
+        realizedPnl: p.realizedPnl ?? 0,
+        exitPrice: p.exitPrice ?? 0,
+      }));
       todayTrades = s.todayTrades || 0;
       lastTradeDate = s.lastTradeDate || null;
       processedSignals = new Set(s.processedSignals || []);
       dailyPnL = s.dailyPnL || 0;
+      dailyRealizedPnL = s.dailyRealizedPnL || 0;
       consecutiveLosses = s.consecutiveLosses || 0;
     }
   } catch (err) {
@@ -115,7 +140,7 @@ function loadState() {
 
 loadState();
 
-// ΓöÇΓöÇΓöÇ AUDIT LOGGING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── AUDIT LOGGING ────────────────────────────────────────────────────
 function logAudit(event) {
   const entry = { timestamp: new Date().toISOString(), ...event };
   auditLog.push(entry);
@@ -126,7 +151,7 @@ function logAudit(event) {
   }
 }
 
-// ΓöÇΓöÇΓöÇ FYERS API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── FYERS API ────────────────────────────────────────────────────────
 const FYERS_APP_ID = process.env.FYERS_APP_ID;
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 const FYERS_DATA_BASE = "https://api-t1.fyers.in/data";
@@ -151,7 +176,7 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
   return data;
 }
 
-// ΓöÇΓöÇΓöÇ RISK MANAGEMENT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── RISK MANAGEMENT ──────────────────────────────────────────────────
 async function fetchAvailableFunds(session) {
   try {
     const data = await fyersApiCall("/funds", session.accessToken, FYERS_APP_ID);
@@ -250,179 +275,315 @@ function checkCorrelationFilter(underlyingName) {
 
 async function checkLiquidity(optionSymbol, session) {
   try {
+    const quote = await fetchOptionQuote(optionSymbol, session);
+    if (!quote) return { pass: false, reason: "NO_QUOTE" };
+    const oi = quote.oi || 0;
+    if (!quote.bid || !quote.ask || quote.lp <= 0) {
+      return { pass: false, reason: "INVALID_QUOTE", quote };
+    }
+    const spread = ((quote.ask - quote.bid) / quote.lp) * 100;
+    if (oi < CONFIG.MIN_OI) {
+      logAudit({ type: "FILTER_BLOCKED", reason: "LOW_OI", optionSymbol, oi, minOI: CONFIG.MIN_OI });
+      return { pass: false, reason: "LOW_OI", quote };
+    }
+    if (spread > CONFIG.MAX_SPREAD_PCT) {
+      logAudit({ type: "FILTER_BLOCKED", reason: "HIGH_SPREAD", optionSymbol, spread });
+      return { pass: false, reason: "HIGH_SPREAD", quote };
+    }
+    return { pass: true, oi, spread, quote };
+  } catch (err) {
+    return { pass: false, reason: "ERROR", error: err.message };
+  }
+}
+
+async function fetchOptionQuote(optionSymbol, session) {
+  try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(optionSymbol)}`;
     const response = await fetch(url, {
       headers: { Authorization: `${FYERS_APP_ID}:${session.accessToken}` },
     });
     const data = await response.json();
-    const quote = data.d?.[0]?.v;
-    if (!quote) return { pass: false, reason: "NO_QUOTE" };
-    const oi = quote.oi || 0;
-    if (!quote.bid || !quote.ask || quote.lp <= 0) {
-      return { pass: false, reason: "INVALID_QUOTE" };
-    }
-    const spread = ((quote.ask - quote.bid) / quote.lp) * 100;
-    if (oi < CONFIG.MIN_OI) {
-      logAudit({ type: "FILTER_BLOCKED", reason: "LOW_OI", optionSymbol, oi, minOI: CONFIG.MIN_OI });
-      return { pass: false, reason: "LOW_OI" };
-    }
-    if (spread > CONFIG.MAX_SPREAD_PCT) {
-      logAudit({ type: "FILTER_BLOCKED", reason: "HIGH_SPREAD", optionSymbol, spread });
-      return { pass: false, reason: "HIGH_SPREAD" };
-    }
-    return { pass: true, oi, spread };
+    return data.d?.[0]?.v || null;
   } catch (err) {
-    return { pass: false, reason: "ERROR" };
+    console.error(`[AUTO-TRADER] Quote fetch failed for ${optionSymbol}:`, err.message);
+    return null;
   }
 }
 
-// ΓöÇΓöÇΓöÇ ORDER EXECUTION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-async function placeLimitOrder(signal, optionSymbol, qty, session) {
-  const bufferMultiplier = signal.type === "LONG" ? 1 : -1;
-  const bufferPrice = signal.entryPrice * (1 + bufferMultiplier * CONFIG.LIMIT_BUFFER_PCT / 100);
-  const limitPrice =
-    signal.type === "LONG"
-      ? Math.ceil(bufferPrice * 100) / 100
-      : Math.floor(bufferPrice * 100) / 100;
-  const orderBody = {
+// ─── OPTION PRICE DERIVATION ──────────────────────────────────────────
+function computeEntryLimitPrice(quote) {
+  const base = quote.ask || quote.lp || 0;
+  if (base <= 0) return 0;
+  return Math.ceil(base * (1 + CONFIG.LIMIT_BUFFER_PCT / 100) * 100) / 100;
+}
+
+function computeOptionSLAndTarget(avgFillPrice, signal) {
+  const slPct = Math.abs(signal.entryPrice - signal.stopLoss) / signal.entryPrice;
+  const targetPct = Math.abs(signal.target - signal.entryPrice) / signal.entryPrice;
+  const delta = CONFIG.OPTION_DELTA_ESTIMATE;
+  const optionSL = Math.max(0.05, avgFillPrice * (1 - slPct * delta));
+  const optionTarget = avgFillPrice * (1 + targetPct * delta);
+  return {
+    optionSL: Math.round(optionSL * 100) / 100,
+    optionTarget: Math.round(optionTarget * 100) / 100,
+  };
+}
+
+// ─── ORDER EXECUTION ──────────────────────────────────────────────────
+async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote) {
+  const entryLimitPrice = computeEntryLimitPrice(entryQuote);
+  if (entryLimitPrice <= 0) {
+    throw new Error("Could not compute valid entry limit price");
+  }
+
+  const entryOrder = await placeLimitEntry({
     symbol: optionSymbol,
     qty,
-    side: signal.type === "LONG" ? 1 : -1,
-    type: 1,
-    productType: "INTRADAY",
-    limitPrice,
-    stopPrice: 0,
-    disclosedQty: 0,
-    validity: "DAY",
-    offlineOrder: false,
-    stopLoss: 0,
-    takeProfit: 0,
-  };
-  if (CONFIG.PAPER_TRADING) {
-    console.log(`[AUTO-TRADER] PAPER TRADE: ${optionSymbol} @ ${limitPrice}`);
-    logAudit({ type: "PAPER_ORDER", optionSymbol, qty, limitPrice, signal });
-    return { orderId: `PAPER-${Date.now()}`, status: "PLACED" };
-  }
-  const response = await fyersApiCall(
-    "/orders/async",
-    session.accessToken,
-    FYERS_APP_ID,
-    orderBody,
-    "POST"
-  );
-  logAudit({ type: "ORDER_PLACED", orderId: response.id, optionSymbol, qty, limitPrice, side: signal.type });
-  return { orderId: response.id, status: "PLACED", limitPrice };
-}
+    limitPrice: entryLimitPrice,
+    session,
+    paperTrading: CONFIG.PAPER_TRADING,
+    auditLogger: logAudit,
+  });
 
-async function validateOrder(orderId, session) {
-  try {
-    const data = await fyersApiCall(`/orders/${orderId}`, session.accessToken, FYERS_APP_ID);
-    return {
-      valid: true,
-      status: data.data?.status || "UNKNOWN",
-      filledQty: data.data?.filledQty || 0,
-    };
-  } catch (err) {
-    console.error("[AUTO-TRADER] Order validation failed:", err.message);
-    return { valid: false };
-  }
-}
+  const fill = await waitForFill(entryOrder.orderId, session, {
+    timeoutMs: CONFIG.ORDER_FILL_TIMEOUT_MS,
+    pollMs: CONFIG.ORDER_POLL_INTERVAL_MS,
+    paperTrading: CONFIG.PAPER_TRADING,
+    paperFillPrice: entryLimitPrice,
+    auditLogger: logAudit,
+  });
 
-// ΓöÇΓöÇΓöÇ POSITION MANAGEMENT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-async function exitPosition(position, session, reason) {
-  try {
-    if (CONFIG.PAPER_TRADING) {
-      console.log(`[AUTO-TRADER] PAPER EXIT: ${position.optionSymbol}`);
-      position.status = "CLOSED";
-      position.exitTime = new Date().toISOString();
-      position.exitReason = reason;
-      saveState();
-      return;
+  const filledQty = CONFIG.PAPER_TRADING ? qty : fill.filledQty;
+  if (fill.status === "REJECTED" || fill.status === "CANCELLED" || filledQty <= 0) {
+    logAudit({ type: "ENTRY_FAILED", orderId: entryOrder.orderId, status: fill.status, symbol: optionSymbol });
+    return null;
+  }
+
+  // If partially filled then timed out, accept the filled quantity and let the
+  // remaining pending qty expire on its own.
+  if (fill.status === "PARTIAL") {
+    try {
+      await cancelOrder(entryOrder.orderId, session, logAudit);
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Could not cancel remaining entry order ${entryOrder.orderId}:`, err.message);
     }
-    const exitSide = position.signal.type === "LONG" ? -1 : 1;
-    const orderBody = {
-      symbol: position.optionSymbol,
-      qty: position.quantity,
-      side: exitSide,
-      type: 2,
-      productType: "INTRADAY",
-      limitPrice: 0,
-      stopPrice: 0,
-      disclosedQty: 0,
-      validity: "DAY",
-      offlineOrder: false,
-      stopLoss: 0,
-      takeProfit: 0,
-    };
-    const response = await fyersApiCall(
-      "/orders/async",
-      session.accessToken,
-      FYERS_APP_ID,
-      orderBody,
-      "POST"
-    );
-    position.status = "CLOSED";
-    position.exitTime = new Date().toISOString();
-    position.exitReason = reason;
-    position.exitOrderId = response.id;
-    logAudit({
-      type: "POSITION_CLOSED",
-      orderId: position.id,
-      optionSymbol: position.optionSymbol,
-      reason,
-      pnl: position.pnl,
-    });
-    console.log(
-      `[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: Γé╣${position.pnl.toFixed(2)} | ${reason}`
-    );
-    saveState();
-  } catch (error) {
-    console.error("[AUTO-TRADER] Exit failed:", error.message);
-    logAudit({ type: "EXIT_FAILED", optionSymbol: position.optionSymbol, error: error.message });
   }
+
+  const avgFillPrice = fill.avgFillPrice || entryLimitPrice;
+  const { optionSL, optionTarget } = computeOptionSLAndTarget(avgFillPrice, tradeSignal);
+
+  let slOrderId = null;
+  if (!CONFIG.PAPER_TRADING) {
+    const slOrder = await placeStopLossOrder({
+      symbol: optionSymbol,
+      qty: filledQty,
+      stopPrice: optionSL,
+      session,
+      paperTrading: false,
+      auditLogger: logAudit,
+    });
+    slOrderId = slOrder.orderId;
+  }
+
+  const position = {
+    id: entryOrder.orderId,
+    entryOrderId: entryOrder.orderId,
+    slOrderId,
+    optionSymbol,
+    quantity: filledQty,
+    avgFillPrice,
+    entryPrice: tradeSignal.entryPrice,
+    stopLoss: optionSL,
+    target: optionTarget,
+    currentSL: optionSL,
+    unrealizedPnl: 0,
+    realizedPnl: 0,
+    pnl: 0,
+    status: "OPEN",
+    entryTime: new Date().toISOString(),
+    signal: tradeSignal,
+    underlying: tradeSignal.underlying,
+  };
+
+  openPositions.push(position);
+  todayTrades++;
+  recalcDailyPnL();
+  saveState();
+
+  logAudit({
+    type: "POSITION_OPENED",
+    strategy: tradeSignal.strategy,
+    orderId: entryOrder.orderId,
+    slOrderId,
+    optionSymbol,
+    qty: filledQty,
+    avgFillPrice,
+    entryLimitPrice,
+    optionSL,
+    optionTarget,
+    underlying: tradeSignal.underlying,
+  });
+
+  console.log(
+    `[AUTO-TRADER] POSITION [${tradeSignal.strategy}]: ${optionSymbol} Qty:${filledQty} AvgFill:₹${avgFillPrice.toFixed(2)} SL:₹${optionSL.toFixed(2)} T:₹${optionTarget.toFixed(2)}`
+  );
+
+  return position;
+}
+
+// ─── POSITION MANAGEMENT ──────────────────────────────────────────────
+async function closePosition(position, session, reason) {
+  if (position.status !== "OPEN") return;
+
+  const currentLTP = position.currentLTP || position.avgFillPrice;
+  const paperFillPrice = reason === "TARGET" ? position.target : currentLTP;
+
+  if (position.slOrderId) {
+    try {
+      await cancelOrder(position.slOrderId, session, logAudit);
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Could not cancel SL order ${position.slOrderId}:`, err.message);
+    }
+  }
+
+  const exitOrder = await placeMarketExit({
+    symbol: position.optionSymbol,
+    qty: position.quantity,
+    session,
+    paperTrading: CONFIG.PAPER_TRADING,
+    paperFillPrice,
+    auditLogger: logAudit,
+  });
+
+  const fill = await waitForFill(exitOrder.orderId, session, {
+    timeoutMs: CONFIG.ORDER_FILL_TIMEOUT_MS,
+    pollMs: CONFIG.ORDER_POLL_INTERVAL_MS,
+    paperTrading: CONFIG.PAPER_TRADING,
+    paperFillPrice,
+    auditLogger: logAudit,
+  });
+
+  const exitQty = CONFIG.PAPER_TRADING ? position.quantity : fill.filledQty;
+  const exitPrice = fill.avgFillPrice || paperFillPrice;
+
+  position.status = "CLOSED";
+  position.exitTime = new Date().toISOString();
+  position.exitReason = reason;
+  position.exitOrderId = exitOrder.orderId;
+  position.exitPrice = exitPrice;
+  position.quantity = exitQty;
+
+  const pnl = (exitPrice - position.avgFillPrice) * exitQty;
+  position.realizedPnl = pnl;
+  position.pnl = pnl;
+  dailyRealizedPnL += pnl;
+
+  if (pnl < 0) {
+    consecutiveLosses++;
+  } else {
+    consecutiveLosses = 0;
+  }
+
+  recalcDailyPnL();
+  saveState();
+
+  logAudit({
+    type: "POSITION_CLOSED",
+    orderId: position.id,
+    exitOrderId: exitOrder.orderId,
+    optionSymbol: position.optionSymbol,
+    reason,
+    avgFillPrice: position.avgFillPrice,
+    exitPrice,
+    qty: exitQty,
+    pnl,
+  });
+
+  console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)} | ${reason}`);
+}
+
+async function reconcileStopLossOrders(session) {
+  for (const position of openPositions) {
+    if (position.status !== "OPEN" || !position.slOrderId) continue;
+    try {
+      const details = await getOrderDetails(position.slOrderId, session);
+      if (details.status === "FILLED") {
+        const exitPrice = details.avgFillPrice || position.stopLoss;
+        position.status = "CLOSED";
+        position.exitTime = new Date().toISOString();
+        position.exitReason = "STOPLOSS";
+        position.exitOrderId = position.slOrderId;
+        position.exitPrice = exitPrice;
+        const pnl = (exitPrice - position.avgFillPrice) * position.quantity;
+        position.realizedPnl = pnl;
+        position.pnl = pnl;
+        dailyRealizedPnL += pnl;
+        consecutiveLosses = pnl < 0 ? consecutiveLosses + 1 : 0;
+        recalcDailyPnL();
+        saveState();
+        logAudit({
+          type: "POSITION_CLOSED",
+          orderId: position.id,
+          exitOrderId: position.slOrderId,
+          optionSymbol: position.optionSymbol,
+          reason: "STOPLOSS",
+          exitPrice,
+          qty: position.quantity,
+          pnl,
+        });
+        console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)}`);
+      } else if (details.status === "REJECTED" || details.status === "CANCELLED") {
+        // SL order is gone — protect the position immediately with a market exit.
+        console.error(`[AUTO-TRADER] SL order ${position.slOrderId} ${details.status}; flattening ${position.optionSymbol}`);
+        await closePosition(position, session, "SL_ORDER_FAILED");
+      }
+    } catch (err) {
+      console.error(`[AUTO-TRADER] SL reconcile error for ${position.optionSymbol}:`, err.message);
+    }
+  }
+}
+
+function recalcDailyPnL() {
+  const unrealized = openPositions
+    .filter((p) => p.status === "OPEN")
+    .reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
+  dailyPnL = dailyRealizedPnL + unrealized;
 }
 
 async function monitorPositions(session) {
   if (openPositions.length === 0) return;
+
   for (const position of openPositions) {
     if (position.status !== "OPEN") continue;
     try {
-      const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(position.optionSymbol)}`;
-      const response = await fetch(url, {
-        headers: { Authorization: `${FYERS_APP_ID}:${session.accessToken}` },
-      });
-      const data = await response.json();
-      const ltp = data.d?.[0]?.v?.lp || 0;
+      const quote = await fetchOptionQuote(position.optionSymbol, session);
+      const ltp = quote?.lp || 0;
       if (ltp <= 0) continue;
-      const isLong = position.signal.type === "LONG";
-      const pnl = isLong
-        ? (ltp - position.entryPrice) * position.quantity
-        : (position.entryPrice - ltp) * position.quantity;
-      position.pnl = pnl;
+
       position.currentLTP = ltp;
-      dailyPnL += pnl - (position.lastPnl || 0);
-      position.lastPnl = pnl;
-      if (pnl < 0 && position.pnl >= 0) {
-        consecutiveLosses++;
-        saveState();
-      }
-      const targetHit = isLong ? ltp >= position.target : ltp <= position.target;
-      const slHit = isLong ? ltp <= position.stopLoss : ltp >= position.stopLoss;
-      if (targetHit) {
-        await exitPosition(position, session, "TARGET");
-      } else if (slHit) {
-        consecutiveLosses++;
-        await exitPosition(position, session, "STOPLOSS");
+      position.unrealizedPnl = (ltp - position.avgFillPrice) * position.quantity;
+
+      // In paper mode we also monitor the stop-loss ourselves.
+      const paperSLHit = CONFIG.PAPER_TRADING && ltp <= position.stopLoss;
+      const targetHit = ltp >= position.target;
+
+      if (paperSLHit) {
+        await closePosition(position, session, "STOPLOSS");
+      } else if (targetHit) {
+        await closePosition(position, session, "TARGET");
       } else if (isSquareOffTime()) {
-        await exitPosition(position, session, "SQUARE_OFF");
+        await closePosition(position, session, "SQUARE_OFF");
       }
     } catch (error) {
       console.error(`[AUTO-TRADER] Monitor error:`, error.message);
     }
   }
+
+  await reconcileStopLossOrders(session);
+  recalcDailyPnL();
 }
 
-// ΓöÇΓöÇΓöÇ MAIN TRADING LOGIC ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── MAIN TRADING LOGIC ───────────────────────────────────────────────
 function canTakeTrade(underlyingName) {
   if (CONFIG.EMERGENCY_STOP) {
     console.log("[AUTO-TRADER] EMERGENCY STOP ACTIVE");
@@ -528,47 +689,11 @@ async function processCandles(underlying, session) {
         underlyingSymbol: underlying.symbol,
       };
       try {
-        const orderResult = await placeLimitOrder(tradeSignal, optionSymbol, qty, session);
-        await new Promise((r) => setTimeout(r, 2000));
-        const validation = await validateOrder(orderResult.orderId, session);
-        if (!validation.valid || validation.status === "REJECTED") {
-          console.log(`[AUTO-TRADER] Order rejected: ${orderResult.orderId}`);
-          logAudit({ type: "ORDER_REJECTED", orderId: orderResult.orderId, validation });
+        const position = await openPosition(tradeSignal, optionSymbol, qty, session, liquidity.quote);
+        if (!position) {
           activeAlerts.delete(`${underlying.name}:${strategy}`);
           continue;
         }
-        const position = {
-          id: orderResult.orderId,
-          signal: tradeSignal,
-          status: "OPEN",
-          entryTime: new Date().toISOString(),
-          orderId: orderResult.orderId,
-          optionSymbol,
-          quantity: qty,
-          entryPrice: signal.entryPrice,
-          stopLoss: signal.stopLoss,
-          target: signal.target,
-          currentSL: signal.stopLoss,
-          pnl: 0,
-          lastPnl: 0,
-          underlying: underlying.name,
-        };
-        openPositions.push(position);
-        todayTrades++;
-        saveState();
-        logAudit({
-          type: "POSITION_OPENED",
-          strategy,
-          orderId: orderResult.orderId,
-          optionSymbol,
-          qty,
-          entryPrice: signal.entryPrice,
-          sl: signal.stopLoss,
-          target: signal.target,
-        });
-        console.log(
-          `[AUTO-TRADER] ORDER [${strategy}]: ${optionSymbol} Qty:${qty} @ ${signal.entryPrice} SL:${signal.stopLoss} T:${signal.target}`
-        );
       } catch (orderError) {
         console.error(`[AUTO-TRADER] Order failed:`, orderError.message);
         logAudit({ type: "ORDER_FAILED", error: orderError.message, signal: tradeSignal });
@@ -580,7 +705,7 @@ async function processCandles(underlying, session) {
   }
 }
 
-// ΓöÇΓöÇΓöÇ DATA FETCHING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── DATA FETCHING ────────────────────────────────────────────────────
 async function fetchLatestCandles(symbol, accessToken, appId) {
   const now = Math.floor(Date.now() / 1000);
   const from = now - 3600;
@@ -620,6 +745,7 @@ async function tradingLoop(session) {
     todayTrades = 0;
     lastTradeDate = today;
     dailyPnL = 0;
+    dailyRealizedPnL = 0;
     consecutiveLosses = 0;
     activeAlerts.clear();
     openPositions = openPositions.filter((p) => p.status !== "CLOSED");
@@ -637,7 +763,7 @@ async function tradingLoop(session) {
     marketStatus = "CLOSED";
     console.log(`[AUTO-TRADER] Market closed IST (${timeStr})`);
     for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
-      await exitPosition(pos, session, "MARKET_CLOSE");
+      await closePosition(pos, session, "MARKET_CLOSE");
     }
     pollInterval = setTimeout(() => tradingLoop(session), 60000);
     return;
@@ -653,16 +779,17 @@ async function tradingLoop(session) {
   }
 }
 
-// ΓöÇΓöÇΓöÇ PUBLIC API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── PUBLIC API ───────────────────────────────────────────────────────
 export async function startAutoTrader(sessionId) {
   if (isRunning) return { status: "ALREADY_RUNNING" };
   const { getSession } = await import("../routes/auth.js");
   const session = getSession(sessionId);
   if (!session) throw new Error("Invalid or expired session");
+  currentSession = session;
   const actualCapital = await fetchAvailableFunds(session);
   if (actualCapital > 0) {
     CONFIG.CAPITAL = actualCapital;
-    console.log(`[AUTO-TRADER] Capital: Γé╣${CONFIG.CAPITAL.toFixed(2)}`);
+    console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
   }
   try {
     const positions = await fyersApiCall("/positions", session.accessToken, FYERS_APP_ID);
@@ -677,6 +804,7 @@ export async function startAutoTrader(sessionId) {
   todayTrades = 0;
   lastTradeDate = new Date().toDateString();
   dailyPnL = 0;
+  dailyRealizedPnL = 0;
   consecutiveLosses = 0;
   tradingLoop(session);
   return {
@@ -706,6 +834,23 @@ export function stopAutoTrader() {
   return { status: "STOPPED", openPositions: openCount, stoppedAt: new Date().toISOString() };
 }
 
+async function flattenAllPositions(reason = "EMERGENCY") {
+  if (!currentSession) {
+    console.log("[AUTO-TRADER] No active session to flatten positions");
+    return;
+  }
+  const open = openPositions.filter((p) => p.status === "OPEN");
+  if (open.length === 0) return;
+  console.log(`[AUTO-TRADER] Flattening ${open.length} position(s) due to ${reason}`);
+  for (const position of open) {
+    try {
+      await closePosition(position, currentSession, reason);
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Flatten failed for ${position.optionSymbol}:`, err.message);
+    }
+  }
+}
+
 export function emergencyStop() {
   CONFIG.EMERGENCY_STOP = true;
   isRunning = false;
@@ -713,6 +858,9 @@ export function emergencyStop() {
     clearTimeout(pollInterval);
     pollInterval = null;
   }
+  flattenAllPositions("EMERGENCY_STOP").catch((err) =>
+    console.error("[AUTO-TRADER] Emergency flatten failed:", err.message)
+  );
   console.log("[AUTO-TRADER] EMERGENCY STOP ACTIVATED");
   logAudit({ type: "EMERGENCY_STOP", timestamp: new Date().toISOString() });
   return { status: "EMERGENCY_STOPPED", openPositions: openPositions.filter((p) => p.status === "OPEN").length };

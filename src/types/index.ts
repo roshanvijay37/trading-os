@@ -87,14 +87,27 @@ export interface MarketStatus {
 // Bot types
 export interface BotPosition {
   id: string;
+  entryOrderId?: string;
+  slOrderId?: string | null;
+  exitOrderId?: string;
   optionSymbol: string;
   quantity: number;
   entryPrice: number;
+  avgFillPrice?: number;
+  currentLTP?: number;
   currentSL: number;
-  target: number;
+  target?: number;
+  stopLoss?: number;
   pnl: number;
+  unrealizedPnl?: number;
+  realizedPnl?: number;
   status: string;
   underlying: string;
+  entryTime?: string;
+  exitTime?: string;
+  exitPrice?: number;
+  exitReason?: string;
+  signal?: any;
 }
 
 export interface BotSignal {

@@ -430,7 +430,7 @@ export function AutoTrade() {
                     </div>
                     <div className="flex items-center gap-4 text-2xs text-zinc-500">
                       <span>Qty: {pos.quantity}</span>
-                      <span>Entry: ₹{pos.entryPrice}</span>
+                      <span>Avg Fill: ₹{pos.avgFillPrice ?? pos.entryPrice}</span>
                       <span>SL: ₹{pos.currentSL}</span>
                       <span className={`font-medium ${pos.pnl >= 0 ? "text-gain" : "text-loss"}`}>
                         {pos.pnl >= 0 ? "+" : ""}₹{pos.pnl.toFixed(2)}
