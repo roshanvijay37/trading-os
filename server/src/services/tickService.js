@@ -12,6 +12,9 @@ import WebSocket from "ws";
 const MAX_TICKS_PER_SYMBOL = 100000;
 const FYERS_WS_URL = "wss://socket.fyers.in";
 const RECONNECT_DELAY_MS = 5000;
+const MAX_RECONNECT_DELAY_MS = 60000;
+const MAX_RECONNECT_ATTEMPTS = 10;
+let reconnectAttempts = 0;
 
 // ─── In-Memory Storage ────────────────────────────────────────────
 const tickStore = {};
@@ -63,12 +66,25 @@ export function connectFyersWebSocket(accessToken, appId) {
   const safeUrl = url.substring(0, colonIdx + 3) + '***' + url.substring(url.length - 5);
   console.log("[TICK-SERVICE] Connecting to:", safeUrl);
 
+  // Tear down any previous socket before creating a new one so old listeners/handles don't
+  // leak and a stale socket's close event can't trigger a spurious extra reconnect.
+  if (wsConnection) {
+    try {
+      wsConnection.removeAllListeners();
+      wsConnection.terminate();
+    } catch {
+      // ignore
+    }
+    wsConnection = null;
+  }
+
   try {
     wsConnection = new WebSocket(url);
 
     wsConnection.on("open", () => {
       console.log("[TICK-SERVICE] WebSocket connected");
       isConnected = true;
+      reconnectAttempts = 0; // successful connection resets backoff
       
       // Subscribe to NIFTY and BANKNIFTY using FYERS v2 format
       const subscribeMsg = {
@@ -131,7 +147,6 @@ function handleFyersMessage(msg) {
     ltp: msg.ltp || msg.lt || 0,
     volume: msg.vol || msg.v || 0,
     timestamp: Date.now(),
-    raw: msg,
   };
 
   // Store tick
@@ -160,8 +175,14 @@ function storeTick(symbol, tick) {
 
 // ─── Heartbeat ────────────────────────────────────────────────────
 function startHeartbeat() {
+  // Clear any prior interval first so a reconnect can't leave an orphaned heartbeat
+  // sending pings on a dead socket.
+  stopHeartbeat();
   heartbeatTimer = setInterval(() => {
     if (wsConnection?.readyState === WebSocket.OPEN) {
+      // TODO(verify): confirm FYERS v3 WS keep-alive expects this JSON {method:"ping"}
+      // message vs a protocol-level ping frame (wsConnection.ping()). If idle disconnects
+      // are observed, switch to wsConnection.ping().
       wsConnection.send(JSON.stringify({ method: "ping" }));
     }
   }, 30000); // Every 30 seconds
@@ -177,12 +198,23 @@ function stopHeartbeat() {
 // ─── Reconnect Logic ──────────────────────────────────────────────
 function scheduleReconnect(accessToken, appId) {
   if (reconnectTimer) return;
-  
-  console.log(`[TICK-SERVICE] Reconnecting in ${RECONNECT_DELAY_MS}ms...`);
+
+  // Exponential backoff with a cap, and give up after MAX_RECONNECT_ATTEMPTS so a dead/
+  // expired token can't drive an infinite fixed-interval reconnect storm against FYERS.
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.error(
+      `[TICK-SERVICE] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached; giving up. Call connect again with a fresh token.`
+    );
+    return;
+  }
+  const delay = Math.min(RECONNECT_DELAY_MS * 2 ** reconnectAttempts, MAX_RECONNECT_DELAY_MS);
+  reconnectAttempts++;
+
+  console.log(`[TICK-SERVICE] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connectFyersWebSocket(accessToken, appId);
-  }, RECONNECT_DELAY_MS);
+  }, delay);
 }
 
 // ─── Disconnect ───────────────────────────────────────────────────
@@ -192,7 +224,9 @@ export function disconnectFyersWebSocket() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  reconnectAttempts = 0; // fresh slate for the next explicit connect
   if (wsConnection) {
+    wsConnection.removeAllListeners();
     wsConnection.close();
     wsConnection = null;
   }
@@ -356,12 +390,19 @@ export function getDayStats(symbol) {
   const ticks = tickStore[symbol] || [];
   if (ticks.length === 0) return null;
 
-  const ltps = ticks.map((t) => t.ltp);
+  // Reduce instead of Math.max(...ltps): spreading up to MAX_TICKS_PER_SYMBOL (100k) args
+  // can blow the call-stack / argument limit and throw RangeError.
+  let dayHigh = -Infinity;
+  let dayLow = Infinity;
+  for (const t of ticks) {
+    if (t.ltp > dayHigh) dayHigh = t.ltp;
+    if (t.ltp < dayLow) dayLow = t.ltp;
+  }
   return {
     symbol,
     currentPrice: latestTick[symbol]?.ltp || 0,
-    dayHigh: Math.max(...ltps),
-    dayLow: Math.min(...ltps),
+    dayHigh,
+    dayLow,
     tickCount: ticks.length,
     firstTickTime: ticks[0]?.timestamp,
     lastTickTime: ticks[ticks.length - 1]?.timestamp,
@@ -396,6 +437,11 @@ export function unsubscribeFromSymbols(symbols) {
   for (const symbol of symbols) {
     if (subscribedSymbols.has(symbol) && !SYMBOL_MAP[symbol]) {
       subscribedSymbols.delete(symbol);
+      // Reclaim the per-symbol tick buffer and latest-tick entry. Without this, every
+      // symbol ever subscribed leaks up to MAX_TICKS_PER_SYMBOL tick objects forever.
+      const shortName = normalizeSymbol(symbol);
+      delete tickStore[shortName];
+      delete latestTick[shortName];
       removed = true;
     }
   }

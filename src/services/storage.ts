@@ -22,7 +22,13 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 function writeJson<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    // Quota exceeded or private-mode storage disabled — don't let a persistence failure
+    // crash the caller (e.g. saving settings/trades).
+    console.error(`[storage] Failed to write ${key}:`, err);
+  }
 }
 
 export const storage = {

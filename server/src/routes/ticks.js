@@ -44,12 +44,19 @@ router.post("/disconnect", (req, res) => {
   res.json({ success: true, message: "WebSocket disconnected" });
 });
 
+// Parse a user-supplied limit into a sane bounded integer (guards NaN/negative/huge values).
+function parseLimit(raw, fallback, max) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(n, max);
+}
+
 // ─── Get Raw Tick History ─────────────────────────────────────────
 router.get("/history", (req, res) => {
   const { symbol = "NIFTY", limit = 5000 } = req.query;
-  
+
   try {
-    const ticks = getTicks(symbol, parseInt(limit));
+    const ticks = getTicks(symbol, parseLimit(limit, 5000, 50000));
     res.json({
       success: true,
       symbol,
@@ -66,11 +73,12 @@ router.get("/candles", async (req, res) => {
   const { symbol = "NIFTY", interval = "1m", limit = 500 } = req.query;
   
   try {
-    let candles = aggregateOHLC(symbol, interval, parseInt(limit));
-    
+    const safeLimit = parseLimit(limit, 500, 5000);
+    let candles = aggregateOHLC(symbol, interval, safeLimit);
+
     // If no local ticks, fetch from FYERS history API
     if (candles.length === 0) {
-      candles = await fetchHistoricalCandles(symbol, interval, parseInt(limit));
+      candles = await fetchHistoricalCandles(symbol, interval, safeLimit);
     }
     
     res.json({
@@ -103,8 +111,16 @@ async function fetchHistoricalCandles(symbol, interval, limit) {
   
   const response = await fetch(url, {
     headers: { Authorization: `${process.env.FYERS_APP_ID}:${session.accessToken}` },
+    signal: AbortSignal.timeout(10000),
   });
-  
+
+  if (!response.ok) {
+    // Surface FYERS auth/API failures instead of silently returning an empty candle set.
+    const text = await response.text().catch(() => "");
+    console.error(`[TICKS] History API ${response.status}: ${text.slice(0, 200)}`);
+    throw new Error(`FYERS history API error ${response.status}`);
+  }
+
   const data = await response.json();
   if (!data.candles || data.candles.length === 0) return [];
   

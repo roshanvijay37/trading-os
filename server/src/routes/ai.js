@@ -9,6 +9,28 @@ import { Router } from "express";
 
 const router = Router();
 
+// TODO(security): These /api/ai/* routes are currently UNAUTHENTICATED and have NO rate
+// limiting. They proxy to a paid Kimi/Moonshot LLM using the server's KIMI_API_KEY, so an
+// unauthenticated caller can run up the bill (cost-DoS) and inject arbitrary prompts. Before
+// production, add requireAuth (mirror server/src/routes/orders.js) and an express-rate-limit
+// instance to this router. Left as a flagged TODO pending an auth-wiring decision so the
+// already-deployed frontend's AI calls are not broken.
+
+const LLM_TIMEOUT_MS = 30000;
+// Cap request body sizes injected into LLM prompts to bound token cost / prompt-injection.
+const MAX_INPUT_CHARS = 8000;
+
+function clampForPrompt(value) {
+  const str = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  return str.length > MAX_INPUT_CHARS ? str.slice(0, MAX_INPUT_CHARS) + "\n...[truncated]" : str;
+}
+
+const VALID_REGIMES = new Set([
+  "TRENDING_UP", "TRENDING_DOWN", "SIDEWAYS", "VOLATILE",
+  "LOW_VOLATILITY", "GAP_DAY", "EXPIRY_DAY", "EVENT_DAY", "UNKNOWN",
+]);
+const VALID_RISK_LEVELS = new Set(["LOW", "MEDIUM", "HIGH", "EXTREME"]);
+
 const KIMI_BASE_URL = process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1";
 const KIMI_MODEL = process.env.KIMI_MODEL || "moonshot-v1-8k";
 
@@ -42,6 +64,8 @@ async function callKimi(systemPrompt, userMessage, temperature = 0.3) {
         { role: "user", content: userMessage },
       ],
     }),
+    // Bound the request so a slow/hung LLM can't hold the Express connection forever.
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -119,10 +143,10 @@ router.post("/cio/query", async (req, res) => {
     }
 
     const contextStr = context
-      ? `\n\nCurrent Context:\n${JSON.stringify(context, null, 2)}`
+      ? `\n\nCurrent Context:\n${clampForPrompt(context)}`
       : "";
 
-    const userMessage = `Question: ${question}${contextStr}`;
+    const userMessage = `Question: ${clampForPrompt(question)}${contextStr}`;
 
     const answer = await callKimi(CIO_SYSTEM_PROMPT, userMessage, 0.4);
 
@@ -155,7 +179,7 @@ router.post("/cio/regime", async (req, res) => {
       return res.status(400).json({ error: "marketData is required" });
     }
 
-    const userMessage = `Analyze this market data and determine the regime:\n\n${JSON.stringify(marketData, null, 2)}`;
+    const userMessage = `Analyze this market data and determine the regime:\n\n${clampForPrompt(marketData)}`;
 
     const answer = await callKimi(REGIME_SYSTEM_PROMPT, userMessage, 0.2);
 
@@ -174,6 +198,13 @@ router.post("/cio/regime", async (req, res) => {
         riskLevel: "HIGH",
       };
     }
+
+    // Validate/normalize LLM output before it flows downstream — the model (or a crafted
+    // prompt) can return out-of-spec values that consumers would otherwise trust.
+    if (!VALID_REGIMES.has(parsed.regime)) parsed.regime = "UNKNOWN";
+    if (!VALID_RISK_LEVELS.has(parsed.riskLevel)) parsed.riskLevel = "HIGH";
+    const conf = Number(parsed.confidence);
+    parsed.confidence = Number.isFinite(conf) ? Math.min(1, Math.max(0, conf)) : 0;
 
     res.json({
       success: true,
@@ -202,7 +233,7 @@ router.post("/trade/review", async (req, res) => {
       return res.status(400).json({ error: "Trade data is required" });
     }
 
-    const userMessage = `Review this trade:\n\n${JSON.stringify(trade, null, 2)}`;
+    const userMessage = `Review this trade:\n\n${clampForPrompt(trade)}`;
 
     const answer = await callKimi(TRADE_REVIEW_SYSTEM_PROMPT, userMessage, 0.3);
 
@@ -248,6 +279,7 @@ router.get("/status", async (req, res) => {
         max_tokens: 1,
         messages: [{ role: "user", content: "hi" }],
       }),
+      signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
     });
 
     if (response.ok) {

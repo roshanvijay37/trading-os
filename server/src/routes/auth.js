@@ -74,11 +74,13 @@ router.post("/callback", async (req, res) => {
     return res.status(400).json({ error: "auth_code is required" });
   }
 
-  // Validate state if provided
-  // Note: In-memory state is lost on server restart. For production, use Redis or persistent storage.
-  // if (state && !stateStore.has(state)) {
-  //   return res.status(400).json({ error: "Invalid or expired state" });
-  // }
+  // TODO(security): OAuth state (CSRF) validation is disabled because the in-memory
+  // stateStore is lost on server restart, which would reject legitimate callbacks. Re-enable
+  // once state is persisted (e.g. Redis) so the callback is protected against CSRF /
+  // auth-code injection:
+  //   if (state && !stateStore.has(state)) {
+  //     return res.status(400).json({ error: "Invalid or expired state" });
+  //   }
 
   // Clear used state
   if (state) {
@@ -115,6 +117,11 @@ router.post("/callback", async (req, res) => {
       `${FYERS_API_BASE}/profile?client_id=${appId}&access_token=${access_token}`,
     );
     const profileData = await profileResponse.json();
+    if (!profileResponse.ok || profileData.s !== "ok") {
+      // Token was obtained but identity lookup failed — log it rather than silently creating
+      // a session with userId "unknown" (which corrupts downstream P&L/audit attribution).
+      console.warn(`[AUTH] Profile fetch failed (${profileResponse.status}) — session identity will be 'unknown'`);
+    }
 
     // Create session
     const sessionId = crypto.randomUUID();
@@ -211,18 +218,39 @@ router.post("/logout", (req, res) => {
   res.json({ success: true });
 });
 
+// Session lifetime. FYERS access tokens are valid for one trading day.
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+function isSessionExpired(session) {
+  const created = new Date(session.createdAt).getTime();
+  return !Number.isFinite(created) || Date.now() - created >= SESSION_TTL_MS;
+}
+
+// TODO(auth): A refresh_token is stored on the session but never used. FYERS v3 access
+// tokens expire daily; without a refresh path (POST {FYERS_API_BASE}/validate-refresh-token
+// with the refresh_token + appIdHash + PIN), every live action — including placing the
+// broker stop-loss for an open position — fails once the token expires, and the only
+// recovery is a manual re-login. Implement a refresh-and-retry-once wrapper before relying
+// on this unattended. (Requires the user's PIN, so confirm how it is supplied/stored.)
+
 // Helper to get session by ID (used by other routes like backtest)
 export function getSession(sessionId) {
   // First check in-memory
   let session = sessions.get(sessionId);
-  if (session) return session;
-  
-  // If not found, reload from disk (server may have restarted)
-  const freshSessions = loadSessions();
-  session = freshSessions.get(sessionId);
-  if (session) {
-    // Update in-memory cache
-    sessions.set(sessionId, session);
+  if (!session) {
+    // If not found, reload from disk (server may have restarted)
+    const freshSessions = loadSessions();
+    session = freshSessions.get(sessionId);
+    if (session) sessions.set(sessionId, session);
+  }
+  if (!session) return null;
+
+  // Enforce expiry on the validation path too (not just getAllSessions). Otherwise a stale
+  // 24h+ session keeps authorizing live orders until FYERS itself rejects the token.
+  if (isSessionExpired(session)) {
+    sessions.delete(sessionId);
+    saveSessions();
+    return null;
   }
   return session;
 }
@@ -253,12 +281,10 @@ export function requireAuth(req, res, next) {
   // Use getSession which reloads from disk if needed
   const session = getSession(sessionId);
   if (!session) {
-    console.log(`[AUTH] 401 - Session not found: ${sessionId.substring(0, 8)}...`);
-    console.log(`[AUTH] Available sessions: ${Array.from(sessions.keys()).map(k => k.substring(0, 8)).join(', ')}`);
+    // Avoid logging session-id prefixes or the full session-key list (account identifiers).
+    console.log("[AUTH] 401 - Invalid or expired session");
     return res.status(401).json({ error: "Invalid or expired session" });
   }
-
-  console.log(`[AUTH] Session validated: ${session.userId}`);
 
   // Attach FYERS config to request
   req.fyers = {

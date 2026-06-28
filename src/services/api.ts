@@ -5,7 +5,12 @@ function getSessionId(): string | null {
   return localStorage.getItem("fyersSessionId");
 }
 
-async function fetchWithAuth(path: string, options: RequestInit = {}) {
+const DEFAULT_TIMEOUT_MS = 20000;
+
+async function fetchWithAuth(
+  path: string,
+  options: RequestInit & { timeoutMs?: number } = {}
+) {
   const sessionId = getSessionId();
   const headers = new Headers(options.headers);
 
@@ -14,10 +19,27 @@ async function fetchWithAuth(path: string, options: RequestInit = {}) {
     headers.set("x-session-id", sessionId);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  // Abort hung requests so a slow/black-holed broker connection can't leave promises pending
+  // forever (polling loops would otherwise stack unresolved requests and freeze the UI).
+  const { timeoutMs, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs ?? DEFAULT_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...fetchOptions,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out: ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Unknown error" }));

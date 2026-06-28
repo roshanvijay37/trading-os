@@ -302,7 +302,10 @@ export function AutoTrade() {
                   min="0.1"
                   max="5"
                   value={configForm.riskPercent}
-                  onChange={(e) => setConfigForm({ ...configForm, riskPercent: parseFloat(e.target.value) })}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    setConfigForm({ ...configForm, riskPercent: Number.isFinite(n) ? n : 0 });
+                  }}
                   className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
                 />
               </div>
@@ -314,7 +317,10 @@ export function AutoTrade() {
                   min="1"
                   max="100"
                   value={configForm.fixedLots}
-                  onChange={(e) => setConfigForm({ ...configForm, fixedLots: parseInt(e.target.value) })}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value, 10);
+                    setConfigForm({ ...configForm, fixedLots: Number.isFinite(n) ? n : 1 });
+                  }}
                   className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
                 />
               </div>
@@ -326,7 +332,10 @@ export function AutoTrade() {
                 min="1"
                 max="100"
                 value={configForm.maxTradesPerDay}
-                onChange={(e) => setConfigForm({ ...configForm, maxTradesPerDay: parseInt(e.target.value) })}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setConfigForm({ ...configForm, maxTradesPerDay: Number.isFinite(n) ? n : 1 });
+                }}
                 className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
               />
             </div>
@@ -468,7 +477,7 @@ export function AutoTrade() {
                 <div>
                   <p className="text-2xs text-zinc-600">Daily P&L</p>
                   <p className={`font-mono text-base font-semibold ${parseFloat(status.dailyPnL || "0") >= 0 ? "text-gain" : "text-loss"}`}>
-                    ₹{status.dailyPnL || 0}
+                    ₹{parseFloat(status.dailyPnL || "0").toFixed(2)}
                   </p>
                 </div>
               </div>

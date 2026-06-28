@@ -11,6 +11,7 @@
  * 7. Square off by 3:15 PM
  */
 
+import { randomUUID } from "crypto";
 
 // Store candles in memory (in production, use Redis/DB)
 const candleStore = new Map();
@@ -24,7 +25,14 @@ const MAX_STORED_SIGNALS = 100;
  */
 export function calculateEMA(closes) {
   if (closes.length < 5) return null;
-  
+
+  // TODO(strategy-validation): This seeds the EMA with the first close and is fed exactly
+  // 5 closes (slice(-5)) at the call sites, whereas the backtest (src/lib/strategies/engine.ts
+  // and server/src/routes/backtest.js) seeds with an SMA over a longer warm-up. As a result
+  // the LIVE 5-EMA differs slightly from the BACKTESTED 5-EMA, so live alert/breakout signals
+  // can diverge from validated results. Aligning these requires confirming the intended EMA
+  // definition with the strategy owner before changing live signal generation — left as-is to
+  // avoid silently altering live entries.
   const multiplier = 2 / (5 + 1);
   let ema = closes[0];
   
@@ -153,11 +161,12 @@ export function detectBreakout(candles, alertCandle) {
  * @returns {boolean}
  */
 export function isValidTradingTime() {
+  // Compute IST explicitly from UTC. Using getHours()/getMinutes() relies on the server's
+  // local timezone — on a UTC production host that shifts the whole trading window by 5.5h.
   const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const timeDecimal = hours + minutes / 60;
-  
+  const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % (24 * 60);
+  const timeDecimal = istMinutes / 60;
+
   // Market hours: 9:15 AM to 3:30 PM IST
   // No new positions after 3:00 PM
   return timeDecimal >= 9.25 && timeDecimal < 15.0;
@@ -168,10 +177,13 @@ export function isValidTradingTime() {
  * @returns {boolean}
  */
 export function isSquareOffTime() {
+  // IST explicitly from UTC (see isValidTradingTime) — square-off at 15:15 IST must not
+  // drift with the server's local timezone.
   const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  
+  const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % (24 * 60);
+  const hours = Math.floor(istMinutes / 60);
+  const minutes = istMinutes % 60;
+
   return hours === 15 && minutes >= 15;
 }
 
@@ -216,7 +228,7 @@ export function getATMOption(underlying, spotPrice, type, optionChain) {
 export function storeSignal(signal) {
   signalStore.unshift({
     ...signal,
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     createdAt: new Date().toISOString(),
   });
   
