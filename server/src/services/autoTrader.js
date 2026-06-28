@@ -28,7 +28,14 @@ import {
 // Real-time tick data (WebSocket) — used as the primary candle/quote source with a
 // REST history fallback. These MUST be imported or every data fetch throws ReferenceError
 // (silently swallowed by the surrounding try/catch), leaving the engine permanently idle.
-import { aggregateOHLC, getLatestTick } from "./tickService.js";
+import {
+  aggregateOHLC,
+  getLatestTick,
+  connectFyersWebSocket,
+  subscribeToSymbols,
+  unsubscribeFromSymbols,
+  getWsStatus,
+} from "./tickService.js";
 
 import { isNseMarketOpen } from "../utils/marketHolidays.js";
 
@@ -391,6 +398,16 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
     throw new Error("Could not compute valid entry limit price");
   }
 
+  // Subscribe to live ticks for this option so monitorPositions() can read getLatestTick()
+  // for the traded instrument instead of always falling back to REST quotes. (Safe to call
+  // before the socket is open — the tick service queues it into subscribedSymbols and
+  // (re)subscribes on connect.)
+  try {
+    subscribeToSymbols([optionSymbol]);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Could not subscribe ticks for ${optionSymbol}:`, err.message);
+  }
+
   const entryOrder = await placeLimitEntry({
     symbol: optionSymbol,
     qty,
@@ -555,6 +572,14 @@ async function closePosition(position, session, reason) {
   });
 
   console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)} | ${reason}`);
+
+  // Stop streaming this option's ticks and reclaim its tick buffer now that the position is
+  // closed (index symbols are protected from removal inside unsubscribeFromSymbols).
+  try {
+    unsubscribeFromSymbols([position.optionSymbol]);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
+  }
 }
 
 async function reconcileStopLossOrders(session) {
@@ -587,6 +612,11 @@ async function reconcileStopLossOrders(session) {
           pnl,
         });
         console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)}`);
+        try {
+          unsubscribeFromSymbols([position.optionSymbol]);
+        } catch (err) {
+          console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
+        }
       } else if (details.status === "REJECTED" || details.status === "CANCELLED") {
         // SL order is gone — protect the position immediately with a market exit.
         console.error(`[AUTO-TRADER] SL order ${position.slOrderId} ${details.status}; flattening ${position.optionSymbol}`);
@@ -876,6 +906,22 @@ export async function startAutoTrader(sessionId) {
   } catch (err) {
     console.log("[AUTO-TRADER] Could not fetch existing positions");
   }
+
+  // Start the live FYERS tick feed. The engine uses aggregateOHLC()/getLatestTick() as its
+  // PRIMARY data source, but nothing else ever initiates the upstream WebSocket (the only
+  // caller was the manual POST /api/ticks/connect route, which neither the frontend nor
+  // startup invokes). Without this the feed stays disconnected and every cycle silently
+  // falls back to the REST history/quotes API. Index symbols (NIFTY/BANKNIFTY) are always
+  // subscribed by the tick service; option symbols are subscribed per-position in
+  // openPosition()/closePosition().
+  // NOTE: the tick store needs ~30 min of ticks to build 6 complete 5m candles, so the
+  // first part of each session legitimately uses the REST fallback until ticks accumulate.
+  try {
+    connectFyersWebSocket(session.accessToken, FYERS_APP_ID);
+    console.log("[AUTO-TRADER] Live tick feed connection initiated");
+  } catch (err) {
+    console.error("[AUTO-TRADER] Tick feed connect failed (will use REST fallback):", err.message);
+  }
   console.log(
     `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
   );
@@ -982,6 +1028,9 @@ export function getAutoTraderStatus() {
     latestData,
     recentSignals: getRecentSignals(10),
     indiaVIX,
+    // Live tick-feed state so the UI "Tick Feed" badge (status.tickStatus) reflects reality
+    // instead of always showing REST.
+    tickStatus: getWsStatus(),
   };
 }
 

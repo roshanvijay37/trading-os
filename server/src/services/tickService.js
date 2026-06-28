@@ -10,6 +10,14 @@ import WebSocket from "ws";
 
 // ─── Configuration ────────────────────────────────────────────────
 const MAX_TICKS_PER_SYMBOL = 100000;
+// TODO(verify during market hours): Confirm this raw-WebSocket JSON approach actually
+// receives data on the FYERS API v3 data feed. v3's official data socket may require a
+// specific endpoint/path and the fyers-apiv3 SDK's subscribe protocol (and a binary/HSM
+// frame format) rather than this plain "wss://socket.fyers.in" + {method:"sub"} JSON. If
+// no ticks arrive when the market is open (status.tickStatus.isConnected true but empty
+// tickCounts), switch to the official fyers-apiv3 data-socket client. Endpoint, subscribe
+// schema, payload field names (ltp/lt, vol/v, symbol) and the keep-alive frame all need
+// confirming against current v3 docs.
 const FYERS_WS_URL = "wss://socket.fyers.in";
 const RECONNECT_DELAY_MS = 5000;
 const MAX_RECONNECT_DELAY_MS = 60000;
