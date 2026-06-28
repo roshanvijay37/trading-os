@@ -3,14 +3,56 @@
  * Institutional-grade market analytics
  */
 
-import type { ElementType } from "react";
+import { useEffect, type ElementType } from "react";
 import { Activity, BarChart3, Eye, TrendingUp, Users, Zap } from "lucide-react";
 
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
+import { accountApi, isFyersConnected } from "../services/api";
+import { normalizeOptionChain, extractSpot, computePCR, computeMaxPain, computeExpectedMove } from "../lib/optionMetrics";
+
+const INTEL_SYMBOL = "NSE:NIFTY50-INDEX";
+const INTEL_INTERVAL_MS = 30000;
+
+function pcrInterpretation(pcr: number): string {
+  if (pcr <= 0) return "—";
+  if (pcr >= 1.3) return "Put-heavy (defensive)";
+  if (pcr <= 0.7) return "Call-heavy (aggressive)";
+  return "Neutral";
+}
 
 export function MarketIntelligencePage() {
-  const { state } = useInstitutionalStore();
+  const { state, setMarketIntel } = useInstitutionalStore();
   const { marketIntel } = state;
+
+  // Compute PCR / Max Pain / Expected Move from the live NIFTY option chain.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!isFyersConnected()) return;
+      try {
+        const res = await accountApi.getOptionChain(INTEL_SYMBOL, 15);
+        if (cancelled) return;
+        const legs = normalizeOptionChain(res?.optionChain);
+        if (legs.length === 0) return;
+        const spot = extractSpot(res?.optionChain);
+        const pcr = computePCR(legs);
+        const em = computeExpectedMove(legs, spot);
+        setMarketIntel({
+          pcr: { current: pcr, change: 0, percentile: 50, trend: "STABLE", interpretation: pcrInterpretation(pcr) },
+          maxPain: { strike: computeMaxPain(legs), painValue: 0, nearestStrikes: [] },
+          expectedMove: { move: em.move, movePercent: em.movePercent, upperBound: em.upper, lowerBound: em.lower, confidence: 0.68 },
+        });
+      } catch {
+        // ignore — keep previous values on a transient failure
+      }
+    }
+    load();
+    const id = setInterval(load, INTEL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [setMarketIntel]);
 
   return (
     <div className="space-y-5">

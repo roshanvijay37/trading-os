@@ -42,6 +42,9 @@ import { isNseMarketOpen } from "../utils/marketHolidays.js";
 import fs from "fs";
 import path from "path";
 
+import { computeExecutionStats } from "./executionStats.js";
+import { computeHealthSnapshot } from "./healthSnapshot.js";
+
 // ΓöÇΓöÇΓöÇ CONFIGURATION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const CONFIG = {
   POLL_INTERVAL_MS: 30000,
@@ -1007,6 +1010,22 @@ export function resetEmergencyStop() {
   return { status: "READY", message: "Emergency stop cleared. Use Start Bot to resume." };
 }
 
+function getExecutionStats() {
+  return computeExecutionStats(auditLog);
+}
+
+function getHealthSnapshot() {
+  const ws = getWsStatus();
+  return computeHealthSnapshot({
+    isRunning,
+    wsConnected: !!(ws && ws.isConnected),
+    emergencyStop: CONFIG.EMERGENCY_STOP,
+    consecutiveLosses,
+    maxConsecutiveLosses: CONFIG.MAX_CONSECUTIVE_LOSSES,
+    marketOpen: isNseMarketOpen(),
+  });
+}
+
 export function getAutoTraderStatus() {
   return {
     isRunning,
@@ -1031,6 +1050,8 @@ export function getAutoTraderStatus() {
     // Live tick-feed state so the UI "Tick Feed" badge (status.tickStatus) reflects reality
     // instead of always showing REST.
     tickStatus: getWsStatus(),
+    executionStats: getExecutionStats(),
+    health: getHealthSnapshot(),
   };
 }
 

@@ -14,6 +14,7 @@ import autoTradeRoutes from "./routes/autoTrade.js";
 import backtestRoutes from "./routes/backtest.js";
 import orderRoutes from "./routes/orders.js";
 import tickRoutes from "./routes/ticks.js";
+import marketRoutes from "./routes/market.js";
 import { WebSocketServer } from "ws";
 import { addWsClient, removeWsClient } from "./services/tickService.js";
 
@@ -96,6 +97,7 @@ app.use("/api/auto-trade", autoTradeRoutes);
 app.use("/api/backtest", backtestRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/ticks", tickRoutes);
+app.use("/api/market", marketRoutes);
 
 // Global error handler
 app.use((err, _req, res, _next) => {

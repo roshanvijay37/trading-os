@@ -14,9 +14,14 @@ import {
   Activity,
   Menu,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useMatch } from "react-router-dom";
 import { FyersConnect } from "./FyersConnect";
+import { useInstitutionalStore } from "../store/InstitutionalProvider";
+import { useLiveDataSync } from "../store/useLiveDataSync";
+import { pingApi, isFyersConnected } from "../services/api";
+import { getAIStatus } from "../services/aiCio";
+import type { DashboardState } from "../types/institutional";
 
 const navigation = [
   { to: "/", label: "Command Center", icon: LayoutDashboard, group: "Operations" },
@@ -54,27 +59,101 @@ function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: R
   );
 }
 
+function marketStatusLabel(s: DashboardState["marketStatus"]): { text: string; tone: string } {
+  switch (s) {
+    case "OPEN":
+      return { text: "NSE Open", tone: "text-gain" };
+    case "PRE_OPEN":
+      return { text: "NSE Pre-open", tone: "text-warn" };
+    case "POST_CLOSE":
+      return { text: "NSE Post-close", tone: "text-zinc-400" };
+    default:
+      return { text: "NSE Closed", tone: "text-zinc-500" };
+  }
+}
+
+// Client-side IST market status — used as a fallback before login (ignores holidays;
+// the backend value, which is holiday-aware, is used once connected).
+function computeMarketStatusIST(): DashboardState["marketStatus"] {
+  const now = new Date();
+  const istMin = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % (24 * 60);
+  const istDay = new Date(now.getTime() + 330 * 60000).getUTCDay();
+  if (istDay === 0 || istDay === 6) return "CLOSED";
+  if (istMin >= 540 && istMin < 555) return "PRE_OPEN"; // 09:00–09:15 IST
+  if (istMin >= 555 && istMin <= 930) return "OPEN"; // 09:15–15:30 IST
+  return "CLOSED";
+}
+
 function StatusBar() {
+  const { state } = useInstitutionalStore();
+  const [latency, setLatency] = useState<number | null>(null);
+  const [aiReachable, setAiReachable] = useState<boolean | null>(null);
+  const [, setClock] = useState(0);
+
+  // Live round-trip latency + reachability against our API.
+  useEffect(() => {
+    let cancelled = false;
+    async function ping() {
+      const ms = await pingApi();
+      if (!cancelled) setLatency(ms);
+    }
+    ping();
+    const id = setInterval(ping, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // AI CIO reachability.
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const s = await getAIStatus();
+        if (!cancelled) setAiReachable(!!(s.configured && s.reachable));
+      } catch {
+        if (!cancelled) setAiReachable(false);
+      }
+    }
+    check();
+    const id = setInterval(check, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // Tick the clock once a second so it advances live.
+  useEffect(() => {
+    const id = setInterval(() => setClock((c) => c + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const online = latency !== null;
+  const market = marketStatusLabel(isFyersConnected() ? state.dashboard.marketStatus : computeMarketStatusIST());
+  const latencyTone = latency === null ? "text-zinc-600" : latency < 120 ? "text-gain" : latency < 350 ? "text-warn" : "text-loss";
+
   return (
     <div className="hidden h-7 items-center border-b border-border bg-surface px-4 lg:flex">
       <div className="flex items-center gap-6 text-2xs">
         <div className="flex items-center gap-1.5">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gain" />
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${online ? "bg-gain" : "bg-loss"}`} />
           <span className="text-zinc-500">System</span>
-          <span className="text-zinc-400">Online</span>
+          <span className={online ? "text-zinc-400" : "text-loss"}>{online ? "Online" : "Offline"}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Activity size={10} className="text-zinc-600" />
           <span className="text-zinc-500">Latency</span>
-          <span className="font-mono text-zinc-400">24ms</span>
+          <span className={`font-mono ${latencyTone}`}>{latency === null ? "—" : `${latency}ms`}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-gain animate-pulse" />
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${aiReachable ? "bg-gain animate-pulse" : "bg-zinc-600"}`} />
           <span className="text-zinc-500">AI CIO</span>
-          <span className="text-zinc-400">Active</span>
+          <span className="text-zinc-400">{aiReachable === null ? "…" : aiReachable ? "Active" : "Rule-based"}</span>
         </div>
         <div className="ml-auto flex items-center gap-6">
-          <span className="text-zinc-600">NSE Pre-open</span>
+          <span className={market.tone}>{market.text}</span>
           <span className="font-mono text-zinc-500">
             {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
           </span>
@@ -105,6 +184,7 @@ function Header() {
 
 export function Layout() {
   const [open, setOpen] = useState(false);
+  useLiveDataSync(); // poll backend status -> institutional store (Command Center, Risk Dashboard)
 
   const grouped = navigation.reduce<Record<string, typeof navigation>>((acc, item) => {
     if (!acc[item.group]) acc[item.group] = [];

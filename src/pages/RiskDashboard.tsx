@@ -13,7 +13,7 @@ export function RiskDashboard() {
   const riskMetrics = [
     { label: "Total Exposure", value: `₹${portfolioRisk.totalExposure.toLocaleString()}`, icon: DollarSign, status: portfolioRisk.totalExposure > portfolioRisk.limits.maxDirectionalExposure * 10000 ? "critical" : "healthy" },
     { label: "Portfolio Drawdown", value: `${portfolioRisk.portfolioDrawdown.toFixed(2)}%`, icon: TrendingDown, status: portfolioRisk.portfolioDrawdown > portfolioRisk.limits.maxPortfolioDrawdown ? "critical" : portfolioRisk.portfolioDrawdown > 5 ? "warning" : "healthy" },
-    { label: "Daily Risk Used", value: `₹${portfolioRisk.dailyRiskUsed.toLocaleString()}`, icon: Activity, status: portfolioRisk.dailyRiskUsed > portfolioRisk.limits.maxDailyLoss * 0.8 ? "warning" : "healthy" },
+    { label: "Daily Risk Used", value: `${portfolioRisk.dailyRiskUsed.toFixed(1)}%`, icon: Activity, status: portfolioRisk.dailyRiskUsed >= 100 ? "critical" : portfolioRisk.dailyRiskUsed >= 80 ? "warning" : "healthy" },
     { label: "Capital Utilized", value: `${portfolioRisk.capitalUtilized.toFixed(1)}%`, icon: BarChart3, status: portfolioRisk.capitalUtilized > 90 ? "warning" : "healthy" },
     { label: "VaR (95%)", value: `₹${portfolioRisk.var95.toLocaleString()}`, icon: Shield, status: "healthy" },
     { label: "Directional Exposure", value: `${portfolioRisk.directionalExposure.toFixed(0)}%`, icon: Lock, status: Math.abs(portfolioRisk.directionalExposure) > portfolioRisk.limits.maxDirectionalExposure ? "critical" : "healthy" },

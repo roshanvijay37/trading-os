@@ -160,3 +160,19 @@ export const backtestApi = {
 export function isFyersConnected(): boolean {
   return !!getSessionId();
 }
+
+/**
+ * Unauthenticated round-trip latency probe against /api/health.
+ * Returns the round-trip time in ms, or null if the server is unreachable.
+ */
+export async function pingApi(): Promise<number | null> {
+  const start = typeof performance !== "undefined" ? performance.now() : Date.now();
+  try {
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const end = typeof performance !== "undefined" ? performance.now() : Date.now();
+    return Math.round(end - start);
+  } catch {
+    return null;
+  }
+}
