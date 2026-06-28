@@ -20,6 +20,7 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 10. [Quick Start](#quick-start)
 11. [Development Workflow](#development-workflow)
 12. [Operations & Deployment](#operations--deployment)
+12a. [Server Access (SSH)](#server-access-ssh)
 13. [Documentation](#documentation)
 14. [License](#license)
 
@@ -250,6 +251,49 @@ Navigation simplified from 13 items → 10 items.
 | **Reverse Proxy** | nginx | Ubuntu |
 | **AI Engine** | Kimi (Moonshot) API | External |
 | **Broker** | FYERS (v3 API) | External |
+
+### Server Access (SSH)
+
+The backend runs on an **AWS Lightsail Ubuntu instance** in the `ap-south-1` (Mumbai) region, exposed via `https://api.roshanvijay.com`.
+
+**SSH key:** `LightsailDefaultKey-ap-south-1.pem` (located in the project root, already gitignored)
+
+**Connect via SSH:**
+
+```bash
+# From the project root
+ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api.roshanvijay.com
+
+# Or using the server's public IP if the domain is not resolving
+# ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@<LIGHTSAIL_PUBLIC_IP>
+```
+
+> **Note:** On macOS/Linux you may need to fix key permissions first:
+> ```bash
+> chmod 600 LightsailDefaultKey-ap-south-1.pem
+> ```
+
+**After logging in, the project is located at:**
+
+```bash
+cd ~/trading-os
+```
+
+**Common post-login commands:**
+
+```bash
+# Check server status
+pm2 status
+pm2 logs trading-os --lines 50
+
+# Pull latest code and restart
+git pull origin main
+npm install
+pm2 restart trading-os --update-env
+
+# Test API health
+curl https://api.roshanvijay.com/api/health
+```
 
 ### Environment Setup
 

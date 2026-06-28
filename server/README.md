@@ -103,6 +103,34 @@ Server will start on `http://localhost:3001`
 
 ## Production Deployment
 
+The production backend is deployed on an **AWS Lightsail Ubuntu instance** and served behind nginx at `https://api.roshanvijay.com`.
+
+### SSH Access
+
+Use the Lightsail default key located at the project root:
+
+```bash
+chmod 600 LightsailDefaultKey-ap-south-1.pem
+ssh -i "LightsailDefaultKey-ap-south-1.pem" ubuntu@api.roshanvijay.com
+```
+
+Once logged in:
+
+```bash
+cd ~/trading-os
+
+# View status
+pm2 status
+pm2 logs trading-os --lines 50
+
+# Deploy latest code
+git pull origin main
+npm install
+pm2 restart trading-os --update-env
+```
+
+### Deployment Checklist
+
 1. Use a proper session store (Redis, PostgreSQL)
 2. Add HTTPS
 3. Set up CORS properly for your domain
