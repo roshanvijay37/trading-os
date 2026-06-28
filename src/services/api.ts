@@ -91,6 +91,8 @@ export const accountApi = {
     }),
   getOptionChain: (symbol: string, strikecount = 10) =>
     fetchWithAuth(`/account/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`),
+  // Market breadth (advance/decline) derived live from the NIFTY 50 constituent quotes.
+  getBreadth: () => fetchWithAuth("/account/breadth"),
 };
 
 // Orders — read-only for bot audit trail
@@ -175,6 +177,8 @@ export const backtestApi = {
 export const marketApi = {
   getStatus: () => fetchWithAuth("/market/status"),
   getIvHistory: () => fetchWithAuth("/market/iv-history"),
+  // FII/DII end-of-day cash-market flow from NSE participant data (no broker session required).
+  getFiiDii: () => fetchWithAuth("/market/fii-dii"),
 };
 
 export function isFyersConnected(): boolean {

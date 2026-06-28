@@ -1,6 +1,7 @@
 import express from "express";
 import { getNseMarketStatus, isNseMarketOpen } from "../utils/marketHolidays.js";
 import { getIvStats } from "../services/ivHistory.js";
+import { getFiiDii } from "../services/fiiDii.js";
 
 const router = express.Router();
 
@@ -29,6 +30,20 @@ router.get("/iv-history", (_req, res) => {
   } catch (err) {
     console.error("[market] iv-history error:", err.message);
     res.status(500).json({ error: "Failed to compute IV history", message: err.message });
+  }
+});
+
+/**
+ * GET /api/market/fii-dii — PUBLIC (no auth; NSE end-of-day data, not the broker feed).
+ * FII/DII cash-market buy/sell/net in ₹ crore. Cached server-side; `available: false` is
+ * returned (HTTP 200) when NSE is unreachable so the UI can show an honest "no data" state.
+ */
+router.get("/fii-dii", async (_req, res) => {
+  try {
+    res.json(await getFiiDii());
+  } catch (err) {
+    console.error("[market] fii-dii error:", err.message);
+    res.status(200).json({ available: false, source: "NSE (EOD cash market)", error: err.message });
   }
 });
 

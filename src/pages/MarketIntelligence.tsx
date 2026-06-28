@@ -2,10 +2,13 @@
  * TradingOS — Market Intelligence
  * Institutional-grade market analytics.
  *
- * Honesty contract: only the cards below the "Live" header are real — they are derived from the
- * live NIFTY option chain (+ India VIX) on every poll. Metrics we cannot source from FYERS
- * (market breadth, FII/DII flow, dealer gamma, IV rank/percentile/skew) are rendered as explicit
- * "no data source" cards rather than fabricated zeros, so the screen never implies fake numbers.
+ * Honesty contract: every number on this screen is sourced or clearly labelled.
+ *  - "Live" cards (PCR, Max Pain, India VIX, IV Rank, Market Breadth) are computed each poll from
+ *    FYERS data — the NIFTY option chain, India VIX, and the NIFTY 50 constituent quotes (breadth).
+ *  - "Model-derived" (dealer GEX) is a Black-Scholes estimate, badged as a model, not a measured Greek.
+ *  - "End of Day (NSE)" FII/DII flow is NSE participant data (not live, never the broker feed) and is
+ *    labelled EOD with its as-of date; it shows an explicit "unreachable" state if NSE blocks the fetch.
+ * Nothing is rendered as a fabricated zero.
  */
 
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from "react";
@@ -35,8 +38,41 @@ interface IvStats {
   sufficient: boolean;
 }
 
+/** Shape returned by GET /api/account/breadth (computeBreadth on the server). */
+interface Breadth {
+  advances: number;
+  declines: number;
+  unchanged: number;
+  counted: number;
+  ratio: number;
+  advancePercent: number;
+  trend: "BULLISH" | "BEARISH" | "NEUTRAL";
+  universe: string;
+  universeSize: number;
+  asOf: string;
+}
+
+interface FiiDiiLeg {
+  buy: number | null;
+  sell: number | null;
+  net: number | null;
+}
+
+/** Shape returned by GET /api/market/fii-dii (NSE EOD participant data). */
+interface FiiDii {
+  available: boolean;
+  source?: string;
+  fetchedAt?: string;
+  stale?: boolean;
+  error?: string;
+  date?: string | null;
+  fii?: FiiDiiLeg | null;
+  dii?: FiiDiiLeg | null;
+}
+
 const INTEL_SYMBOL = "NSE:NIFTY50-INDEX";
 const INTEL_INTERVAL_MS = 30000;
+const FII_DII_INTERVAL_MS = 15 * 60 * 1000; // EOD data — refresh slowly, independent of FYERS
 
 type Status = "disconnected" | "loading" | "live" | "error";
 
@@ -67,6 +103,8 @@ export function MarketIntelligencePage() {
   const [vix, setVix] = useState<IndiaVix | null>(null);
   const [gex, setGex] = useState<GammaExposure | null>(null);
   const [ivStats, setIvStats] = useState<IvStats | null>(null);
+  const [breadth, setBreadth] = useState<Breadth | null>(null);
+  const [fiiDii, setFiiDii] = useState<FiiDii | null>(null);
   const prevPcrRef = useRef<number | null>(null);
   const hasData = lastUpdated !== null;
 
@@ -129,6 +167,15 @@ export function MarketIntelligencePage() {
         } catch {
           /* leave previous IV stats in place */
         }
+
+        // Market breadth from the NIFTY 50 constituent quotes. Isolated so a quotes hiccup
+        // can't flip the whole page to "error".
+        try {
+          const b = await accountApi.getBreadth();
+          if (!cancelled) setBreadth(b);
+        } catch {
+          /* keep previous breadth */
+        }
       } catch {
         // Keep the last good values; surface a stale/error badge instead of silently freezing.
         if (!cancelled) setStatus("error");
@@ -139,6 +186,7 @@ export function MarketIntelligencePage() {
     const id = setInterval(load, INTEL_INTERVAL_MS);
     const onLogout = () => {
       prevPcrRef.current = null;
+      setBreadth(null);
       setStatus("disconnected");
     };
     window.addEventListener("fyers:logout", onLogout);
@@ -149,13 +197,33 @@ export function MarketIntelligencePage() {
     };
   }, [setMarketIntel]);
 
+  // FII/DII is NSE end-of-day public data — it needs no broker session, so poll it independently
+  // of the FYERS connection (and slowly, since it only changes once per day after market close).
+  useEffect(() => {
+    let cancelled = false;
+    async function loadFiiDii() {
+      try {
+        const d = await marketApi.getFiiDii();
+        if (!cancelled) setFiiDii(d);
+      } catch (err) {
+        if (!cancelled) setFiiDii({ available: false, error: err instanceof Error ? err.message : "request failed" });
+      }
+    }
+    loadFiiDii();
+    const id = setInterval(loadFiiDii, FII_DII_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
   const meta = STATUS_META[status];
 
   return (
     <div className="space-y-5">
       {/* Header + connection status */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-2xs text-zinc-600">Real-time NIFTY option-chain analytics. Cards marked “No data source” are not available from the FYERS feed.</p>
+        <p className="text-2xs text-zinc-600">Real-time NIFTY option-chain &amp; breadth analytics from FYERS. FII/DII is NSE end-of-day data.</p>
         <div className="flex items-center gap-2">
           {lastUpdated !== null && (
             <span className="text-2xs text-zinc-600">Updated {fmtTime(lastUpdated)}</span>
@@ -242,6 +310,35 @@ export function MarketIntelligencePage() {
                 {ivStats
                   ? `Building history — ${ivStats.samples}/${ivStats.minSamples} days needed for a meaningful rank.`
                   : "Connect to begin recording India VIX history."}
+              </p>
+            </>
+          )}
+        </Panel>
+
+        {/* Market Breadth (NIFTY 50 advance / decline) — live from constituent quotes */}
+        <Panel icon={TrendingUp} title="Market Breadth (NIFTY 50)">
+          {breadth && breadth.counted > 0 ? (
+            <>
+              <Row label="Advances" value={String(breadth.advances)} mono valueClass="text-gain" />
+              <Row label="Declines" value={String(breadth.declines)} mono valueClass="text-loss" />
+              <Row
+                label="A/D Ratio"
+                value={breadth.ratio.toFixed(2)}
+                mono
+                valueClass={breadth.trend === "BULLISH" ? "text-gain" : breadth.trend === "BEARISH" ? "text-loss" : ""}
+              />
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-loss/25">
+                <div className="h-full rounded-full bg-gain" style={{ width: `${breadth.advancePercent}%` }} />
+              </div>
+              <p className="text-2xs text-zinc-700">
+                {breadth.advancePercent.toFixed(0)}% advancing · {breadth.counted}/{breadth.universeSize} constituents
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-mono text-xl font-semibold text-zinc-700">—</p>
+              <p className="text-2xs text-zinc-600">
+                {status === "disconnected" ? "Connect to FYERS to load breadth." : "Waiting for constituent quotes…"}
               </p>
             </>
           )}

@@ -2,6 +2,7 @@ import express from "express";
 import { requireAuth } from "./auth.js";
 import { recordVix } from "../services/ivHistory.js";
 import { maybeBackfillVix } from "../services/vixBackfill.js";
+import { NIFTY50_SYMBOLS, computeBreadth } from "../services/marketBreadth.js";
 
 const router = express.Router();
 
@@ -151,6 +152,45 @@ router.post("/quote", requireAuth, async (req, res) => {
     console.error("Get quote error:", error);
     res.status(400).json({
       error: "Failed to fetch quotes",
+      message: error.message,
+    });
+  }
+});
+
+// Market breadth (advance / decline) over the NIFTY 50 constituent basket.
+// Derived live from FYERS /quotes — FYERS has no breadth endpoint, but it quotes the constituents.
+router.get("/breadth", requireAuth, async (req, res) => {
+  try {
+    // /quotes caps at 50 symbols/request; chunk so the basket can grow past 50 later.
+    const chunks = [];
+    for (let i = 0; i < NIFTY50_SYMBOLS.length; i += 50) {
+      chunks.push(NIFTY50_SYMBOLS.slice(i, i + 50));
+    }
+
+    const quotes = [];
+    for (const symbols of chunks) {
+      const response = await fyersApiCall(
+        "/quotes",
+        req.fyers.accessToken,
+        req.fyers.appId,
+        { symbols },
+        "POST",
+      );
+      if (Array.isArray(response.d)) quotes.push(...response.d);
+    }
+
+    const breadth = computeBreadth(quotes);
+    res.json({
+      ...breadth,
+      universe: "NIFTY 50",
+      universeSize: NIFTY50_SYMBOLS.length,
+      asOf: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Get breadth error:", error.message);
+    const status = error.status || 400;
+    res.status(status).json({
+      error: "Failed to fetch market breadth",
       message: error.message,
     });
   }
