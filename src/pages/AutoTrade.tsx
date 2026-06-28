@@ -1,21 +1,25 @@
-              </div>
-                </div>
-                  )}
-                    </p>
-                      {Object.entries(status.tickStatus.tickCounts || {}).map(([k, v]) => `${k}:${v}`).join(" ")}
-                    <p className="text-3xs text-zinc-600">
-                  {status.tickStatus?.isConnected && (
-                  </p>
-                    {status.tickStatus?.isConnected ? "LIVE" : "REST"}
-                  <p className={`font-mono text-base font-semibold ${status.tickStatus?.isConnected ? "text-gain" : "text-warn"}`}>
-                  <p className="text-2xs text-zinc-600">Tick Feed</p>
-                <div>
-                </div>
-                  <Radio size={18} />
-                <div className={`rounded-panel p-2 ${status.tickStatus?.isConnected ? "bg-gain-dim text-gain" : "bg-warn-dim text-warn"}`}>
-              <div className="flex items-center gap-3">
-            <Card>
-            </Card>
+  const fetchAuditLogs = async () => {
+    try {
+      const data = await autoTradeApi.getAuditLog(50);
+      if (Array.isArray(data.logs)) {
+        setAuditLogs(data.logs);
+      }
+    } catch (err: any) {
+      // Silent — audit logs are optional UI candy
+    }
+  };
+
+
+  const fetchAuditLogs = async () => {
+    try {
+      const data = await autoTradeApi.getAuditLog(50);
+      if (Array.isArray(data.logs)) {
+        setAuditLogs(data.logs);
+      }
+    } catch (err: any) {
+      // Silent — audit logs are optional UI candy
+    }
+  };
 import { useEffect, useState } from "react";
 import { Card } from "../components/Card";
 import { MetricCard } from "../components/MetricCard";
@@ -516,7 +520,6 @@ export function AutoTrade() {
                   </p>
                 </div>
               </div>
-            </Card>
             <Card>
               <div className="flex items-center gap-3">
                 <div className={`rounded-panel p-2 ${status.tickStatus?.isConnected ? "bg-gain-dim text-gain" : "bg-warn-dim text-warn"}`}>
@@ -535,6 +538,9 @@ export function AutoTrade() {
                 </div>
               </div>
             </Card>
+
+
+
           </div>
 
           {/* Data Source Visibility */}
