@@ -23,7 +23,10 @@ import {
   waitForFill,
   cancelOrder,
   getOrderDetails,
+  isTokenErrorData,
 } from "./orderExecution.js";
+
+import { refreshAccessToken } from "../routes/auth.js";
 
 // Real-time tick data (WebSocket) — used as the primary candle/quote source with a
 // REST history fallback. These MUST be imported or every data fetch throws ReferenceError
@@ -128,6 +131,11 @@ let dailyRealizedPnL = 0;
 let consecutiveLosses = 0;
 let auditLog = [];
 
+// Gates new entries until local open positions have been verified against the broker on
+// startup. Stays false if that reconciliation could not run, so a phantom position can never
+// trigger a naked exit and we never trade on an unverified picture of what we hold.
+let reconcileOk = false;
+
 
 // ΓöÇΓöÇΓöÇ PERSISTENCE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const STATE_FILE = path.join(process.cwd(), "auto-trade-state.json");
@@ -206,7 +214,7 @@ async function fetchCandlesWithTickFallback(symbol, session) {
     return tickCandles.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
   }
   logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, reason: "insufficient_tick_data", tickCount: tickCandles.length });
-  return fetchLatestCandles(symbol, session.accessToken, FYERS_APP_ID);
+  return fetchLatestCandles(symbol, session);
 }
 
 async function fetchOptionQuoteWithTickFallback(optionSymbol, session) {
@@ -241,22 +249,50 @@ const FYERS_APP_ID = process.env.FYERS_APP_ID;
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 const FYERS_DATA_BASE = "https://api-t1.fyers.in/data";
 
-async function fyersApiCall(endpoint, accessToken, appId, body = null, method = "GET") {
+// Account/order API call (api/v3). Reads the token from the session each attempt and refreshes
+// once on an auth failure, so a token that dies mid-session doesn't blind the engine.
+async function fyersApiCall(endpoint, session, body = null, method = "GET", _retried = false) {
+  const appId = session.appId ?? FYERS_APP_ID;
   const response = await fetch(`${FYERS_API_BASE}${endpoint}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `${appId}:${accessToken}`,
+      Authorization: `${appId}:${session.accessToken}`,
     },
     body: body ? JSON.stringify(body) : null,
+    signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) {
     const text = await response.text();
+    if (response.status === 401 && !_retried && (await refreshAccessToken(session))) {
+      return fyersApiCall(endpoint, session, body, method, true);
+    }
     throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
   }
   const data = await response.json();
   if (data.s !== "ok") {
+    if (!_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
+      return fyersApiCall(endpoint, session, body, method, true);
+    }
     throw new Error(data.message || "FYERS API error");
+  }
+  return data;
+}
+
+// Data API call (the /data host: quotes, history, option-chain, VIX). Mirrors the auth-refresh
+// retry so the data feed survives a mid-session token expiry too.
+async function fyersDataFetch(url, session, _retried = false) {
+  const appId = session.appId ?? FYERS_APP_ID;
+  const response = await fetch(url, {
+    headers: { Authorization: `${appId}:${session.accessToken}` },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (response.status === 401 && !_retried && (await refreshAccessToken(session))) {
+    return fyersDataFetch(url, session, true);
+  }
+  const data = await response.json();
+  if (data.s !== "ok" && !_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
+    return fyersDataFetch(url, session, true);
   }
   return data;
 }
@@ -264,7 +300,7 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
 // ─── RISK MANAGEMENT ──────────────────────────────────────────────────
 async function fetchAvailableFunds(session) {
   try {
-    const data = await fyersApiCall("/funds", session.accessToken, FYERS_APP_ID);
+    const data = await fyersApiCall("/funds", session);
     const funds = data.fund_limit || [];
     const available = funds.find((f) => f.title === "Available Balance");
     return available ? available.equityAmount : 0;
@@ -322,10 +358,7 @@ function roundToLotSize(qty, underlying) {
 async function fetchIndiaVIX(session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=NSE:INDIAVIX-INDEX`;
-    const response = await fetch(url, {
-      headers: { Authorization: `${FYERS_APP_ID}:${session.accessToken}` },
-    });
-    const data = await response.json();
+    const data = await fyersDataFetch(url, session);
     indiaVIX = data.d?.[0]?.v?.lp || 0;
     return indiaVIX;
   } catch (err) {
@@ -391,10 +424,7 @@ async function checkLiquidity(optionSymbol, session) {
 async function fetchOptionQuote(optionSymbol, session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(optionSymbol)}`;
-    const response = await fetch(url, {
-      headers: { Authorization: `${FYERS_APP_ID}:${session.accessToken}` },
-    });
-    const data = await response.json();
+    const data = await fyersDataFetch(url, session);
     return data.d?.[0]?.v || null;
   } catch (err) {
     console.error(`[AUTO-TRADER] Quote fetch failed for ${optionSymbol}:`, err.message);
@@ -463,7 +493,7 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
   });
 
   const filledQty = CONFIG.PAPER_TRADING ? qty : fill.filledQty;
-  if (fill.status === "REJECTED" || fill.status === "CANCELLED" || filledQty <= 0) {
+  if (fill.status === "REJECTED" || fill.status === "CANCELLED" || fill.status === "EXPIRED" || filledQty <= 0) {
     logAudit({ type: "ENTRY_FAILED", orderId: entryOrder.orderId, status: fill.status, symbol: optionSymbol });
     return null;
   }
@@ -654,7 +684,7 @@ async function reconcileStopLossOrders(session) {
         } catch (err) {
           console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
         }
-      } else if (details.status === "REJECTED" || details.status === "CANCELLED") {
+      } else if (["REJECTED", "CANCELLED", "EXPIRED"].includes(details.status)) {
         // SL order is gone — protect the position immediately with a market exit.
         console.error(`[AUTO-TRADER] SL order ${position.slOrderId} ${details.status}; flattening ${position.optionSymbol}`);
         await closePosition(position, session, "SL_ORDER_FAILED");
@@ -670,6 +700,164 @@ function recalcDailyPnL() {
     .filter((p) => p.status === "OPEN")
     .reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
   dailyPnL = dailyRealizedPnL + unrealized;
+}
+
+// ─── BROKER RECONCILIATION (STARTUP) ──────────────────────────────────
+/**
+ * Pure decision step for startup reconciliation: given the locally-tracked OPEN positions and
+ * the broker's netPositions, decide which we still hold and which went flat while we were
+ * down. Kept side-effect-free so it can be unit-tested without hitting the broker.
+ *
+ * @returns {{ toClose: Array<{position, realized:number}>, toKeep: Array<{position, brokerQty:number}> }}
+ */
+export function planReconciliation(openLocal, netPositions) {
+  const netQtyBySymbol = new Map();
+  const npBySymbol = new Map();
+  for (const np of netPositions || []) {
+    const q = Number(np.netQty ?? np.qty ?? 0) || 0;
+    netQtyBySymbol.set(np.symbol, (netQtyBySymbol.get(np.symbol) || 0) + q);
+    npBySymbol.set(np.symbol, np);
+  }
+  const toClose = [];
+  const toKeep = [];
+  for (const pos of openLocal || []) {
+    const brokerQty = netQtyBySymbol.get(pos.optionSymbol);
+    // The bot only ever BUYS options, so a live position has a positive net qty. Absent or
+    // <= 0 means the broker is flat in this symbol — it was closed (SL/manual/expiry) while
+    // we were offline, so reconcile it to CLOSED rather than ever acting on it again.
+    if (!brokerQty || brokerQty <= 0) {
+      const np = npBySymbol.get(pos.optionSymbol);
+      const realized = np ? Number(np.realized_profit ?? np.pl ?? np.realizedPnl ?? 0) || 0 : 0;
+      toClose.push({ position: pos, realized });
+    } else {
+      toKeep.push({ position: pos, brokerQty });
+    }
+  }
+  return { toClose, toKeep };
+}
+
+/**
+ * Ensure an OPEN position has a live broker stop-loss. Re-arms one if the recorded SL order is
+ * missing or no longer pending (cancelled/rejected/expired) — a held position with no broker
+ * SL is exactly the unattended risk this whole tier targets.
+ */
+async function ensureStopLoss(position, session) {
+  if (CONFIG.PAPER_TRADING) return;
+  let alive = false;
+  if (position.slOrderId) {
+    try {
+      const details = await getOrderDetails(position.slOrderId, session);
+      alive = details.status === "PENDING";
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Reconcile: SL status check failed for ${position.optionSymbol}:`, err.message);
+      alive = false;
+    }
+  }
+  if (alive) return;
+  const stopPrice = position.currentSL || position.stopLoss;
+  try {
+    const slOrder = await placeStopLossOrder({
+      symbol: position.optionSymbol,
+      qty: position.quantity,
+      stopPrice,
+      session,
+      paperTrading: false,
+      auditLogger: logAudit,
+    });
+    position.slOrderId = slOrder.orderId;
+    logAudit({ type: "SL_REARMED", optionSymbol: position.optionSymbol, slOrderId: position.slOrderId, stopPrice });
+    console.log(`[AUTO-TRADER] Re-armed missing broker SL for ${position.optionSymbol} @ ₹${Number(stopPrice).toFixed(2)}`);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Failed to re-arm SL for ${position.optionSymbol}:`, err.message);
+    logAudit({ type: "SL_REARM_FAILED", optionSymbol: position.optionSymbol, error: err.message });
+  }
+}
+
+/**
+ * On startup, verify every locally-tracked OPEN position against the broker before the trading
+ * loop runs. Positions the broker no longer holds are marked CLOSED (so monitorPositions can
+ * never fire a naked SELL on a phantom); positions still held get their tick subscription and
+ * broker SL restored. Sets reconcileOk so canTakeTrade can block new entries until this has
+ * succeeded — if we can't verify what we hold, we don't trade.
+ */
+async function reconcilePositionsWithBroker(session) {
+  const openLocal = openPositions.filter((p) => p.status === "OPEN");
+  // Paper positions don't exist at the broker, so there is nothing to reconcile against —
+  // doing so would wrongly close every simulated position. Just restore tick subscriptions.
+  if (CONFIG.PAPER_TRADING) {
+    for (const p of openLocal) {
+      try {
+        subscribeToSymbols([p.optionSymbol]);
+      } catch {
+        /* best-effort */
+      }
+    }
+    reconcileOk = true;
+    return;
+  }
+  if (openLocal.length === 0) {
+    reconcileOk = true;
+    return;
+  }
+  let netPositions;
+  try {
+    const data = await fyersApiCall("/positions", session);
+    netPositions = data.netPositions || [];
+  } catch (err) {
+    // Could not verify — fail safe: leave reconcileOk false so no NEW trades open, and leave
+    // existing positions untouched (their broker SL, if any, still protects them).
+    reconcileOk = false;
+    console.error("[AUTO-TRADER] Reconcile: positions fetch failed — new trades blocked until verified:", err.message);
+    logAudit({ type: "RECONCILE_FAILED", error: err.message });
+    return;
+  }
+
+  const { toClose, toKeep } = planReconciliation(openLocal, netPositions);
+
+  for (const { position, realized } of toClose) {
+    position.status = "CLOSED";
+    position.exitReason = "RECONCILED";
+    position.exitTime = new Date().toISOString();
+    position.realizedPnl = realized || position.realizedPnl || 0;
+    position.pnl = position.realizedPnl;
+    dailyRealizedPnL += position.realizedPnl;
+    if (position.realizedPnl < 0) consecutiveLosses++;
+    else if (position.realizedPnl > 0) consecutiveLosses = 0;
+    if (position.slOrderId) {
+      try {
+        await cancelOrder(position.slOrderId, session, logAudit);
+      } catch (err) {
+        console.error(`[AUTO-TRADER] Reconcile: could not cancel orphan SL ${position.slOrderId}:`, err.message);
+      }
+    }
+    try {
+      unsubscribeFromSymbols([position.optionSymbol]);
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Reconcile: unsubscribe failed for ${position.optionSymbol}:`, err.message);
+    }
+    logAudit({ type: "POSITION_RECONCILED_CLOSED", optionSymbol: position.optionSymbol, realized: position.realizedPnl });
+    console.log(`[AUTO-TRADER] Reconciled FLAT at broker → CLOSED: ${position.optionSymbol} (realized ₹${position.realizedPnl.toFixed(2)})`);
+  }
+
+  for (const { position, brokerQty } of toKeep) {
+    if (brokerQty !== position.quantity) {
+      logAudit({ type: "RECONCILE_QTY_MISMATCH", optionSymbol: position.optionSymbol, localQty: position.quantity, brokerQty });
+      position.quantity = brokerQty;
+    }
+    // Re-stream this option's ticks (subscriptions don't survive a restart) and make sure a
+    // broker SL is in place.
+    try {
+      subscribeToSymbols([position.optionSymbol]);
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Reconcile: resubscribe failed for ${position.optionSymbol}:`, err.message);
+    }
+    await ensureStopLoss(position, session);
+  }
+
+  reconcileOk = true;
+  recalcDailyPnL();
+  saveState();
+  logAudit({ type: "RECONCILE_DONE", closed: toClose.length, kept: toKeep.length });
 }
 
 async function monitorPositions(session) {
@@ -713,6 +901,10 @@ async function monitorPositions(session) {
 function canTakeTrade(underlyingName) {
   if (CONFIG.EMERGENCY_STOP) {
     console.log("[AUTO-TRADER] EMERGENCY STOP ACTIVE");
+    return false;
+  }
+  if (!reconcileOk) {
+    console.log("[AUTO-TRADER] Broker reconciliation incomplete — no new entries");
     return false;
   }
   if (!isValidTradingTime()) return false;
@@ -785,7 +977,7 @@ async function processCandles(underlying, session) {
         activeAlerts.delete(`${underlying.name}:${strategy}`);
         continue;
       }
-      const optionChain = await fetchOptionChain(underlying.symbol, session.accessToken, FYERS_APP_ID);
+      const optionChain = await fetchOptionChain(underlying.symbol, session);
       const optionType = signal.type === "LONG" ? "CE" : "PE";
       const optionSymbol = getATMOption(underlying.name, signal.entryPrice, optionType, optionChain);
       if (!optionSymbol) {
@@ -838,19 +1030,17 @@ async function processCandles(underlying, session) {
 }
 
 // ─── DATA FETCHING ────────────────────────────────────────────────────
-async function fetchLatestCandles(symbol, accessToken, appId) {
+async function fetchLatestCandles(symbol, session) {
   const now = Math.floor(Date.now() / 1000);
   const from = now - 3600;
   const url = `${FYERS_DATA_BASE}/history?symbol=${encodeURIComponent(symbol)}&resolution=5&date_format=0&range_from=${from}&range_to=${now}&cont_flag=1`;
-  const response = await fetch(url, { headers: { Authorization: `${appId}:${accessToken}` } });
-  const data = await response.json();
+  const data = await fyersDataFetch(url, session);
   return data.candles || [];
 }
 
-async function fetchOptionChain(symbol, accessToken, appId) {
+async function fetchOptionChain(symbol, session) {
   const url = `${FYERS_DATA_BASE}/options-chain-v3?symbol=${encodeURIComponent(symbol)}&strikecount=5`;
-  const response = await fetch(url, { headers: { Authorization: `${appId}:${accessToken}` } });
-  const data = await response.json();
+  const data = await fyersDataFetch(url, session);
   return data.data?.optionsChain || [];
 }
 
@@ -915,6 +1105,11 @@ async function tradingLoop(session) {
     }
   } else {
     marketStatus = "OPEN";
+    // If startup reconciliation couldn't complete (e.g. a transient positions-fetch failure),
+    // retry it here so the engine self-heals and can resume taking trades without a restart.
+    if (!reconcileOk) {
+      await reconcilePositionsWithBroker(session);
+    }
     for (const underlying of getActiveUnderlyings()) {
       await processCandles(underlying, session);
     }
@@ -938,7 +1133,7 @@ export async function startAutoTrader(sessionId) {
     console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
   }
   try {
-    const positions = await fyersApiCall("/positions", session.accessToken, FYERS_APP_ID);
+    const positions = await fyersApiCall("/positions", session);
     console.log(`[AUTO-TRADER] Existing positions: ${positions.netPositions?.length || 0}`);
   } catch (err) {
     console.log("[AUTO-TRADER] Could not fetch existing positions");
@@ -974,6 +1169,13 @@ export async function startAutoTrader(sessionId) {
     consecutiveLosses = 0;
     lastTradeDate = today;
   }
+
+  // Verify locally-tracked positions against the broker BEFORE the loop can act. This prevents
+  // a phantom position (closed at the broker while we were down) from triggering a naked exit,
+  // and re-arms the broker SL + tick subscription for anything still genuinely held. Blocks new
+  // entries (reconcileOk stays false) if it can't complete.
+  await reconcilePositionsWithBroker(session);
+
   tradingLoop(session);
   return {
     status: "STARTED",

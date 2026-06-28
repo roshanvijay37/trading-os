@@ -11,7 +11,15 @@
  * implementation targets the FYERS v3 API.
  */
 
+import { refreshAccessToken } from "../routes/auth.js";
+
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
+
+// Single-order placement uses the SYNCHRONOUS endpoint: it returns the order id in the
+// response so the order can be tracked (fill polling + stop-loss attachment). The async
+// endpoint was previously used and its id field was unverified — a placed-but-untracked
+// order is the single most dangerous failure mode here.
+const PLACE_ORDER_ENDPOINT = "/orders/sync";
 
 export const ORDER_TYPE = Object.freeze({
   LIMIT: 1,
@@ -26,14 +34,64 @@ export const ORDER_SIDE = Object.freeze({
 });
 
 /**
- * Make a raw FYERS API call.
+ * Heuristic: does a FYERS error payload indicate an invalid/expired access token? FYERS may
+ * signal this as an HTTP 401, or as an HTTP 200 with s!=="ok" and a token-related code/message
+ * (codes -8/-15/-16/-17 observed). Used to decide whether a refresh-and-retry is worth it.
  */
-async function fyersApiCall(endpoint, accessToken, appId, body = null, method = "GET") {
+export function isTokenErrorData(data) {
+  if (!data) return false;
+  const msg = String(data.message || "").toLowerCase();
+  const code = Number(data.code);
+  return (
+    msg.includes("token") ||
+    msg.includes("authenticate") ||
+    msg.includes("authorization") ||
+    code === -8 ||
+    code === -15 ||
+    code === -16 ||
+    code === -17
+  );
+}
+
+/**
+ * Pull the broker order id out of a place-order or orderbook entry, tolerating the several
+ * shapes FYERS has used across endpoints/versions. Returns a non-empty string, or null.
+ */
+export function extractOrderId(response) {
+  if (!response) return null;
+  const candidates = [
+    response.id,
+    response.orderId,
+    response.data?.id,
+    response.data?.orderId,
+    Array.isArray(response.orderNumbers)
+      ? response.orderNumbers[0]?.id ?? response.orderNumbers[0]
+      : response.orderNumbers,
+  ];
+  for (const c of candidates) {
+    if (c !== undefined && c !== null && String(c).length > 0) return String(c);
+  }
+  return null;
+}
+
+// A short unique tag attached to every live order so it can be located in the orderbook even
+// if the place response is malformed. FYERS caps orderTag length, so keep it well under.
+function generateOrderTag() {
+  return ("tos" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 20);
+}
+
+/**
+ * Make a FYERS API call, reading the access token from the session each attempt. On an
+ * auth failure it refreshes the token once and retries, so an access token that expires
+ * mid-session does not strand an open position.
+ */
+async function fyersApiCall(endpoint, session, body = null, method = "GET", _retried = false) {
+  const appId = session.appId ?? process.env.FYERS_APP_ID;
   const response = await fetch(`${FYERS_API_BASE}${endpoint}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `${appId}:${accessToken}`,
+      Authorization: `${appId}:${session.accessToken}`,
     },
     body: body ? JSON.stringify(body) : null,
     // Bound every broker call so a hung connection can't stall an order/fill poll forever.
@@ -42,37 +100,69 @@ async function fyersApiCall(endpoint, accessToken, appId, body = null, method = 
 
   if (!response.ok) {
     const text = await response.text();
+    if (response.status === 401 && !_retried && (await refreshAccessToken(session))) {
+      return fyersApiCall(endpoint, session, body, method, true);
+    }
     throw new Error(`FYERS ${method} ${endpoint} HTTP ${response.status}: ${text.substring(0, 240)}`);
   }
 
   const data = await response.json();
   if (data.s !== "ok") {
+    if (!_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
+      return fyersApiCall(endpoint, session, body, method, true);
+    }
     throw new Error(data.message || `FYERS ${endpoint} returned error`);
   }
   return data;
 }
 
 /**
- * FYERS returns order status as a number. Map it to a canonical string.
- * Common v3 status codes observed in FYERS:
- *   1 = Pending / Open
- *   2 = Filled / Executed
- *   3 = Rejected
- *   4 = Cancelled
+ * Locate a just-placed order in the orderbook by the unique orderTag we attached. Used to
+ * recover the order id when the place response did not contain one. Best-effort: returns null
+ * on any failure rather than throwing (the caller decides how to escalate).
  */
-function normalizeStatus(status) {
+async function findOrderIdByTag(tag, session) {
+  try {
+    const data = await fyersApiCall("/orders", session);
+    const book = data.orderBook || data.data || [];
+    const match = book.find((o) => (o.orderTag ?? o.tag) === tag);
+    return match ? extractOrderId(match) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * FYERS returns order status as a number. Map it to a canonical string.
+ * Verified FYERS v3 order status codes:
+ *   1 = Cancelled
+ *   2 = Traded / Filled
+ *   3 = (reserved / for future use)
+ *   4 = Transit  (accepted, en route to the exchange — NOT terminal, keep waiting)
+ *   5 = Rejected
+ *   6 = Pending
+ *   7 = Expired
+ * The previous map (1=Pending, 3=Rejected, 4=Cancelled) was wrong for everything but 2:
+ * in particular it read Transit(4) as CANCELLED, which made the engine abandon an entry that
+ * was actually going live — a filled-but-untracked position with no stop-loss.
+ */
+export function normalizeStatus(status) {
   if (status === null || status === undefined) return "UNKNOWN";
   const num = Number(status);
   if (!Number.isNaN(num)) {
     switch (num) {
       case 1:
-        return "PENDING";
+        return "CANCELLED";
       case 2:
         return "FILLED";
-      case 3:
-        return "REJECTED";
       case 4:
-        return "CANCELLED";
+        return "PENDING"; // Transit — treat as in-flight so we keep polling
+      case 5:
+        return "REJECTED";
+      case 6:
+        return "PENDING";
+      case 7:
+        return "EXPIRED";
       default:
         return "UNKNOWN";
     }
@@ -81,7 +171,8 @@ function normalizeStatus(status) {
   if (s === "FILLED" || s === "EXECUTED" || s === "TRADED") return "FILLED";
   if (s === "REJECTED") return "REJECTED";
   if (s === "CANCELLED" || s === "CANCELED") return "CANCELLED";
-  if (s === "PENDING" || s === "OPEN" || s === "AMO") return "PENDING";
+  if (s === "EXPIRED") return "EXPIRED";
+  if (s === "PENDING" || s === "OPEN" || s === "AMO" || s === "TRANSIT") return "PENDING";
   return "UNKNOWN";
 }
 
@@ -182,18 +273,34 @@ export async function placeOrder({
     };
   }
 
-  // TODO(verify FYERS v3 docs): (1) Confirm the /orders/async response actually exposes the
-  // order id at `response.id` (vs response.data.id / orderNumbers). If it doesn't, a live
-  // order IS placed but `orderId` is undefined, so waitForFill can't track it and no SL is
-  // attached. Consider the synchronous /orders endpoint for orders that must be tracked.
-  // (2) Confirm the numeric status mapping in normalizeStatus() (1=Pending,2=Filled,
-  // 3=Rejected,4=Cancelled) against current docs — a wrong map could misreport a fill.
-  const response = await fyersApiCall("/orders/async", session.accessToken, session.appId ?? process.env.FYERS_APP_ID, orderBody, "POST");
+  // Attach a unique tag so the order can be located in the orderbook even if the place
+  // response is malformed. Use the synchronous endpoint, which returns the order id.
+  // NOTE(verify FYERS v3 docs): normalizeStatus() maps 1=Pending,2=Filled,3=Rejected,
+  // 4=Cancelled — confirm against current docs; a wrong map could misreport a fill.
+  const orderTag = generateOrderTag();
+  const response = await fyersApiCall(PLACE_ORDER_ENDPOINT, session, { ...orderBody, orderTag }, "POST");
+
+  // Resolve the order id robustly. If the response omitted it, the order may still be live —
+  // recover it from the orderbook by orderTag rather than ever returning an untracked order
+  // (which would fill with no fill-tracking and no stop-loss attached).
+  let orderId = extractOrderId(response);
+  if (!orderId) {
+    orderId = await findOrderIdByTag(orderTag, session);
+  }
+  if (!orderId) {
+    if (auditLogger) {
+      auditLogger({ type: "ORDER_ID_UNRESOLVED", symbol, qty, side, type, orderTag });
+    }
+    throw new Error(
+      `Order placed but order id could not be resolved (orderTag=${orderTag}); manual reconciliation required`
+    );
+  }
 
   if (auditLogger) {
     auditLogger({
       type: "ORDER_PLACED",
-      orderId: response.id,
+      orderId,
+      orderTag,
       symbol,
       qty,
       side,
@@ -204,7 +311,8 @@ export async function placeOrder({
   }
 
   return {
-    orderId: response.id,
+    orderId,
+    orderTag,
     status: "PLACED",
     symbol,
     qty,
@@ -246,7 +354,7 @@ export async function waitForFill(orderId, session, options = {}) {
     const details = await getOrderDetails(orderId, session);
     lastState = details;
 
-    if (["FILLED", "REJECTED", "CANCELLED"].includes(details.status)) {
+    if (["FILLED", "REJECTED", "CANCELLED", "EXPIRED"].includes(details.status)) {
       if (auditLogger) {
         auditLogger({
           type: details.status === "FILLED" ? "ORDER_FILLED" : `ORDER_${details.status}`,
@@ -279,7 +387,7 @@ export async function waitForFill(orderId, session, options = {}) {
  * Fetch normalized order details from the broker.
  */
 export async function getOrderDetails(orderId, session) {
-  const data = await fyersApiCall(`/orders/${orderId}`, session.accessToken, session.appId ?? process.env.FYERS_APP_ID);
+  const data = await fyersApiCall(`/orders/${orderId}`, session);
   const order = data.data || {};
   return {
     orderId,
@@ -300,42 +408,50 @@ export async function getOrderDetails(orderId, session) {
 /**
  * Cancel a pending broker order.
  */
-export async function cancelOrder(orderId, session, auditLogger = null) {
-  if (orderId && orderId.startsWith("PAPER-")) {
+export async function cancelOrder(orderId, session, auditLogger = null, _retried = false) {
+  if (orderId && String(orderId).startsWith("PAPER-")) {
     if (auditLogger) auditLogger({ type: "PAPER_ORDER_CANCELLED", orderId });
     return { success: true };
   }
 
   const appId = session.appId ?? process.env.FYERS_APP_ID;
+  const authHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `${appId}:${session.accessToken}`,
+  };
   const url = `${FYERS_API_BASE}/orders/${orderId}`;
 
   // Try REST-style DELETE first, then fall back to the older POST /orders/cancel.
   let response = await fetch(url, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `${appId}:${session.accessToken}`,
-    },
+    headers: authHeaders,
+    signal: AbortSignal.timeout(10000),
   });
 
   if (!response.ok && (response.status === 404 || response.status === 405)) {
     response = await fetch(`${FYERS_API_BASE}/orders/cancel`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `${appId}:${session.accessToken}`,
-      },
+      headers: authHeaders,
       body: JSON.stringify({ id: orderId }),
+      signal: AbortSignal.timeout(10000),
     });
   }
 
   if (!response.ok) {
     const text = await response.text();
+    // Refresh the token once and retry — cancelling a stale SL on close must not be blocked
+    // by an expired token.
+    if (response.status === 401 && !_retried && (await refreshAccessToken(session))) {
+      return cancelOrder(orderId, session, auditLogger, true);
+    }
     throw new Error(`Cancel order ${orderId} failed: HTTP ${response.status}: ${text.substring(0, 240)}`);
   }
 
   const data = await response.json();
   if (data.s !== "ok") {
+    if (!_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
+      return cancelOrder(orderId, session, auditLogger, true);
+    }
     throw new Error(data.message || `Cancel order ${orderId} failed`);
   }
 

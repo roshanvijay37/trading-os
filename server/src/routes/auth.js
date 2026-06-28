@@ -226,12 +226,86 @@ function isSessionExpired(session) {
   return !Number.isFinite(created) || Date.now() - created >= SESSION_TTL_MS;
 }
 
-// TODO(auth): A refresh_token is stored on the session but never used. FYERS v3 access
-// tokens expire daily; without a refresh path (POST {FYERS_API_BASE}/validate-refresh-token
-// with the refresh_token + appIdHash + PIN), every live action — including placing the
-// broker stop-loss for an open position — fails once the token expires, and the only
-// recovery is a manual re-login. Implement a refresh-and-retry-once wrapper before relying
-// on this unattended. (Requires the user's PIN, so confirm how it is supplied/stored.)
+// ─── TOKEN REFRESH ────────────────────────────────────────────────────
+// FYERS v3 access tokens expire daily. The refresh_token (valid ~15 days) can mint a new
+// access token without a full re-login, but FYERS requires the account PIN. We read it from
+// the FYERS_PIN env var; if it is not set we cannot refresh unattended and callers fall back
+// to fail-safe behaviour (stop opening new trades and rely on the already-placed broker SL).
+// The PIN is sensitive — storing it enables fully unattended trading — so it is strictly
+// opt-in via env and never hardcoded.
+const FYERS_REFRESH_URL = `${FYERS_API_BASE}/validate-refresh-token`;
+let warnedNoPin = false;
+// sessionId -> in-flight refresh Promise. A burst of 401s (an order plus several data polls
+// arriving together once the token dies) must trigger only ONE refresh round-trip, not a
+// thundering herd that could trip FYERS rate limits or race on the stored token.
+const refreshInFlight = new Map();
+
+function getAppIdHash() {
+  return crypto.createHash("sha256").update(`${appId}:${secretId}`).digest("hex");
+}
+
+/**
+ * Exchange the session's refresh_token for a fresh access token and update the session IN
+ * PLACE so every holder of this object reference (e.g. the auto-trader's captured
+ * `currentSession`) immediately sees the new token. Returns the new access token, or null if
+ * refresh is impossible (no PIN / no refresh_token) or the broker rejected it — callers must
+ * treat null as "still unauthenticated" and fail safe.
+ */
+export async function refreshAccessToken(session) {
+  if (!session || !session.refreshToken) return null;
+  const pin = process.env.FYERS_PIN;
+  if (!pin) {
+    if (!warnedNoPin) {
+      console.warn(
+        "[AUTH] Access token expired but FYERS_PIN is not set — cannot auto-refresh. " +
+          "Set FYERS_PIN to enable unattended token refresh; until then the bot will stop " +
+          "opening new trades and rely on the broker stop-loss for any open position."
+      );
+      warnedNoPin = true;
+    }
+    return null;
+  }
+
+  if (refreshInFlight.has(session.id)) return refreshInFlight.get(session.id);
+
+  const p = (async () => {
+    try {
+      const response = await fetch(FYERS_REFRESH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "refresh_token",
+          appIdHash: getAppIdHash(),
+          refresh_token: session.refreshToken,
+          pin: String(pin),
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.s !== "ok" || !data.access_token) {
+        console.error(`[AUTH] Token refresh failed: ${data.message || `HTTP ${response.status}`}`);
+        return null;
+      }
+      // Mutate the shared object so referencing holders see the new token, and reset
+      // createdAt so the local 24h TTL does not immediately expire the refreshed session.
+      session.accessToken = data.access_token;
+      if (data.refresh_token) session.refreshToken = data.refresh_token;
+      session.createdAt = new Date().toISOString();
+      sessions.set(session.id, session);
+      saveSessions();
+      console.log("[AUTH] Access token refreshed via refresh_token");
+      return data.access_token;
+    } catch (err) {
+      console.error("[AUTH] Token refresh error:", err.message);
+      return null;
+    } finally {
+      refreshInFlight.delete(session.id);
+    }
+  })();
+
+  refreshInFlight.set(session.id, p);
+  return p;
+}
 
 // Helper to get session by ID (used by other routes like backtest)
 export function getSession(sessionId) {

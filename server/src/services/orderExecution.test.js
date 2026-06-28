@@ -5,11 +5,70 @@ import {
   placeMarketExit,
   placeStopLossOrder,
   cancelOrder,
+  extractOrderId,
+  isTokenErrorData,
+  normalizeStatus,
   ORDER_TYPE,
   ORDER_SIDE,
 } from "./orderExecution.js";
 
 const session = {}; // unused on paper/validation paths (no network is hit)
+
+describe("normalizeStatus (FYERS v3 numeric order status)", () => {
+  it("maps the verified v3 codes correctly", () => {
+    expect(normalizeStatus(1)).toBe("CANCELLED");
+    expect(normalizeStatus(2)).toBe("FILLED");
+    expect(normalizeStatus(4)).toBe("PENDING"); // Transit — must NOT be terminal
+    expect(normalizeStatus(5)).toBe("REJECTED");
+    expect(normalizeStatus(6)).toBe("PENDING");
+    expect(normalizeStatus(7)).toBe("EXPIRED");
+  });
+  it("does not misread Transit(4) as a terminal CANCELLED (the dangerous old bug)", () => {
+    expect(normalizeStatus(4)).not.toBe("CANCELLED");
+  });
+  it("handles string statuses and unknowns", () => {
+    expect(normalizeStatus("TRADED")).toBe("FILLED");
+    expect(normalizeStatus("transit")).toBe("PENDING");
+    expect(normalizeStatus(3)).toBe("UNKNOWN");
+    expect(normalizeStatus(null)).toBe("UNKNOWN");
+  });
+});
+
+describe("extractOrderId (tolerates FYERS response shapes)", () => {
+  it("reads a top-level id", () => {
+    expect(extractOrderId({ s: "ok", id: "808058117761" })).toBe("808058117761");
+  });
+  it("reads a numeric id as a string", () => {
+    expect(extractOrderId({ id: 12345 })).toBe("12345");
+  });
+  it("falls back to data.id and orderId", () => {
+    expect(extractOrderId({ data: { id: "A1" } })).toBe("A1");
+    expect(extractOrderId({ orderId: "B2" })).toBe("B2");
+  });
+  it("reads an orderNumbers array entry", () => {
+    expect(extractOrderId({ orderNumbers: [{ id: "C3" }] })).toBe("C3");
+  });
+  it("returns null when no id is present", () => {
+    expect(extractOrderId({ s: "ok", message: "done" })).toBeNull();
+    expect(extractOrderId({})).toBeNull();
+    expect(extractOrderId(null)).toBeNull();
+  });
+});
+
+describe("isTokenErrorData (detects expired/invalid token)", () => {
+  it("matches token/auth messages", () => {
+    expect(isTokenErrorData({ message: "Invalid token" })).toBe(true);
+    expect(isTokenErrorData({ message: "Could not authenticate" })).toBe(true);
+  });
+  it("matches known token error codes", () => {
+    expect(isTokenErrorData({ code: -16 })).toBe(true);
+    expect(isTokenErrorData({ code: -17 })).toBe(true);
+  });
+  it("does not match unrelated errors", () => {
+    expect(isTokenErrorData({ message: "Insufficient funds", code: -99 })).toBe(false);
+    expect(isTokenErrorData(null)).toBe(false);
+  });
+});
 
 describe("order constants", () => {
   it("expose the FYERS numeric codes and are frozen", () => {
