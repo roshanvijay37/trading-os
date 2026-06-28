@@ -16,8 +16,12 @@ describe("normalizeSdkTick", () => {
     });
   });
 
-  it("supports alternate field names", () => {
-    expect(normalizeSdkTick({ s: "X", lp: 10, volume: 5 })).toEqual({ symbol: "X", ltp: 10, vol: 5 });
+  it("supports alternate field names (symbolName/lp/volume)", () => {
+    expect(normalizeSdkTick({ symbolName: "X", lp: 10, volume: 5 })).toEqual({ symbol: "X", ltp: 10, vol: 5 });
+  });
+
+  it("ignores status/ack frames (s:'ok' with no symbol)", () => {
+    expect(normalizeSdkTick({ s: "ok", code: 200, message: "connected" })).toBeNull();
   });
 
   it("returns null for malformed input or a missing symbol", () => {

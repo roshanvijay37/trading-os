@@ -21,7 +21,9 @@ let started = false;
  */
 export function normalizeSdkTick(msg) {
   if (!msg || typeof msg !== "object") return null;
-  const symbol = msg.symbol || msg.s || msg.symbolName;
+  // NB: msg.s is the STATUS field ("ok"/"error") on ack/connection frames, NOT a symbol —
+  // do not fall back to it, or status frames get stored as junk "ok" ticks.
+  const symbol = msg.symbol || msg.symbolName;
   if (!symbol) return null;
   const ltp = Number(msg.ltp ?? msg.lp ?? msg.last_traded_price ?? 0) || 0;
   const vol = Number(msg.vol_traded_today ?? msg.volume ?? msg.vol ?? msg.v ?? 0) || 0;
