@@ -441,7 +441,7 @@ export function AutoTrade() {
                 {status.openPositions.map((pos: BotPosition) => (
                   <div
                     key={pos.id}
-                    className="flex items-center justify-between rounded border border-border-subtle bg-surface px-3 py-2"
+                    className="flex flex-col gap-2 rounded border border-border-subtle bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex items-center gap-3">
                       <span className={`rounded px-1.5 py-0.5 text-2xs font-semibold ${
@@ -451,7 +451,7 @@ export function AutoTrade() {
                       </span>
                       <span className="text-2xs text-zinc-300">{pos.optionSymbol}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-2xs text-zinc-500">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-zinc-500">
                       <span>Qty: {pos.quantity}</span>
                       <span>Avg Fill: ₹{pos.avgFillPrice ?? pos.entryPrice}</span>
                       <span>SL: ₹{pos.currentSL}</span>
@@ -571,7 +571,7 @@ export function AutoTrade() {
                 {status.recentSignals.slice(0, 5).map((sig: BotSignal, i: number) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between rounded border border-border-subtle bg-surface px-3 py-2"
+                    className="flex flex-col gap-2 rounded border border-border-subtle bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex items-center gap-3">
                       <span className={`rounded px-1.5 py-0.5 text-2xs font-semibold ${
@@ -581,7 +581,7 @@ export function AutoTrade() {
                       </span>
                       <span className="text-2xs text-zinc-300">{sig.underlying}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-2xs text-zinc-500">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-zinc-500">
                       <span>Entry: ₹{sig.entryPrice}</span>
                       <span>SL: ₹{sig.stopLoss}</span>
                       <span>Tgt: ₹{sig.target}</span>

@@ -126,7 +126,7 @@ export function StrategyManager() {
                 </button>
 
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-2xs font-medium text-zinc-200">{def.name}</span>
                     <span className={`rounded px-1.5 py-0.5 text-2xs font-medium ${getCategoryColor(def.category)}`}>
                       {def.category.replace("_", " ")}
@@ -138,7 +138,7 @@ export function StrategyManager() {
                   <p className="truncate text-2xs text-zinc-600">{def.description}</p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3">
                   {isEnabled && (
                     <>
                       <div className="text-right">
@@ -186,7 +186,7 @@ export function StrategyManager() {
       {/* Modal */}
       {selectedConfig && selectedDef && showConfig && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-2xl rounded-panel border border-border bg-surface p-5">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-panel border border-border bg-surface p-5">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-medium text-zinc-200">{selectedDef.name}</h2>

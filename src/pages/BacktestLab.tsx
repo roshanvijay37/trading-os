@@ -141,8 +141,8 @@ export function BacktestLab() {
 
     try {
       const container = chartContainerRef.current;
-      const width = container.clientWidth || container.offsetWidth || 800;
-      if (width <= 0) return;
+      const width = container.clientWidth || container.offsetWidth || Math.min(window.innerWidth - 64, 800);
+      if (!width || width <= 0) return;
 
       const chart = createChart(container, {
         layout: { background: { type: ColorType.Solid, color: "#08080a" }, textColor: "#71717a" },
@@ -209,7 +209,8 @@ export function BacktestLab() {
 
       const handleResize = () => {
         if (chartContainerRef.current && chartRef.current) {
-          chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth || chartContainerRef.current.offsetWidth || 800 });
+          const w = chartContainerRef.current.clientWidth || chartContainerRef.current.offsetWidth;
+          if (w > 0) chartRef.current.applyOptions({ width: w });
         }
       };
       window.addEventListener("resize", handleResize);

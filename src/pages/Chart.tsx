@@ -299,7 +299,7 @@ export function Chart() {
 
         <div className="flex items-center gap-2">
           <Clock size={13} className="text-zinc-600" />
-          <div className="flex rounded-panel border border-border-subtle bg-surface overflow-hidden">
+          <div className="flex flex-wrap rounded-panel border border-border-subtle bg-surface overflow-hidden">
             {timeframes.map((tf) => (
               <button
                 key={tf.value}
@@ -339,7 +339,7 @@ export function Chart() {
 
       {candles.length > 0 && (
         <div className="mt-5 rounded-panel border border-border bg-panel p-4">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <h2 className="text-2xs font-semibold uppercase tracking-wider text-zinc-400">
                 {symbols.find((s) => s.value === symbol)?.label}
@@ -348,7 +348,7 @@ export function Chart() {
                 {timeframes.find((t) => t.value === resolution)?.label}
               </span>
             </div>
-            <div className="flex items-center gap-4 text-2xs text-zinc-600">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-zinc-600">
               <span className="font-mono">O: {candles[candles.length - 1].open.toFixed(2)}</span>
               <span className="font-mono">H: {candles[candles.length - 1].high.toFixed(2)}</span>
               <span className="font-mono">L: {candles[candles.length - 1].low.toFixed(2)}</span>
