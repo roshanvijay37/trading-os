@@ -84,6 +84,30 @@ function getActiveUnderlyings() {
   return CONFIG.UNDERLYINGS.filter((u) => CONFIG.SELECTED_INSTRUMENTS.includes(u.name));
 }
 
+// The UI sends config in camelCase; the engine stores it in SCREAMING_SNAKE_CASE. This maps
+// each incoming field to its CONFIG key. Without the translation a blind Object.assign() just
+// attached dead camelCase keys to CONFIG that nothing reads, so every saved setting silently
+// reverted to the default the /status endpoint reports. The values of this map double as the
+// set of user-tunable keys we persist across restarts (CAPITAL/EMERGENCY_STOP are deliberately
+// excluded — capital is re-fetched from the broker on start, and a halt shouldn't be config).
+const CONFIG_FIELD_MAP = {
+  riskPercent: "RISK_PERCENT",
+  maxTradesPerDay: "MAX_TRADES_PER_DAY",
+  maxRiskPerDay: "MAX_RISK_PER_DAY_PERCENT",
+  positionSizingMode: "POSITION_SIZING_MODE",
+  fixedLots: "FIXED_LOTS",
+  paperTrading: "PAPER_TRADING",
+  limitBufferPct: "LIMIT_BUFFER_PCT",
+  maxVIX: "MAX_VIX",
+  maxSpreadPct: "MAX_SPREAD_PCT",
+  minOI: "MIN_OI",
+  maxTimeEntryHour: "MAX_TIME_ENTRY_HOUR",
+  allowCorrelatedTrades: "ALLOW_CORRELATED_TRADES",
+  selectedStrategies: "SELECTED_STRATEGIES",
+  selectedInstruments: "SELECTED_INSTRUMENTS",
+};
+const PERSISTED_CONFIG_KEYS = Object.values(CONFIG_FIELD_MAP);
+
 // ─── SESSION REFERENCE ────────────────────────────────────────────────
 let currentSession = null;
 
@@ -111,6 +135,8 @@ const AUDIT_FILE = path.join(process.cwd(), "auto-trade-audit.jsonl");
 
 function saveState() {
   try {
+    const config = {};
+    for (const key of PERSISTED_CONFIG_KEYS) config[key] = CONFIG[key];
     fs.writeFileSync(
       STATE_FILE,
       JSON.stringify(
@@ -122,6 +148,7 @@ function saveState() {
           dailyPnL,
           dailyRealizedPnL,
           consecutiveLosses,
+          config,
         },
         null,
         2
@@ -149,6 +176,13 @@ function loadState() {
       dailyPnL = s.dailyPnL || 0;
       dailyRealizedPnL = s.dailyRealizedPnL || 0;
       consecutiveLosses = s.consecutiveLosses || 0;
+      // Restore only the known user-tunable keys so a stale/garbage field in the file can't
+      // leak into CONFIG.
+      if (s.config) {
+        for (const key of PERSISTED_CONFIG_KEYS) {
+          if (s.config[key] !== undefined) CONFIG[key] = s.config[key];
+        }
+      }
     }
   } catch (err) {
     console.error("[AUTO-TRADER] Load state failed:", err.message);
@@ -1075,11 +1109,20 @@ export function getPerformanceSummary() {
 
 export function setPaperTrading(enabled) {
   CONFIG.PAPER_TRADING = enabled;
+  saveState();
   return { paperTrading: CONFIG.PAPER_TRADING };
 }
 
 export function updateConfig(updates) {
-  Object.assign(CONFIG, updates);
+  // Translate camelCase UI fields to CONFIG keys, applying only the ones actually sent so a
+  // partial update doesn't clobber unrelated settings. Then persist so the change survives a
+  // server restart, not just the in-memory session.
+  for (const [incoming, target] of Object.entries(CONFIG_FIELD_MAP)) {
+    if (updates[incoming] !== undefined) {
+      CONFIG[target] = updates[incoming];
+    }
+  }
+  saveState();
   return {
     config: {
       riskPercent: CONFIG.RISK_PERCENT,
