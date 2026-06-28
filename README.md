@@ -19,8 +19,9 @@ TradingOS is an institutional-grade autonomous trading platform designed for hed
 9. [Tech Stack](#tech-stack)
 10. [Quick Start](#quick-start)
 11. [Development Workflow](#development-workflow)
+    - [Windows Development Notes](#windows-development-notes)
 12. [Operations & Deployment](#operations--deployment)
-12a. [Server Access (SSH)](#server-access-ssh)
+    - [Server Access (SSH)](#server-access-ssh)
 13. [Documentation](#documentation)
 14. [License](#license)
 
@@ -239,6 +240,24 @@ Navigation simplified from 13 items → 10 items.
 > - **UI** is deployed to and tested on **GitHub Pages**
 > - **Backend** is deployed to and tested on **Ubuntu**
 
+### Windows Development Notes
+
+When editing files on the Windows development machine (VS Code), keep the following in mind:
+
+- **Line endings are CRLF** — files use Windows-style CR+LF (`0x0D 0x0A`) line endings. Exact-string replacements that assume LF-only line endings may fail silently. Use regex-based replacements or Git Bash (`perl`/ `sed`) for multiline edits.
+- **Node/npm/Python are not on PATH** in this environment. You cannot run `npm run build`, TypeScript checks, or Python scripts here. Always validate builds on a machine with Node.js installed or on the Ubuntu server after deployment.
+- **Use Git Bash for tricky edits** — when the VS Code editor or PowerShell fails to match text, use:
+  ```bash
+  C:\Users\RoshanV\AppData\Local\Programs\Git\bin\bash.exe
+  ```
+  then use `perl -0777 -i -pe` or `sed` to make the change.
+- **Git `index.lock` can appear transiently** — if a commit fails with "Unable to create .git/index.lock", wait a few seconds and retry.
+- **Recommended fix for line-ending warnings**:
+  ```bash
+  git config core.autocrlf true
+  ```
+  or use `false` if you want LF everywhere and convert files once.
+
 ## Operations & Deployment
 
 ### Infrastructure
@@ -448,3 +467,4 @@ sudo certbot --nginx -d yourdomain.com
 ## License
 
 Proprietary — Institutional Trading Platform
+
