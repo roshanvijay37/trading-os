@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ListTree, Star, Search } from "lucide-react";
-import { useOptionsData } from "../data/OptionsDataProvider";
+import { useOptionsData } from "../state/OptionsDataProvider";
 import { ChainGate } from "../components/ChainGate";
 import { Panel, ProvenanceBadge, Segmented, Bar } from "../components/ui";
 import { dec, compact, signed, volPct } from "../lib/format";

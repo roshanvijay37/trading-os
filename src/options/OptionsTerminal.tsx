@@ -3,8 +3,8 @@
  * every panel shares a single broker feed. Mounted at /options (see App.tsx).
  */
 
-import { OptionsDataProvider } from "./data/OptionsDataProvider";
-import { StrategyProvider } from "./data/StrategyProvider";
+import { OptionsDataProvider } from "./state/OptionsDataProvider";
+import { StrategyProvider } from "./state/StrategyProvider";
 import { OptionsWorkspace } from "./OptionsWorkspace";
 
 export function OptionsTerminal() {

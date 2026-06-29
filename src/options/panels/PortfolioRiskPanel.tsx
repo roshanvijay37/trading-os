@@ -16,7 +16,7 @@
 
 import { useMemo } from "react";
 import { ShieldAlert, PlugZap, Activity } from "lucide-react";
-import { useOptionsData } from "../data/OptionsDataProvider";
+import { useOptionsData } from "../state/OptionsDataProvider";
 import { positionGreeks, aggregateGreeks, type PositionGreeks } from "../lib/positions";
 import { bsPrice } from "../lib/bs";
 import { Panel, ProvenanceBadge, Empty, Spinner, Banner, Stat } from "../components/ui";

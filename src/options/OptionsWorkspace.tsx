@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Search, Command, ChevronDown } from "lucide-react";
-import { useOptionsData } from "./data/OptionsDataProvider";
+import { useOptionsData } from "./state/OptionsDataProvider";
 import { PANELS, PANEL_GROUPS, type PanelDef } from "./panels/registry";
 import { StatusPill, Button } from "./components/ui";
 import { dec, fmtTime, volPct } from "./lib/format";

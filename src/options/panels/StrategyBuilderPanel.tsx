@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo } from "react";
 import { Wrench, Plus, Trash2, ArrowUp, ArrowDown, Layers } from "lucide-react";
-import { useStrategy } from "../data/StrategyProvider";
+import { useStrategy } from "../state/StrategyProvider";
 import { ChainGate } from "../components/ChainGate";
 import {
   Panel,

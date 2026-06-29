@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Star, Trash2, Plus, ArrowUpRight, Layers, CalendarClock } from "lucide-react";
-import { useOptionsData } from "../data/OptionsDataProvider";
+import { useOptionsData } from "../state/OptionsDataProvider";
 import { Panel, ProvenanceBadge, Button, Empty, Pill, Banner } from "../components/ui";
 import { watchlistStore } from "../lib/storage";
 import { onSelectContract, emitSelectContract, type SelectContractDetail } from "../lib/events";

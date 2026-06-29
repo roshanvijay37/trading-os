@@ -135,7 +135,7 @@ function ChartsBody({ chain }: { chain: EnrichedChain }) {
 
       {chartType === "underlying" && <UnderlyingChart chain={chain} />}
       {chartType === "premium" && <PremiumChart chain={chain} />}
-      {!isHistorical && <InSessionChart chain={chain} metric={chartType} />}
+      {!isHistorical && <InSessionChart chain={chain} metric={chartType as "pcr" | "oi" | "iv" | "greeks" | "volume"} />}
     </div>
   );
 }

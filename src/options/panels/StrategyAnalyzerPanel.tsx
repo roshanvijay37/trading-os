@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Gauge, Percent, Scale, Sigma, Wallet, Activity, AlertCircle } from "lucide-react";
-import { useStrategy } from "../data/StrategyProvider";
+import { useStrategy } from "../state/StrategyProvider";
 import { ChainGate } from "../components/ChainGate";
 import { Panel, ProvenanceBadge, Stat, Row, Empty, Banner } from "../components/ui";
 import { computePayoff, type PayoffOpts } from "../lib/payoff";

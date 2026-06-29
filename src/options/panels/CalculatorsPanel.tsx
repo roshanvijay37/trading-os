@@ -30,7 +30,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useOptionsData } from "../data/OptionsDataProvider";
+import { useOptionsData } from "../state/OptionsDataProvider";
 import { Panel, ProvenanceBadge, Segmented, Select, NumberField, Row, Banner } from "../components/ui";
 import { bsPrice, computeGreeks, impliedVol, DEFAULT_R } from "../lib/bs";
 import { dec, signed, volPct, rupee, int } from "../lib/format";

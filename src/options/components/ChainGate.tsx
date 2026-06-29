@@ -6,7 +6,7 @@
 
 import type { ReactNode } from "react";
 import { PlugZap, AlertTriangle } from "lucide-react";
-import { useOptionsData } from "../data/OptionsDataProvider";
+import { useOptionsData } from "../state/OptionsDataProvider";
 import { Empty, Spinner, Banner } from "./ui";
 import type { EnrichedChain } from "../types";
 
