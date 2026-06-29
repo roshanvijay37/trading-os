@@ -89,10 +89,46 @@ export const accountApi = {
       method: "POST",
       body: JSON.stringify({ symbols }),
     }),
-  getOptionChain: (symbol: string, strikecount = 10) =>
-    fetchWithAuth(`/account/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`),
+  getOptionChain: (symbol: string, strikecount = 10, expiry?: string | number) =>
+    fetchWithAuth(
+      `/account/option-chain?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}` +
+        (expiry != null && expiry !== "" ? `&expiry=${encodeURIComponent(String(expiry))}` : ""),
+    ),
+  // Level-5 market depth (bid/ask with quantities) for a single symbol.
+  getDepth: (symbol: string) =>
+    fetchWithAuth("/account/depth", {
+      method: "POST",
+      body: JSON.stringify({ symbol, ohlcv_flag: 1 }),
+    }),
   // Market breadth (advance/decline) derived live from the NIFTY 50 constituent quotes.
   getBreadth: () => fetchWithAuth("/account/breadth"),
+};
+
+// Options Workspace — live orders, broker margin, and arbitrary-symbol history.
+export interface OrderRequest {
+  symbol: string;
+  side: "BUY" | "SELL";
+  qty: number;
+  orderType: "MARKET" | "LIMIT" | "SL" | "SL-M";
+  limitPrice?: number;
+  stopPrice?: number;
+  productType: "INTRADAY" | "MARGIN" | "CNC";
+  validity: "DAY" | "IOC";
+}
+
+export const optionsApi = {
+  placeOrder: (order: OrderRequest) =>
+    fetchWithAuth("/options/place-order", { method: "POST", body: JSON.stringify(order) }),
+  basketOrder: (orders: OrderRequest[]) =>
+    fetchWithAuth("/options/basket-order", { method: "POST", body: JSON.stringify({ orders }) }),
+  modifyOrder: (payload: { id: string; limitPrice?: number; stopPrice?: number; qty?: number; orderType?: string }) =>
+    fetchWithAuth("/options/modify-order", { method: "PATCH", body: JSON.stringify(payload) }),
+  cancelOrder: (id: string) =>
+    fetchWithAuth("/options/cancel-order", { method: "POST", body: JSON.stringify({ id }) }),
+  getMargin: (orders: OrderRequest[]) =>
+    fetchWithAuth("/options/margin", { method: "POST", body: JSON.stringify({ orders }) }),
+  getHistory: (symbol: string, resolution = "5", days = 5) =>
+    fetchWithAuth(`/options/history?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&days=${days}`),
 };
 
 // Orders — read-only for bot audit trail

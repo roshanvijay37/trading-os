@@ -253,16 +253,19 @@ router.get("/search", requireAuth, async (req, res) => {
 
 // Get option chain for a symbol
 router.get("/option-chain", requireAuth, async (req, res) => {
-  const { symbol, strikecount = 10 } = req.query;
+  const { symbol, strikecount = 10, expiry } = req.query;
 
   if (!symbol) {
     return res.status(400).json({ error: "symbol is required" });
   }
 
   try {
-    // FYERS v3 option chain endpoint
-    const url = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`;
-    
+    // FYERS v3 option chain endpoint. `expiry` (a value from the returned expiryData[].expiry)
+    // selects a non-nearest expiry; omitting it returns the nearest expiry's chain. Forwarding
+    // it is additive — existing callers that don't pass it are unaffected.
+    let url = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(symbol)}&strikecount=${strikecount}`;
+    if (expiry) url += `&timestamp=${encodeURIComponent(expiry)}`;
+
     const response = await fetch(url, {
       headers: {
         Authorization: `${req.fyers.appId}:${req.fyers.accessToken}`,

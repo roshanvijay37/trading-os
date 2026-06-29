@@ -11,6 +11,7 @@ import { BacktestLab } from "./pages/BacktestLab";
 import { StrategyManager } from "./pages/StrategyManager";
 import { RiskDashboard } from "./pages/RiskDashboard";
 import { MarketIntelligencePage } from "./pages/MarketIntelligence";
+import { OptionsTerminal } from "./options/OptionsTerminal";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/strategy-manager" element={<StrategyManager />} />
           <Route path="/risk-dashboard" element={<RiskDashboard />} />
           <Route path="/market-intelligence" element={<MarketIntelligencePage />} />
+          <Route path="/options" element={<OptionsTerminal />} />
           <Route path="/journal" element={<Journal />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
