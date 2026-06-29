@@ -169,17 +169,17 @@ function ChainTable({
   const showCE = filter !== "PE";
   const showPE = filter !== "CE";
   return (
-    <table className="w-full border-collapse text-2xs">
+    <table className="chain-grid w-full border-collapse text-2xs">
       <thead className="sticky top-0 z-10 bg-panel">
         <tr className="text-[9px] uppercase tracking-wider text-zinc-600">
           {showCE && (
             <>
               <Th>OI</Th>
-              <Th>ΔOI</Th>
+              <Th className="hidden sm:table-cell">ΔOI</Th>
               {extended && <Th>Vol</Th>}
               {extended && <Th>Γ</Th>}
               {extended && <Th>Θ</Th>}
-              <Th>IV</Th>
+              <Th className="hidden sm:table-cell">IV</Th>
               <Th>Δ</Th>
               {extended && <Th>Bid</Th>}
               <Th highlight>LTP</Th>
@@ -191,11 +191,11 @@ function ChainTable({
               <Th highlight>LTP</Th>
               {extended && <Th>Bid</Th>}
               <Th>Δ</Th>
-              <Th>IV</Th>
+              <Th className="hidden sm:table-cell">IV</Th>
               {extended && <Th>Θ</Th>}
               {extended && <Th>Γ</Th>}
               {extended && <Th>Vol</Th>}
-              <Th>ΔOI</Th>
+              <Th className="hidden sm:table-cell">ΔOI</Th>
               <Th>OI</Th>
             </>
           )}
@@ -245,11 +245,11 @@ function CeCells({ row, itm, extended, maxOi }: { row: StrikeRow; itm: boolean; 
         </div>
         <span className="relative">{compact(q.oi)}</span>
       </td>
-      <td className={`px-1.5 py-1 text-right font-mono ${bg} ${q.oiChange >= 0 ? "text-gain" : "text-loss"}`}>{compact(q.oiChange)}</td>
+      <td className={`hidden px-1.5 py-1 text-right font-mono sm:table-cell ${bg} ${q.oiChange >= 0 ? "text-gain" : "text-loss"}`}>{compact(q.oiChange)}</td>
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-zinc-500 ${bg}`}>{compact(q.volume)}</td>}
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-zinc-500 ${bg}`}>{dec(q.greeks.gamma, 4)}</td>}
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-loss ${bg}`}>{dec(q.greeks.theta, 1)}</td>}
-      <td className={`px-1.5 py-1 text-right font-mono text-zinc-400 ${bg}`}>{q.iv > 0 ? volPct(q.iv) : "—"}</td>
+      <td className={`hidden px-1.5 py-1 text-right font-mono text-zinc-400 sm:table-cell ${bg}`}>{q.iv > 0 ? volPct(q.iv) : "—"}</td>
       <td className={`px-1.5 py-1 text-right font-mono text-zinc-400 ${bg}`}>{q.iv > 0 ? dec(q.greeks.delta, 2) : "—"}</td>
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-zinc-500 ${bg}`}>{dec(q.bid, 1)}</td>}
       <Ltp q={q} bg={bg} />
@@ -265,11 +265,11 @@ function PeCells({ row, itm, extended, maxOi }: { row: StrikeRow; itm: boolean; 
       <Ltp q={q} bg={bg} />
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-zinc-500 ${bg}`}>{dec(q.bid, 1)}</td>}
       <td className={`px-1.5 py-1 text-right font-mono text-zinc-400 ${bg}`}>{q.iv > 0 ? dec(q.greeks.delta, 2) : "—"}</td>
-      <td className={`px-1.5 py-1 text-right font-mono text-zinc-400 ${bg}`}>{q.iv > 0 ? volPct(q.iv) : "—"}</td>
+      <td className={`hidden px-1.5 py-1 text-right font-mono text-zinc-400 sm:table-cell ${bg}`}>{q.iv > 0 ? volPct(q.iv) : "—"}</td>
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-loss ${bg}`}>{dec(q.greeks.theta, 1)}</td>}
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-zinc-500 ${bg}`}>{dec(q.greeks.gamma, 4)}</td>}
       {extended && <td className={`px-1.5 py-1 text-right font-mono text-zinc-500 ${bg}`}>{compact(q.volume)}</td>}
-      <td className={`px-1.5 py-1 text-right font-mono ${bg} ${q.oiChange >= 0 ? "text-gain" : "text-loss"}`}>{compact(q.oiChange)}</td>
+      <td className={`hidden px-1.5 py-1 text-right font-mono sm:table-cell ${bg} ${q.oiChange >= 0 ? "text-gain" : "text-loss"}`}>{compact(q.oiChange)}</td>
       <td className={`relative px-1.5 py-1 text-right font-mono text-zinc-400 ${bg}`}>
         <div className="absolute inset-y-1 left-0 w-full opacity-30">
           <Bar value={q.oi} max={maxOi} tone="green" />
@@ -297,9 +297,9 @@ function Ltp({ q, bg }: { q: OptionQuote; bg: string }) {
   );
 }
 
-function Th({ children, center, highlight }: { children: React.ReactNode; center?: boolean; highlight?: boolean }) {
+function Th({ children, center, highlight, className = "" }: { children: React.ReactNode; center?: boolean; highlight?: boolean; className?: string }) {
   return (
-    <th className={`px-1.5 py-1.5 font-semibold ${center ? "text-center" : "text-right"} ${highlight ? "text-zinc-400" : ""}`}>
+    <th className={`px-1.5 py-1.5 font-semibold ${center ? "text-center" : "text-right"} ${highlight ? "text-zinc-400" : ""} ${className}`}>
       {children}
     </th>
   );

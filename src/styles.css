@@ -57,6 +57,23 @@ textarea {
   font: inherit;
 }
 
+/* Utilities for dense/mobile layouts */
+@layer utilities {
+  /* Hide scrollbars on horizontal chip strips / metric rails while keeping scroll */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Momentum scrolling on touch devices */
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+}
+
 /* Institutional panel base */
 @layer components {
   .inst-panel {
@@ -73,5 +90,14 @@ textarea {
   }
   .inst-text-muted {
     @apply text-zinc-600;
+  }
+}
+
+/* Roomier option-chain rows on touch screens (specificity beats the cells' own py-* utility) */
+@media (max-width: 639px) {
+  .chain-grid td,
+  .chain-grid th {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
   }
 }
