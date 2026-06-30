@@ -16,6 +16,50 @@ let skt = null;
 let started = false;
 
 /**
+ * Remove the fyers-api-v3 package from the CommonJS require cache so the NEXT require() rebuilds
+ * a fresh module — and therefore a fresh socket singleton. The SDK's fyersDataSocket.getInstance()
+ * returns a PROCESS-WIDE singleton bound to the access token it was first constructed with; a
+ * later getInstance(newToken) hands back the same instance and ignores the new token. Without
+ * this purge a refreshed/replaced token never reaches the live feed — the socket keeps
+ * reconnecting with the dead token until the whole Node process restarts (the exact failure this
+ * change exists to fix).
+ */
+function purgeSdkFromCache() {
+  try {
+    for (const key of Object.keys(require.cache)) {
+      if (key.includes("fyers-api-v3")) delete require.cache[key];
+    }
+  } catch (err) {
+    console.error("[DATA-SOCKET-V3] Cache purge failed:", err.message);
+  }
+}
+
+/**
+ * Fully tear down the current SDK socket: stop its auto-reconnect loop, close the connection,
+ * drop our reference, and purge the singleton from the module cache so the next
+ * startSdkDataSocket() builds a brand-new instance with whatever token it is handed.
+ */
+function teardownSdkSocket() {
+  if (skt) {
+    try {
+      // autoreconnect(0) sets maxreconnectiontries=0 so the SDK's retry loop gives up instead of
+      // resurrecting the old (dead-token) socket after we close it.
+      if (typeof skt.autoreconnect === "function") skt.autoreconnect(0);
+    } catch (err) {
+      console.error("[DATA-SOCKET-V3] autoreconnect(0) failed:", err.message);
+    }
+    try {
+      if (typeof skt.close === "function") skt.close();
+    } catch (err) {
+      console.error("[DATA-SOCKET-V3] close failed:", err.message);
+    }
+  }
+  skt = null;
+  started = false;
+  purgeSdkFromCache();
+}
+
+/**
  * Pure: normalize an SDK tick message into { symbol, ltp, vol }.
  * Defensive about field names across lite/full mode. Exported for unit testing.
  */
@@ -35,6 +79,10 @@ export function normalizeSdkTick(msg) {
  * Returns false (and stays quiet) if the package is not installed.
  */
 export function startSdkDataSocket({ accessToken, appId, symbols = [], onTick, onStatus }) {
+  // Tear down any prior singleton (and purge it from the module cache) FIRST, so the token
+  // passed in this call actually takes effect instead of being shadowed by the cached instance.
+  teardownSdkSocket();
+
   let DataSocket;
   try {
     DataSocket = require("fyers-api-v3").fyersDataSocket;
@@ -108,13 +156,9 @@ export function sdkUnsubscribe(symbols = []) {
 }
 
 export function sdkDisconnect() {
-  try {
-    if (skt && typeof skt.close === "function") skt.close();
-  } catch (e) {
-    console.error("[DATA-SOCKET-V3] sdkDisconnect failed:", e.message);
-  }
-  skt = null;
-  started = false;
+  // Full teardown (close + drop reference + purge the singleton from the module cache) so a
+  // later start can rebuild the socket with a current token.
+  teardownSdkSocket();
 }
 
 export function isSdkActive() {
