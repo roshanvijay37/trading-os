@@ -294,6 +294,16 @@ export async function refreshAccessToken(session) {
       sessions.set(session.id, session);
       saveSessions();
       console.log("[AUTH] Access token refreshed via refresh_token");
+      // Re-arm the live market-data socket with the new token. That feed socket is a
+      // process-wide singleton otherwise stranded on the now-dead token; without this it keeps
+      // reconnecting with the expired token until the process restarts. Lazy import avoids any
+      // module init-order coupling between auth and the tick service.
+      try {
+        const { onTokenRefreshed } = await import("../services/tickService.js");
+        onTokenRefreshed(data.access_token, appId);
+      } catch (err) {
+        console.error("[AUTH] Feed re-arm after refresh failed:", err.message);
+      }
       return data.access_token;
     } catch (err) {
       console.error("[AUTH] Token refresh error:", err.message);

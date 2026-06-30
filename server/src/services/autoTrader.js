@@ -35,6 +35,7 @@ import {
   aggregateOHLC,
   getLatestTick,
   connectFyersWebSocket,
+  disconnectFyersWebSocket,
   subscribeToSymbols,
   unsubscribeFromSymbols,
   getWsStatus,
@@ -1198,6 +1199,15 @@ export function stopAutoTrader() {
   if (pollInterval) {
     clearTimeout(pollInterval);
     pollInterval = null;
+  }
+  // Tear down the live data feed so a later Start rebuilds it with the CURRENT token. The SDK
+  // market-data socket is a process-wide singleton pinned to the token it was first built with;
+  // without this teardown a Stop/Start (or a fresh login) cannot replace a dead/expired token
+  // and the feed stays stranded until the whole process restarts.
+  try {
+    disconnectFyersWebSocket();
+  } catch (err) {
+    console.error("[AUTO-TRADER] Feed disconnect on stop failed:", err.message);
   }
   const openCount = openPositions.filter((p) => p.status === "OPEN").length;
   console.log(`[AUTO-TRADER] Stopped. ${openCount} positions open.`);

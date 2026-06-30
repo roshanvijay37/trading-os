@@ -7,7 +7,7 @@
  */
 
 import WebSocket from "ws";
-import { startSdkDataSocket, sdkSubscribe, sdkDisconnect } from "./fyersDataSocketV3.js";
+import { startSdkDataSocket, sdkSubscribe, sdkDisconnect, isSdkActive } from "./fyersDataSocketV3.js";
 
 // Data-feed mode: "raw" (legacy hand-rolled WS, default) | "sdk" (official fyers-api-v3
 // dataSocket, which decodes the v3 protobuf frames). Flag-gated so production stays on the
@@ -268,6 +268,35 @@ export function disconnectFyersWebSocket() {
   }
   isConnected = false;
   console.log("[TICK-SERVICE] Disconnected");
+}
+
+/**
+ * Force a clean reconnect of the upstream FYERS feed with a (possibly new) access token. Used
+ * after a token refresh so the live socket picks up the new token WITHOUT a full process
+ * restart. In SDK mode startSdkDataSocket() tears down the pinned singleton and rebuilds it; in
+ * raw mode we drop the existing socket first because connectFyersWebSocket() early-returns when
+ * one is already open.
+ */
+export function reconnectFyersWebSocket(accessToken, appId) {
+  if (DATA_FEED_MODE === "sdk") {
+    connectFyersWebSocket(accessToken, appId);
+    return;
+  }
+  disconnectFyersWebSocket();
+  connectFyersWebSocket(accessToken, appId);
+}
+
+/**
+ * Called when the access token is refreshed. Re-arms the live feed with the new token, but only
+ * if a feed is currently active (i.e. the bot is running) — otherwise a refresh that happens
+ * while the bot is stopped would needlessly spin a socket up. The in-memory tick buffer is NOT
+ * touched, so accumulated candles survive the re-arm (no warm-up reset on a token refresh).
+ */
+export function onTokenRefreshed(accessToken, appId) {
+  const active = DATA_FEED_MODE === "sdk" ? isSdkActive() : wsConnection != null;
+  if (!active) return;
+  console.log("[TICK-SERVICE] Access token refreshed — re-arming live feed with the new token");
+  reconnectFyersWebSocket(accessToken, appId);
 }
 
 // ─── Get Raw Ticks ────────────────────────────────────────────────
