@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
 <meta name="theme-color" content="#FF6A00">
+<meta name="description" content="Booth contact directory for BJP Mulki–Moodbidri Mandal. Call or WhatsApp booth coordinators across every Maha Shakti Kendra.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Booth Contacts">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23FF6A00'/%3E%3Cpath d='M50 20 C63 40 63 58 50 80 C37 58 37 40 50 20 Z' fill='%23ffffff'/%3E%3C/svg%3E">
 <title>Booth Contacts · Mulki–Moodbidri Mandal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,6 +43,566 @@ body{
   position:sticky;top:0;z-index:50;
   background:rgba(251,248,244,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   border-bottom:1px solid var(--line);
+  padding-top:env(safe-area-inset-top);
 }
 .hdr-bar{height:4px;background:linear-gradient(90deg,var(--saffron) 0%,var(--saffron) 33%,#fff 33%,#fff 66%,var(--green) 66%,var(--green) 100%)}
-.hdr-in{max-width:760px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.hdr-in{max-width:760px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 12px max(16px,env(safe-area-inset-right));display:flex;align-items:center;gap:12px}
+.lotus{
+  width:46px;height:46px;border-radius:13px;flex:0 0 auto;
+  background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));
+  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34);overflow:hidden;
+}
+.lotus img{width:34px;height:34px;object-fit:contain;filter:brightness(0) invert(1)}
+.lotus .fallback{font-size:24px;line-height:1}
+.hdr-txt{min-width:0;flex:1}
+.hdr-txt h1{font-family:'Sora';font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
+.hdr-txt .kn{font-size:11.5px;color:var(--saffron-deep);font-weight:600}
+.hdr-txt .sub{font-size:11px;color:var(--ink-soft);margin-top:1px}
+.badge{flex:0 0 auto;font-family:'Sora';font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--green-deep);background:rgba(19,136,8,.1);border:1px solid rgba(19,136,8,.2);padding:5px 9px;border-radius:999px}
+
+/* ---------- Controls ---------- */
+.wrap{max-width:760px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.stats{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--ink-soft);font-weight:500;margin-bottom:12px}
+.stats b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+.stats .sep{width:4px;height:4px;border-radius:50%;background:var(--line)}
+.search{position:relative;margin-bottom:10px}
+.search svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-soft);pointer-events:none}
+.search input{
+  width:100%;height:50px;padding:0 44px 0 44px;font-size:16px;font-family:inherit;color:var(--ink);
+  background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);outline:none;transition:border-color .15s,box-shadow .15s;
+}
+.search input:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring)}
+.search .clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:none;background:transparent;color:var(--ink-soft);font-size:20px;cursor:pointer;border-radius:8px;display:none;align-items:center;justify-content:center}
+.search .clear.show{display:flex}
+
+/* Kendra chips */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none;-ms-overflow-style:none;scroll-snap-type:x proximity}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;scroll-snap-align:start;font-family:'Sora';font-size:12.5px;font-weight:600;white-space:nowrap;
+  padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+  cursor:pointer;transition:all .15s;box-shadow:var(--shadow);
+}
+.chip[aria-pressed="true"]{background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(232,93,4,.3)}
+.chip .n{opacity:.6;font-weight:500;margin-left:5px;font-size:11px}
+.chip[aria-pressed="true"] .n{opacity:.85}
+
+.count{font-size:12.5px;color:var(--ink-soft);padding:0 2px 10px;font-weight:500}
+.count b{color:var(--ink);font-weight:700}
+
+/* ---------- Group ---------- */
+.group{margin-bottom:18px}
+.group-head{
+  display:flex;align-items:center;gap:9px;padding:4px 4px 9px;position:sticky;top:75px;z-index:5;
+}
+.group-head .dot{width:8px;height:8px;border-radius:50%;background:var(--saffron);flex:0 0 auto;box-shadow:0 0 0 4px rgba(255,106,0,.14)}
+.group-head h2{font-family:'Sora';font-size:13.5px;font-weight:700;letter-spacing:.01em;color:var(--ink)}
+.group-head .gc{font-size:11px;color:var(--ink-soft);font-weight:600;margin-left:auto;background:var(--card);border:1px solid var(--line);padding:3px 9px;border-radius:999px}
+
+/* ---------- Card ---------- */
+.cards{display:flex;flex-direction:column;gap:9px}
+.card{
+  display:flex;align-items:center;gap:13px;padding:12px 13px;background:var(--card);
+  border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow);transition:transform .12s,box-shadow .12s;
+}
+.card:active{transform:scale(.992)}
+.avatar{
+  width:46px;height:46px;border-radius:13px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  font-family:'Sora';font-weight:700;font-size:17px;color:#fff;position:relative;
+}
+.avatar .bn{position:absolute;bottom:-5px;right:-5px;font-size:9.5px;font-weight:700;font-family:'Sora';background:var(--ink);color:#fff;border:2px solid var(--card);border-radius:7px;padding:1px 5px;line-height:1.4}
+.meta{flex:1;min-width:0}
+.meta .nm{font-weight:600;font-size:15px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta .ph{
+  display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums;
+  margin-top:2px;letter-spacing:.02em;font-family:inherit;background:none;border:none;padding:2px 0;cursor:pointer;
+}
+.meta .ph .cp{width:13px;height:13px;opacity:0;transform:scale(.8);transition:opacity .15s,transform .15s;color:var(--saffron-deep)}
+.meta .ph:active .cp,.card:hover .ph .cp{opacity:.7;transform:scale(1)}
+.meta .ph.nophone{cursor:default}
+.acts{display:flex;gap:9px;flex:0 0 auto}
+.fab{
+  width:44px;height:44px;border-radius:13px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:#fff;transition:transform .12s,filter .12s;font-family:inherit;padding:0;text-decoration:none;
+}
+.fab:active{transform:scale(.9)}
+.fab svg{width:20px;height:20px}
+.fab.call{background:linear-gradient(150deg,#1aa608,var(--green-deep));box-shadow:0 4px 11px rgba(11,110,4,.32)}
+.fab.wa{background:linear-gradient(150deg,#25D366,#128C7E);box-shadow:0 4px 11px rgba(18,140,127,.3)}
+.fab[disabled],.fab[aria-disabled="true"]{background:#d9d2c8;box-shadow:none;cursor:not-allowed;pointer-events:none}
+
+/* ---------- Card entrance ---------- */
+.cards.anim .card{animation:cardIn .42s cubic-bezier(.22,.61,.36,1) both}
+.cards.anim .card:nth-child(1){animation-delay:.02s}
+.cards.anim .card:nth-child(2){animation-delay:.05s}
+.cards.anim .card:nth-child(3){animation-delay:.08s}
+.cards.anim .card:nth-child(4){animation-delay:.11s}
+.cards.anim .card:nth-child(5){animation-delay:.14s}
+.cards.anim .card:nth-child(6){animation-delay:.17s}
+.cards.anim .card:nth-child(7){animation-delay:.20s}
+.cards.anim .card:nth-child(8){animation-delay:.23s}
+.cards.anim .card:nth-child(n+9){animation-delay:.26s}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ---------- Empty ---------- */
+.empty{text-align:center;padding:60px 20px;color:var(--ink-soft)}
+.empty .ico{font-size:40px;margin-bottom:10px}
+.empty h3{font-family:'Sora';font-size:16px;color:var(--ink);margin-bottom:5px;font-weight:700}
+.empty p{font-size:13.5px}
+
+/* ---------- Toast ---------- */
+.toast{
+  position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));z-index:100;
+  display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:13px;
+  background:var(--ink);color:#fff;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);
+  opacity:0;transform:translate(-50%,14px);pointer-events:none;transition:opacity .22s,transform .22s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast svg{width:16px;height:16px;color:#25D366}
+
+/* ---------- Scroll to top ---------- */
+.totop{
+  position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;
+  width:46px;height:46px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.9);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--saffron-deep);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow-lg);
+  opacity:0;pointer-events:none;transform:translateY(8px) scale(.92);transition:opacity .2s,transform .2s;
+}
+.totop.show{opacity:1;pointer-events:auto;transform:none}
+.totop svg{width:22px;height:22px}
+
+.foot{max-width:760px;margin:8px auto 0;padding:28px 16px calc(40px + env(safe-area-inset-bottom));text-align:center}
+.foot .div{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin-bottom:22px}
+.foot .lotus-sm{width:40px;height:40px;border-radius:11px;margin:0 auto 12px;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.3);overflow:hidden}
+.foot .lotus-sm img{width:28px;height:28px;object-fit:contain;filter:brightness(0) invert(1)}
+.foot .lotus-sm .fallback{font-size:20px}
+.foot .love{font-size:14px;font-weight:500;color:var(--ink)}
+.foot .love .heart{color:#E0245E}
+.foot .by{font-family:'Sora';font-weight:800;font-size:15px;background:linear-gradient(90deg,var(--saffron-deep),var(--green-deep));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-top:2px}
+.foot .org{font-size:11.5px;color:var(--ink-soft);margin-top:10px}
+
+@media (min-width:640px){
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .group-head{top:78px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="hdr-bar"></div>
+  <div class="hdr-in">
+    <div class="lotus"><img src="bjplogo.svg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+    <div class="hdr-txt">
+      <h1>Booth Contacts</h1>
+      <div class="kn">ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ</div>
+      <div class="sub">Maha Shakti Kendra Directory</div>
+    </div>
+    <span class="badge">BLA 2</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="stats" id="stats"></div>
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+    <input id="search" type="search" inputmode="search" placeholder="Search name, booth or phone" autocomplete="off">
+    <button class="clear" id="clear" aria-label="Clear search">&times;</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="count" id="count"></div>
+  <div id="list"></div>
+</main>
+
+<footer class="foot">
+  <div class="div"></div>
+  <div class="lotus-sm"><img src="bjplogo.svg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+  <div class="love">Developed with <span class="heart">&hearts;</span> by</div>
+  <div class="by">Roshan Belvai</div>
+  <div class="org">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<button class="totop" id="totop" type="button" aria-label="Scroll to top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>
+</button>
+
+<script>
+const DATA = [
+  {kendra:"Mulki Maha Shakti Kendra", booth:1, name:"Sunil Alva", phone:"8951426774"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:2, name:"Satyendra", phone:"8861276777"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:3, name:"Narasimha Poojari", phone:"9844605963"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:4, name:"Keerthi Kumar", phone:"9972136095"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:5, name:"Subhash Shetty", phone:"9008147217"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:115, name:"Radhika Kotyan", phone:"9945092998"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:116, name:"Ashok Kumar", phone:"9964141989"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:117, name:"Sumathi", phone:"8150804029"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:118, name:"Soumyalatha", phone:"9663439886"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:119, name:"Vishwas Ramesh", phone:"9916824181"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:120, name:"Manjunath", phone:"9844885403"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:121, name:"Ramesh Hangaragi", phone:"9902062725"},
+  {kendra:"Mulki Maha Shakti Kendra", booth:122, name:"Sanath Kumar", phone:"9964793725"},
+
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:6, name:"Uday Amin", phone:"9916038670"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:7, name:"Sandeep Acharya", phone:"9342782711"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:8, name:"Jayalakshmi K", phone:"8105543211"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:9, name:"Ashwith K", phone:"9740726156"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:10, name:"Geetha K", phone:"9900345992"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:11, name:"Mamatha D Poonja", phone:"9845488736"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:12, name:"Rashmi Acharya", phone:"9945934753"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:13, name:"Ananda K", phone:"9164413878"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:14, name:"Sarvottama", phone:"9663626598"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:15, name:"Sudheer Suvarna Patte", phone:"9845041820"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:16, name:"Hemanatha Shetty", phone:"9945928757"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:94, name:"Vineeth Poojari", phone:"9480756956"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:95, name:"Mahabala Das", phone:"9964142120"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:110, name:"Praveen", phone:"9902181665"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:111, name:"Jeevan Shetty", phone:"9845323164"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:112, name:"Roopakshi", phone:"9740747231"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:113, name:"Damayanti Shettigar", phone:"8105987119"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:114, name:"Satish D Poojari", phone:"9945091853"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:123, name:"Srimathi Kusuma Chandrashekhar", phone:"9343408368"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:124, name:"Ramesh Devadiga", phone:"9844255884"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:125, name:"Vijayalakshmi", phone:"9844915358"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:126, name:"Hemanath Amin", phone:"8105008609"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:127, name:"Mohan Das", phone:"9980753865"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:128, name:"Shashikala", phone:"7899494386"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:129, name:"Ashok Shetty", phone:"8971464346"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:130, name:"Chandrahasa Belchada", phone:"9740543205"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:131, name:"Nisarga Ganiga", phone:"7483910565"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:142, name:"Sachin Shetty", phone:"9845577162"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:143, name:"Rajesh Shetty", phone:"9964397342"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:144, name:"Mohit Kumar", phone:"8535563261"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:145, name:"Hariprasad Shetty", phone:"8296763357"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:146, name:"Chandrika", phone:"7483948760"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:147, name:"Nandita", phone:"9880837249"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:148, name:"Sujatha", phone:"9148496711"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:149, name:"Poornima", phone:"9964677575"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:150, name:"Jeevan Prakash", phone:"9945935679"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:151, name:"Vinod Kumar", phone:"9743489769"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:152, name:"Anil Kundar", phone:"9743082089"},
+  {kendra:"Haleyangadi Maha Shakti Kendra", booth:153, name:"Rajesh B Suvarna", phone:"9945535812"},
+
+  {kendra:"Puttige Maha Shakti Kendra", booth:17, name:"Maruti Bhat", phone:"9036793695"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:18, name:"Surekha", phone:"9591590421"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:19, name:"Vasanth Naik", phone:"9008514363"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:20, name:"Girish Poojari", phone:"8861549622"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:91, name:"Sundar Niddodi", phone:"9164314149"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:92, name:"Janardhana Gowda", phone:"9945736497"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:93, name:"Joysan Neerude", phone:"9845697428"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:21, name:"Surendra Bhat", phone:"9901190018"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:22, name:"Santhosh Bhandari", phone:"9535209109"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:23, name:"Dinesh Poojari", phone:"9731339625"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:24, name:"Satish Poojari", phone:"9880826982"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:25, name:"Sudarshan Kolakebailu", phone:"9663766014"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:26, name:"Jivandhar Shettigar", phone:"8105198531"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:78, name:"Prashanth Amin", phone:"8105484497"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:79, name:"Girish Kumar", phone:"9164943575"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:80, name:"Ravish", phone:"7760390354"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:81, name:"Shashidhar Nayak", phone:"9845290952"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:82, name:"Suma Bhat", phone:"9591592780"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:83, name:"Shashidhar Anchan", phone:"9845719785"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:84, name:"Shubhakara Rao K", phone:"9880910468"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:85, name:"Vikas H", phone:"9902336826"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:86, name:"Bharath Poojari", phone:"8747993507"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:87, name:"Padmanabha Mijaru", phone:"9741508355"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:88, name:"Pradeep", phone:"8722856686"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:89, name:"Vidyananda Shetty", phone:"8971138951"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:90, name:"Raghavendra Rao", phone:"8197136911"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:201, name:"Gopala Gowda", phone:"9900978724"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:202, name:"Shalini Salyan", phone:"9901660124"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:203, name:"Virendra Gowda", phone:"6361257521"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:204, name:"Chandrahasa", phone:"9731573336"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:205, name:"Lokesh Shetty", phone:"8390557226"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:206, name:"Kumar Prasad", phone:"9611479922"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:207, name:"Divakara Shetty", phone:"9880869947"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:208, name:"Sujatha Shyam Kundar", phone:"9482644896"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:215, name:"Harish Poojari", phone:"9482431410"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:216, name:"Pradeep Poojari", phone:"7760783862"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:217, name:"Nagesh Amin", phone:"9008851593"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:218, name:"Padmanabha Iruvailu", phone:"9741503196"},
+  {kendra:"Puttige Maha Shakti Kendra", booth:219, name:"Valerian Kutinha", phone:"9880906744"},
+
+  {kendra:"Shirthady Maha Shakti Kendra", booth:27, name:"Susheela", phone:"9972246488"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:28, name:"Somanath Kotyan", phone:"8296551141"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:29, name:"Yajnesh Acharya", phone:"9591890026"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:30, name:"Roshan Shetty", phone:"7349495469"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:31, name:"Sooraj Alva", phone:"9008315680"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:32, name:"Gopal", phone:"9686009663"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:33, name:"Ravindra Nayak", phone:"9902187502"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:34, name:"Vandana Prabhu", phone:"7760361341"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:35, name:"Bharath Shetty", phone:"9741765423"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:36, name:"Yashavanth Devadiga", phone:"8105915293"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:37, name:"Nitin Kotyan", phone:"9620149214"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:38, name:"Satish S", phone:"9164153083"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:39, name:"Santhosh Poojari", phone:"7892026569"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:40, name:"Shashikala Girish", phone:"8151968501"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:41, name:"Shakuntala Shetty", phone:"9686143227"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:42, name:"Sanmath Kumar Jain", phone:"9945359058"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:43, name:"Santhosh Poojari", phone:"9901725690"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:44, name:"Nalini", phone:"9686750224"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:45, name:"Dixith Panapila", phone:"9535588971"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:46, name:"Ganesh", phone:"6360510537"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:47, name:"Dinesh N", phone:"9972672643"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:48, name:"Vittala Acharya", phone:"9902189972"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:49, name:"Satish", phone:"9769194824"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:50, name:"Rajesh Makki", phone:"8722964405"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:51, name:"Yashodhara", phone:"9980479012"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:52, name:"Uday Shetty", phone:"9901997688"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:53, name:"Ganesh B Aliyooru", phone:"6361578345"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:54, name:"Pradeep Kumar", phone:"9535617794"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:55, name:"Dinesh Shetty", phone:"9632030819"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:56, name:"Prabhakara", phone:"9448528970"},
+  {kendra:"Shirthady Maha Shakti Kendra", booth:57, name:"Santhosh Shetty", phone:"7090193462"},
+
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:58, name:"Bhaskar", phone:"7026219567"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:59, name:"Gowtham Shettigar", phone:"6362057151"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:60, name:"Sunil", phone:"7259469556"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:61, name:"Soumya Shetty", phone:"9901660949"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:62, name:"Praveen Kumar", phone:"8971818413"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:63, name:"Rajeevi Suvarna", phone:"9945218870"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:64, name:"Nagaraja Poojari", phone:"9845959863"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:65, name:"Divya Jagadish", phone:"9743814311"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:66, name:"Rajesh Shetty", phone:"9448412379"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:67, name:"Lakshmana Poojari", phone:"9663766075"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:68, name:"Girish Kumar", phone:"9663033621"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:69, name:"Naveen Shetty", phone:"9535371091"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:70, name:"Suresh Acharya", phone:"8971253523"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:71, name:"Jitesh Ladi", phone:"9535616246"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:72, name:"Krithika", phone:"9591781084"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:73, name:"Prajwal Shenai", phone:"849701770"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:74, name:"Prasad Kumar", phone:"9663993284"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:75, name:"Baby", phone:"9379053279"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:76, name:"Shiva", phone:"9945705071"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:77, name:"Ganesh Acharya", phone:"9611298256"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:209, name:"Krishnappa", phone:"9743354990"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:210, name:"Shashikiran Kallabettu", phone:"9740940991"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:211, name:"Chandra Uplapade", phone:"9611268903"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:212, name:"Jayashree Keshav", phone:"9900350402"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:213, name:"Dinesh Poojari", phone:"9632658242"},
+  {kendra:"Moodbidri Nagara Maha Shakti Kendra", booth:214, name:"Sampath Poojari", phone:"9164174331"},
+
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:96, name:"Padmalata Rao", phone:"9482346324"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:97, name:"Dhananjaya Kumar", phone:"9663921078"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:98, name:"Meenakshi", phone:"9980805331"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:99, name:"Yashodha", phone:"9591956475"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:100, name:"Ashok K", phone:"9901477623"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:101, name:"Lakshmi Poojarthi", phone:"7760232044"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:102, name:"Sarojini Gujaran", phone:"9686378080"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:103, name:"Rajesh Acharya", phone:"9611303081"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:104, name:"Asha Ratnakara Suvarna", phone:"9448357033"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:105, name:"Kapil S Anchan", phone:"9901409609"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:106, name:"Pranik", phone:"8861115538"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:107, name:"Shobha Rao", phone:"9535079629"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:108, name:"Gopalakrishna", phone:"9108493349"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:109, name:"Prashanth Devadiga", phone:"9663392707"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:132, name:"Gururaj Sapaliga", phone:"9844996015"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:133, name:"Shailesh Anchan", phone:"9964218369"},
+  {kendra:"Kinnigoli Maha Shakti Kendra", booth:141, name:"Shantharam Acharya", phone:"9008892972"},
+
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:134, name:"Suresh C Shetty", phone:"9844800316"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:135, name:"Satish", phone:"9880933364"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:136, name:"Shivaprasad Shetty", phone:"9663721460"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:137, name:"Shivaprasad", phone:"9091713481"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:138, name:"Manoj", phone:"9632712962"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:139, name:"Jitendra Shetty", phone:"9731851604"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:140, name:"Gopala D Kulal", phone:"9481955331"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:154, name:"Balakrishna", phone:"9964582917"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:155, name:"Jayananda", phone:"9964590138"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:156, name:"Rekha", phone:"9740608932"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:157, name:"Vajrakshi P Shetty", phone:"9341608307"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:158, name:"Pushparaj Shetty", phone:"9945936535"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:159, name:"Suresh Shetty", phone:"8762696142"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:160, name:"Manohar Shetty", phone:"9980018907"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:161, name:"Shashidhar Shetty", phone:"9964564042"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:162, name:"Prasad Anchan", phone:"9481761894"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:163, name:"Naveen Shetty", phone:"9538535951"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:164, name:"Kishor Permude", phone:"9742956507"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:165, name:"Ganesh", phone:"7090988162"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:174, name:"Shankar Jogi", phone:"8197102092"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:175, name:"Kiran Rai", phone:"7823133882"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:176, name:"Padmanabha Salyan", phone:"9448503191"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:177, name:"Jayanth Salyan", phone:"9448480368"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:178, name:"Ravindra T", phone:"9036930483"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:179, name:"Ganesh Jokatte", phone:"9880051437"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:180, name:"Anvesh", phone:"8722288343"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:181, name:"Mukesh", phone:"9632343445"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:182, name:"Manish Kumar", phone:"9591857196"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:192, name:"Chandrahas", phone:"9900713705"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:193, name:"Sharada", phone:"9740695324"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:194, name:"Sukesh Kotari", phone:"9900972788"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:195, name:"Mukesh", phone:"9916246942"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:196, name:"Umesh T", phone:"9243303939"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:197, name:"Umesh Shetty", phone:"9035957606"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:198, name:"Yuvaraj", phone:"9886621948"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:199, name:"Anil Kumar", phone:"9845372080"},
+  {kendra:"62nd Thokuru Maha Shakti Kendra", booth:200, name:"Chandrika", phone:"8453253554"},
+
+  {kendra:"Baje Maha Shakti Kendra", booth:166, name:"Jayaram Poojari", phone:"9686716953"},
+  {kendra:"Baje Maha Shakti Kendra", booth:167, name:"Leelavathi", phone:"9449283928"},
+  {kendra:"Baje Maha Shakti Kendra", booth:168, name:"Chitra Shetty", phone:"9980349336"},
+  {kendra:"Baje Maha Shakti Kendra", booth:169, name:"Nagesh", phone:"9964141235"},
+  {kendra:"Baje Maha Shakti Kendra", booth:170, name:"Divakara Shetty", phone:"8660620909"},
+  {kendra:"Baje Maha Shakti Kendra", booth:171, name:"Swaroop", phone:"9110865400"},
+  {kendra:"Baje Maha Shakti Kendra", booth:172, name:"Nitesh Kumar", phone:"9663691095"},
+  {kendra:"Baje Maha Shakti Kendra", booth:173, name:"Lokesh Poojari", phone:"9945690178"},
+  {kendra:"Baje Maha Shakti Kendra", booth:183, name:"Kaushik Karkera", phone:"6366132641"},
+  {kendra:"Baje Maha Shakti Kendra", booth:184, name:"Niranjan", phone:"9731923630"},
+  {kendra:"Baje Maha Shakti Kendra", booth:185, name:"Bhojaraj", phone:"9880980180"},
+  {kendra:"Baje Maha Shakti Kendra", booth:186, name:"Shreyas", phone:"8095972764"},
+  {kendra:"Baje Maha Shakti Kendra", booth:187, name:"Jagadish Kapikadugudde", phone:"7411275327"},
+  {kendra:"Baje Maha Shakti Kendra", booth:188, name:"Kishor", phone:"9741481716"},
+  {kendra:"Baje Maha Shakti Kendra", booth:189, name:"Naveen", phone:"7829324033"},
+  {kendra:"Baje Maha Shakti Kendra", booth:190, name:"Vinay Salyan", phone:"9844817890"},
+  {kendra:"Baje Maha Shakti Kendra", booth:191, name:"Vishwanatha Devadiga", phone:"9008653456"},
+];
+
+// avatar gradient palettes (deterministic per name)
+const PALETTES = [
+  ['#FF6A00','#E85D04'],['#138808','#0B6E04'],['#2563EB','#1E40AF'],
+  ['#9333EA','#6B21A8'],['#DB2777','#9D174D'],['#0891B2','#0E7490'],
+  ['#CA8A04','#854D0E'],['#DC2626','#991B1B'],['#475569','#1E293B']
+];
+function initials(name){
+  const p=name.replace(/\(.\)/g,'').trim().split(/\s+/).filter(Boolean);
+  return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase()||'#';
+}
+function palette(name){let h=0;for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0;return PALETTES[h%PALETTES.length];}
+function digits(p){return (p||'').replace(/\D/g,'');}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function haptic(ms){try{if(navigator.vibrate)navigator.vibrate(ms);}catch(e){}}
+
+const WA_GREETING='ನಮಸ್ಕಾರ 🙏';
+
+const SVG_CALL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+const SVG_WA='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.82 11.82 0 0 1 8.413 3.488 11.82 11.82 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.82 9.82 0 0 0 1.523 5.26l-.999 3.648 3.736-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>';
+const SVG_COPY='<svg class="cp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const SVG_TICK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+const listEl=document.getElementById('list');
+const searchEl=document.getElementById('search');
+const clearEl=document.getElementById('clear');
+const chipsEl=document.getElementById('chips');
+const countEl=document.getElementById('count');
+const statsEl=document.getElementById('stats');
+const toastEl=document.getElementById('toast');
+const totopEl=document.getElementById('totop');
+
+const KENDRAS=[...new Set(DATA.map(d=>d.kendra))];
+let activeKendra='';
+
+// header stat strip
+statsEl.innerHTML='<b>'+DATA.length+'</b> contacts<span class="sep"></span><b>'+KENDRAS.length+'</b> Maha Shakti Kendras';
+
+// build chips
+function buildChips(){
+  const mk=(label,val,n)=>{
+    const b=document.createElement('button');
+    b.className='chip';b.type='button';
+    b.setAttribute('aria-pressed',val===activeKendra);
+    b.innerHTML=esc(label)+'<span class="n">'+n+'</span>';
+    b.onclick=()=>{haptic(8);activeKendra=val;buildChips();render(true);window.scrollTo({top:0,behavior:'smooth'});};
+    return b;
+  };
+  chipsEl.innerHTML='';
+  chipsEl.appendChild(mk('All',' ',DATA.length));
+  KENDRAS.forEach(k=>{
+    const short=k.replace(/ Maha Shakti Kendra$/,'');
+    chipsEl.appendChild(mk(short,k,DATA.filter(d=>d.kendra===k).length));
+  });
+}
+
+function cardHTML(r){
+  const d=digits(r.phone);
+  const ok=d.length===10;
+  const tel='+91'+d;
+  const [c1,c2]=palette(r.name);
+  const nm=esc(r.name);
+  const call=ok
+    ?'<a class="fab call" href="tel:'+tel+'" data-haptic aria-label="Call '+nm+'" title="Call '+nm+'">'+SVG_CALL+'</a>'
+    :'<span class="fab call" aria-disabled="true" title="No number on file">'+SVG_CALL+'</span>';
+  const wa=ok
+    ?'<a class="fab wa" href="https://wa.me/91'+d+'?text='+encodeURIComponent(WA_GREETING)+'" target="_blank" rel="noopener" data-haptic aria-label="WhatsApp '+nm+'" title="WhatsApp '+nm+'">'+SVG_WA+'</a>'
+    :'<span class="fab wa" aria-disabled="true" title="No number on file">'+SVG_WA+'</span>';
+  const phone=ok
+    ?'<button type="button" class="ph" data-copy="'+esc(r.phone)+'" aria-label="Copy '+esc(r.phone)+'">'+esc(r.phone)+SVG_COPY+'</button>'
+    :'<span class="ph nophone">No number on file</span>';
+  return '<div class="card">'+
+    '<div class="avatar" style="background:linear-gradient(150deg,'+c1+','+c2+')">'+initials(r.name)+
+      '<span class="bn">#'+r.booth+'</span></div>'+
+    '<div class="meta"><div class="nm">'+nm+'</div>'+phone+'</div>'+
+    '<div class="acts">'+call+wa+'</div></div>';
+}
+
+function render(animate){
+  const q=searchEl.value.trim().toLowerCase();
+  clearEl.classList.toggle('show',!!searchEl.value);
+  let rows=DATA.filter(d=>{
+    if(activeKendra && d.kendra!==activeKendra) return false;
+    if(!q) return true;
+    return d.name.toLowerCase().includes(q)||String(d.booth).includes(q)||d.phone.includes(q);
+  });
+
+  countEl.innerHTML='<b>'+rows.length+'</b> '+(rows.length===1?'contact':'contacts')+(activeKendra?' in '+esc(activeKendra.replace(/ Maha Shakti Kendra$/,'')):'');
+
+  if(!rows.length){
+    listEl.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>No contacts found</h3><p>Try a different name, booth number, or clear the filter.</p></div>';
+    return;
+  }
+
+  const groups={};const order=[];
+  rows.forEach(r=>{if(!groups[r.kendra]){groups[r.kendra]=[];order.push(r.kendra);}groups[r.kendra].push(r);});
+
+  const cls=animate?'cards anim':'cards';
+  listEl.innerHTML=order.map(k=>{
+    const short=k.replace(/ Maha Shakti Kendra$/,'');
+    return '<section class="group">'+
+      '<div class="group-head"><span class="dot"></span><h2>'+esc(short)+'</h2>'+
+        '<span class="gc">'+groups[k].length+'</span></div>'+
+      '<div class="'+cls+'">'+groups[k].map(cardHTML).join('')+'</div></section>';
+  }).join('');
+}
+
+// copy phone to clipboard with toast + haptic
+let toastTimer=null;
+function showToast(msg){
+  toastEl.innerHTML=SVG_TICK+'<span>'+esc(msg)+'</span>';
+  toastEl.classList.add('show');
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>toastEl.classList.remove('show'),1900);
+}
+async function copyText(t){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(t);}
+    else{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
+    return true;
+  }catch(e){return false;}
+}
+
+// delegated interactions
+listEl.addEventListener('click',e=>{
+  const cp=e.target.closest('[data-copy]');
+  if(cp){
+    const num=cp.getAttribute('data-copy');
+    copyText(num).then(ok=>{haptic(ok?12:0);if(ok)showToast('Number copied · '+num);});
+    return;
+  }
+  const fab=e.target.closest('[data-haptic]');
+  if(fab)haptic(12);
+});
+
+// search
+searchEl.addEventListener('input',()=>render(false));
+clearEl.addEventListener('click',()=>{searchEl.value='';searchEl.focus();render(false);});
+
+// scroll to top
+window.addEventListener('scroll',()=>{
+  totopEl.classList.toggle('show',window.scrollY>520);
+},{passive:true});
+totopEl.addEventListener('click',()=>{haptic(8);window.scrollTo({top:0,behavior:'smooth'});});
+
+buildChips();
+render(true);
+</script>
+</body>
+</html>
