@@ -496,6 +496,12 @@ function computeEntryLimitPrice(quote) {
 }
 
 function computeOptionSLAndTarget(avgFillPrice, signal) {
+  // C5 (residual, audited): this uses a fixed delta (OPTION_DELTA_ESTIMATE=0.5) to convert the
+  // underlying-point stop/target into OPTION-PREMIUM levels, and the live SL/target then trigger on
+  // the option PREMIUM. The backtest instead triggers on the INDEX level and prices the option via
+  // Black-Scholes. Backtest filters/warmup/costs/square-off are now aligned (C3), but this premium-vs-
+  // index trigger model is a deeper divergence; aligning it changes live position sizing/stops, so it
+  // is deferred to a separately paper-validated change rather than rushed here. Tracked in the audit.
   // An option premium moves ~delta rupees per 1 rupee move in the underlying. Convert the
   // strategy's underlying-point risk/target into option-premium points and apply them as
   // absolute rupee distances from the fill price. (The previous version multiplied a

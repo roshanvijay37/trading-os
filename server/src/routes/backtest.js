@@ -130,6 +130,30 @@ async function fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs,
   }
 }
 
+// IST wall-clock parts from an epoch-ms timestamp (India has no DST, so a fixed +5:30 is exact).
+export function istClock(tsMs) {
+  const istMin = (((Math.floor(tsMs / 60000) % 1440) + 1440) % 1440 + 330) % 1440;
+  return {
+    hour: Math.floor(istMin / 60),
+    minute: istMin % 60,
+    decimal: istMin / 60,
+    dayKey: Math.floor((tsMs + 330 * 60000) / 86400000),
+  };
+}
+
+// Pure live-parity ENTRY gate (C3): mirrors the autoTrader gates that the backtest historically
+// ignored (session window, 14:00 entry cutoff, max-trades/day, daily-loss, consecutive-loss, VIX).
+// Returns { allow, reason }. OI and correlation are intentionally not here (see runBacktest notes).
+export function liveEntryGate({ decimal, hour, dayTrades, dayPnL, consecutiveLosses, vix }, limits) {
+  if (decimal < limits.sessionStartDecimal || decimal >= limits.sessionEndDecimal) return { allow: false, reason: "OUTSIDE_SESSION" };
+  if (hour >= limits.maxTimeEntryHour) return { allow: false, reason: "AFTER_ENTRY_CUTOFF" };
+  if (dayTrades >= limits.maxTradesPerDay) return { allow: false, reason: "MAX_TRADES" };
+  if (dayPnL <= -limits.dailyLossCap) return { allow: false, reason: "DAILY_LOSS_LIMIT" };
+  if (consecutiveLosses >= limits.maxConsecutiveLosses) return { allow: false, reason: "CONSECUTIVE_LOSSES" };
+  if (limits.maxVix != null && vix != null && vix > limits.maxVix) return { allow: false, reason: "HIGH_VIX" };
+  return { allow: true, reason: "" };
+}
+
 // ─── Backtest Engine ──────────────────────────────────────────────
 function runBacktest(candles, config) {
   const {
@@ -165,6 +189,27 @@ function runBacktest(candles, config) {
     ivSource = "FLAT",
     ivMultiplier = 1,
     ivSeries = null, // [{ timestamp(ms), iv(decimal) }], same resolution as candles
+    // ── Live-parity gating (C3) ─────────────────────────────────────────────────────────────
+    // Apply the same gates the live bot (autoTrader.js) applies, so the backtest stops being
+    // systematically over-optimistic. Defaults mirror the live CONFIG. Set applyLiveFilters:false
+    // for the old raw "idea filter" behaviour.
+    // NOTE — two live filters CANNOT be reproduced faithfully here and are intentionally omitted:
+    //  • OI / liquidity (MIN_OI): FYERS history has no per-strike historical open-interest, so the
+    //    backtest cannot know which strikes were illiquid. Treated as "assume adequate OI" — this is
+    //    the one remaining optimism vs live; surfaced via result.parity.oiModeled.
+    //  • Correlation: a backtest run is single-symbol, so the cross-underlying correlation block is
+    //    not applicable (it only matters when NIFTY & BANKNIFTY trade together live).
+    applyLiveFilters = true,
+    maxTimeEntryHour = 14,        // no new entries at/after 14:00 IST (autoTrader MAX_TIME_ENTRY_HOUR)
+    sessionStartDecimal = 9.25,   // 9:15 IST (isValidTradingTime lower bound)
+    sessionEndDecimal = 15.0,     // 15:00 IST (no new entries after)
+    squareOffHour = 15,
+    squareOffMinute = 15,         // force-exit at 15:15 IST (isSquareOffTime)
+    maxTradesPerDay = 10,
+    maxRiskPerDayPercent = 2,     // halt new entries once daily P&L <= -this% of capital
+    maxConsecutiveLossesLimit = 3,
+    maxVix = 25,                  // only enforced when ivSource === "INDIA_VIX" (VIX known per bar)
+    marginSafetyMultiplier = 2,   // option-buying capital cap = premium * this (autoTrader MARGIN_SAFETY)
   } = config;
 
   const isBS = pricingModel === "BLACK_SCHOLES";
@@ -225,6 +270,16 @@ function runBacktest(candles, config) {
   // Alert Candle tracking for 5 EMA strategy
   let alertCandle = null;
 
+  // ── Live-parity gating state (C3) ────────────────────────────────
+  const limits = {
+    sessionStartDecimal, sessionEndDecimal, maxTimeEntryHour, maxTradesPerDay,
+    dailyLossCap: initialCapital * (Number(maxRiskPerDayPercent) || 0) / 100,
+    maxConsecutiveLosses: maxConsecutiveLossesLimit,
+    maxVix: isVixSource ? maxVix : null, // VIX is only known per-bar when sourced from India VIX
+  };
+  let curDay = null, dayTrades = 0, dayPnL = 0;
+  const blockedByFilter = {}; // reason -> count, surfaced in the result for transparency
+
   // Build a position from an index breakout, identically triggered in both modes.
   // INDEX mode reproduces the original engine exactly. BLACK_SCHOLES mode trades an ATM
   // option on the same signal: entry/SL/target levels stay in INDEX points (they remain
@@ -251,7 +306,9 @@ function runBacktest(candles, config) {
       const optionRiskPerUnit = Math.max(0.05, entryPremium - slPremium);
       let qty = Math.floor(riskAmount / optionRiskPerUnit / bs.lotSize) * bs.lotSize;
       // Never deploy more premium than available capital.
-      const maxByCapital = Math.floor(currentCapital / entryPremium / bs.lotSize) * bs.lotSize;
+      // C3/margin-parity: cap deployed premium by capital × the live margin-safety multiplier.
+      const marginMult = applyLiveFilters ? (Number(marginSafetyMultiplier) > 0 ? marginSafetyMultiplier : 1) : 1;
+      const maxByCapital = Math.floor(currentCapital / (entryPremium * marginMult) / bs.lotSize) * bs.lotSize;
       qty = Math.min(qty, maxByCapital);
       if (qty <= 0) return null;
       return {
@@ -296,12 +353,44 @@ function runBacktest(candles, config) {
     return { entryRec: pos.entryPremium, exitRec: exitPremium, pnl: gross - costs };
   }
 
-  const warmup = Math.max(emaOffset, 50);
+  // Gated entry shared by both strategies (C3): when a breakout would fire, apply the live entry
+  // filters FIRST. A blocked signal consumes the alert (mirrors the live bot deleting the alert on a
+  // canTakeTrade failure) and is tallied in blockedByFilter for transparency.
+  function tryEnterFromAlert(candle, i, clk) {
+    if (!alertCandle) return;
+    const ac = alertCandle.candle;
+    const wantLong = alertCandle.type === "BULLISH" && candle.high > ac.high;
+    const wantShort = alertCandle.type === "BEARISH" && candle.low < ac.low;
+    if (!wantLong && !wantShort) return;
+    if (applyLiveFilters) {
+      const vix = isVixSource ? (candleIv[i] / ivMult) * 100 : null;
+      const gate = liveEntryGate(
+        { decimal: clk.decimal, hour: clk.hour, dayTrades, dayPnL, consecutiveLosses: currentConsecutiveLosses, vix },
+        limits
+      );
+      if (!gate.allow) {
+        blockedByFilter[gate.reason] = (blockedByFilter[gate.reason] || 0) + 1;
+        alertCandle = null;
+        return;
+      }
+    }
+    const side = wantLong ? "LONG" : "SHORT";
+    const pos = buildPosition(side, wantLong ? ac.high : ac.low, wantLong ? ac.low : ac.high, i, candle);
+    if (pos) { position = pos; alertCandle = null; }
+  }
+
+  // C3: align warmup with the live bot, which signals as soon as it has enough candles (6 for EMA5;
+  // 20 for EMA5_OPTION's trend EMA). The old flat 50-bar warmup made the backtest skip the first ~4h
+  // that the live bot trades. Keep 50 only when live filters are off (legacy raw mode).
+  const liveWarmup = strategy === "EMA5_OPTION" ? 20 : Math.max(emaPeriod + 1, 6);
+  const warmup = Math.max(emaOffset, applyLiveFilters ? liveWarmup : 50);
 
   for (let i = warmup; i < candles.length; i++) {
     const candle = candles[i];
     const prevCandle = candles[i - 1];
     const ema = i >= emaOffset ? emaValues[i - emaOffset] : null;
+    const clk = istClock(candle.timestamp);
+    if (clk.dayKey !== curDay) { curDay = clk.dayKey; dayTrades = 0; dayPnL = 0; }
 
     if (currentCapital > peakEquity) peakEquity = currentCapital;
     const drawdown = ((peakEquity - currentCapital) / peakEquity) * 100;
@@ -313,7 +402,11 @@ function runBacktest(candles, config) {
       let exitReason = "";
       let indexExitLevel = null; // clean index level the position exits at
 
-      if (position.side === "LONG" && candle.low <= position.sl) {
+      // C3: intraday square-off at 15:15 IST (mirrors isSquareOffTime), highest priority.
+      if (applyLiveFilters && (clk.hour > squareOffHour || (clk.hour === squareOffHour && clk.minute >= squareOffMinute))) {
+        exitReason = "SQUARE_OFF";
+        indexExitLevel = candle.close;
+      } else if (position.side === "LONG" && candle.low <= position.sl) {
         exitReason = "SL";
         indexExitLevel = position.sl;
       } else if (position.side === "SHORT" && candle.high >= position.sl) {
@@ -360,6 +453,8 @@ function runBacktest(candles, config) {
         currentCapital += pnl;
         totalTrades++;
         totalPnL += pnl;
+        dayTrades++;     // C3: per-IST-day counters feed the live-parity entry gate
+        dayPnL += pnl;
 
         if (pnl > 0) {
           wins++;
@@ -411,21 +506,7 @@ function runBacktest(candles, config) {
       if (at) {
         alertCandle = { candle: prevCandle, type: at, index: i - 1 };
       }
-
-      // Check for entry on current candle
-      if (alertCandle) {
-        const ac = alertCandle.candle;
-        // Bullish Entry: Break above Alert Candle high
-        if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
-          const pos = buildPosition("LONG", ac.high, ac.low, i, candle);
-          if (pos) { position = pos; alertCandle = null; }
-        }
-        // Bearish Entry: Break below Alert Candle low
-        else if (alertCandle.type === "BEARISH" && candle.low < ac.low) {
-          const pos = buildPosition("SHORT", ac.low, ac.high, i, candle);
-          if (pos) { position = pos; alertCandle = null; }
-        }
-      }
+      tryEnterFromAlert(candle, i, clk); // C3: gated entry (break of alert high/low + live filters)
     }
 
     // ── 5 EMA Option Buying (Subhasish Pani) ─────────────────────
@@ -439,20 +520,7 @@ function runBacktest(candles, config) {
       if (at) {
         alertCandle = { candle: prevCandle, type: at, index: i - 1 };
       }
-
-      if (alertCandle) {
-        const ac = alertCandle.candle;
-        // CE Entry: Break above Alert Candle high
-        if (alertCandle.type === "BULLISH" && candle.high > ac.high) {
-          const pos = buildPosition("LONG", ac.high, ac.low, i, candle);
-          if (pos) { position = pos; alertCandle = null; }
-        }
-        // PE Entry: Break below Alert Candle low
-        else if (alertCandle.type === "BEARISH" && candle.low < ac.low) {
-          const pos = buildPosition("SHORT", ac.low, ac.high, i, candle);
-          if (pos) { position = pos; alertCandle = null; }
-        }
-      }
+      tryEnterFromAlert(candle, i, clk); // C3: gated entry
     }
   }
 
@@ -539,6 +607,17 @@ function runBacktest(candles, config) {
       : null,
     trades,
     equityCurve,
+    // C3: live-parity transparency — which live gates were applied, how many signals each blocked,
+    // and the honest caveat that OI/liquidity is NOT data-faithful (no historical per-strike OI).
+    parity: {
+      applyLiveFilters,
+      filtersApplied: applyLiveFilters
+        ? ["session", "entryCutoff14", "maxTradesPerDay", "dailyLoss", "consecutiveLoss", "squareOff1515", "marginSafety", ...(isVixSource ? ["maxVix"] : [])]
+        : [],
+      blockedByFilter,
+      oiModeled: true,              // MIN_OI gate cannot be reproduced (no historical per-strike OI)
+      correlationApplicable: false, // single-symbol backtest; cross-underlying correlation N/A
+    },
   };
 }
 
@@ -618,6 +697,15 @@ router.post("/run", async (req, res) => {
       ivSource,
       ivMultiplier,
       ivSeries,
+      // C3 live-parity controls. Undefined → runBacktest's defaults (full parity) apply; the UI can
+      // pass applyLiveFilters:false for the legacy raw "idea filter" run, or override any threshold.
+      applyLiveFilters: req.body.applyLiveFilters,
+      maxTimeEntryHour: req.body.maxTimeEntryHour,
+      maxTradesPerDay: req.body.maxTradesPerDay,
+      maxRiskPerDayPercent: req.body.maxRiskPerDayPercent,
+      maxConsecutiveLossesLimit: req.body.maxConsecutiveLossesLimit,
+      maxVix: req.body.maxVix,
+      marginSafetyMultiplier: req.body.marginSafetyMultiplier,
     });
 
     res.json({
