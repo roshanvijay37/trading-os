@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+<meta name="theme-color" content="#FF6A00">
+<meta name="description" content="Shakti Kendra Prabhari & Pramukh directory for BJP Mulki–Moodbidri Mandal, grouped by Maha Shakti Kendra. Call or WhatsApp every lead and in-charge.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Prabhari & Pramukh">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23FF6A00'/%3E%3Cpath d='M50 20 C63 40 63 58 50 80 C37 58 37 40 50 20 Z' fill='%23ffffff'/%3E%3C/svg%3E">
+<title>Shakti Kendra Prabhari &amp; Pramukh · Mulki–Moodbidri Mandal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --saffron:#FF6A00;--saffron-deep:#E85D04;--green:#138808;--green-deep:#0B6E04;
+  --ink:#181410;--ink-soft:#6b635a;--paper:#FBF8F4;--card:#FFFFFF;--line:#EFE7DD;
+  --ring:rgba(255,106,0,.28);--shadow:0 1px 2px rgba(24,20,16,.04),0 4px 14px rgba(24,20,16,.06);--shadow-lg:0 8px 30px rgba(24,20,16,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--paper);color:var(--ink);line-height:1.5;
+  background-image:radial-gradient(circle at 12% -8%,rgba(255,106,0,.07),transparent 42%),radial-gradient(circle at 88% -4%,rgba(19,136,8,.06),transparent 40%);
+  background-attachment:fixed;
+}
+.hdr{position:sticky;top:0;z-index:50;background:rgba(251,248,244,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.hdr-bar{height:4px;background:linear-gradient(90deg,var(--saffron) 0%,var(--saffron) 33%,#fff 33%,#fff 66%,var(--green) 66%,var(--green) 100%)}
+.hdr-in{max-width:820px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 12px max(16px,env(safe-area-inset-right));display:flex;align-items:center;gap:12px}
+.lotus{width:46px;height:46px;border-radius:13px;flex:0 0 auto;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34);overflow:hidden}
+.lotus img{width:34px;height:34px;object-fit:contain;filter:brightness(0) invert(1)}
+.lotus .fallback{font-size:24px;line-height:1}
+.hdr-txt{min-width:0;flex:1}
+.hdr-txt h1{font-family:'Sora';font-size:15.5px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
+.hdr-txt .kn{font-size:11.5px;color:var(--saffron-deep);font-weight:600}
+.hdr-txt .sub{font-size:11px;color:var(--ink-soft);margin-top:1px}
+.badge{flex:0 0 auto;font-family:'Sora';font-size:9.5px;font-weight:700;letter-spacing:.05em;color:var(--green-deep);background:rgba(19,136,8,.1);border:1px solid rgba(19,136,8,.2);padding:5px 8px;border-radius:999px}
+.backbar{max-width:820px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--saffron-deep);text-decoration:none;font-family:'Sora'}
+.back svg{width:15px;height:15px}
+.back:active{opacity:.6}
+.wrap{max-width:820px;margin:0 auto;padding:8px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.stats{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--ink-soft);font-weight:500;margin:8px 0 12px}
+.stats b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+.stats .sep{width:4px;height:4px;border-radius:50%;background:var(--line)}
+.search{position:relative;margin-bottom:10px}
+.search svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-soft);pointer-events:none}
+.search input{width:100%;height:50px;padding:0 44px;font-size:16px;font-family:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);outline:none;transition:border-color .15s,box-shadow .15s}
+.search input:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring)}
+.search .clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:none;background:transparent;color:var(--ink-soft);font-size:20px;cursor:pointer;border-radius:8px;display:none;align-items:center;justify-content:center}
+.search .clear.show{display:flex}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none;-ms-overflow-style:none;scroll-snap-type:x proximity}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;scroll-snap-align:start;font-family:'Sora';font-size:12.5px;font-weight:600;white-space:nowrap;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);cursor:pointer;transition:all .15s;box-shadow:var(--shadow)}
+.chip[aria-pressed="true"]{background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(232,93,4,.3)}
+.chip .n{opacity:.6;font-weight:500;margin-left:5px;font-size:11px}
+.chip[aria-pressed="true"] .n{opacity:.85}
+.count{font-size:12.5px;color:var(--ink-soft);padding:0 2px 10px;font-weight:500}
+.count b{color:var(--ink);font-weight:700}
+.group{margin-bottom:20px}
+.group-head{display:flex;align-items:center;gap:9px;padding:4px 4px 9px;position:sticky;top:75px;z-index:5}
+.group-head .dot{width:9px;height:9px;border-radius:50%;background:var(--saffron);flex:0 0 auto;box-shadow:0 0 0 4px rgba(255,106,0,.14)}
+.group-head h2{font-family:'Sora';font-size:14.5px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+.group-head .gc{font-size:11px;color:var(--ink-soft);font-weight:600;margin-left:auto;background:var(--card);border:1px solid var(--line);padding:3px 9px;border-radius:999px}
+/* leadership */
+.lead{background:linear-gradient(180deg,rgba(255,106,0,.05),rgba(255,255,255,0));border:1px solid var(--line);border-radius:16px;margin-bottom:10px;overflow:hidden}
+.lead>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:12px 14px;font-family:'Sora';font-size:12.5px;font-weight:700;color:var(--saffron-deep)}
+.lead>summary::-webkit-details-marker{display:none}
+.lead>summary .ico{width:16px;height:16px;transition:transform .2s}
+.lead[open]>summary .ico{transform:rotate(90deg)}
+.lead>summary .sx{margin-left:auto;font-family:'Inter';font-weight:500;font-size:11px;color:var(--ink-soft)}
+.lrows{padding:0 12px 10px}
+.lrow{display:flex;align-items:center;gap:11px;padding:8px 4px;border-top:1px solid var(--line)}
+.lrole{flex:0 0 96px;font-family:'Sora';font-size:10px;font-weight:700;letter-spacing:.02em;color:var(--ink-soft);text-transform:uppercase}
+.lname{flex:1;min-width:0;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lacts{display:flex;gap:7px;flex:0 0 auto}
+/* village card */
+.kcard{background:var(--card);border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow);padding:12px 13px;margin-bottom:9px;transition:transform .12s}
+.kcard:active{transform:scale(.995)}
+.ktop{display:flex;align-items:baseline;gap:8px;margin-bottom:9px;flex-wrap:wrap}
+.kv{font-family:'Sora';font-size:14.5px;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+.kb{font-size:10.5px;color:var(--ink-soft);font-weight:500;font-variant-numeric:tabular-nums;background:var(--paper);border:1px solid var(--line);padding:2px 8px;border-radius:999px}
+.prow{display:flex;align-items:center;gap:11px;padding:7px 0}
+.prow+.prow{border-top:1px dashed var(--line)}
+.pav{width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-family:'Sora';font-weight:700;font-size:14px;color:#fff}
+.pmeta{flex:1;min-width:0}
+.pname{font-weight:600;font-size:14.5px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psub{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:2px}
+.tag{font-family:'Sora';font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:999px;text-transform:uppercase}
+.tag.pk{color:var(--saffron-deep);background:rgba(255,106,0,.1);border:1px solid rgba(255,106,0,.2)}
+.tag.pr{color:var(--green-deep);background:rgba(19,136,8,.1);border:1px solid rgba(19,136,8,.2)}
+.prole{font-size:11.5px;color:var(--ink-soft);font-weight:500}
+.pph{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums;font-family:inherit;background:none;border:none;padding:0;cursor:pointer;letter-spacing:.02em}
+.pph .cp{width:12px;height:12px;opacity:0;transform:scale(.8);transition:opacity .15s,transform .15s;color:var(--saffron-deep)}
+.pph:active .cp,.kcard:hover .pph .cp{opacity:.65;transform:scale(1)}
+.pacts{display:flex;gap:8px;flex:0 0 auto}
+.fab{border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;transition:transform .12s;font-family:inherit;padding:0;text-decoration:none;width:40px;height:40px;border-radius:12px}
+.fab.sm{width:36px;height:36px;border-radius:11px}
+.fab:active{transform:scale(.9)}
+.fab svg{width:18px;height:18px}
+.fab.sm svg{width:16px;height:16px}
+.fab.call{background:linear-gradient(150deg,#1aa608,var(--green-deep));box-shadow:0 4px 11px rgba(11,110,4,.32)}
+.fab.wa{background:linear-gradient(150deg,#25D366,#128C7E);box-shadow:0 4px 11px rgba(18,140,127,.3)}
+.fab[aria-disabled="true"]{background:#d9d2c8;box-shadow:none;cursor:not-allowed;pointer-events:none}
+.cards.anim .kcard{animation:cardIn .42s cubic-bezier(.22,.61,.36,1) both}
+.cards.anim .kcard:nth-child(1){animation-delay:.02s}.cards.anim .kcard:nth-child(2){animation-delay:.05s}
+.cards.anim .kcard:nth-child(3){animation-delay:.08s}.cards.anim .kcard:nth-child(4){animation-delay:.11s}
+.cards.anim .kcard:nth-child(5){animation-delay:.14s}.cards.anim .kcard:nth-child(n+6){animation-delay:.17s}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.empty{text-align:center;padding:60px 20px;color:var(--ink-soft)}
+.empty .ico{font-size:40px;margin-bottom:10px}
+.empty h3{font-family:'Sora';font-size:16px;color:var(--ink);margin-bottom:5px;font-weight:700}
+.empty p{font-size:13.5px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));z-index:100;display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:13px;background:var(--ink);color:#fff;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);opacity:0;transform:translate(-50%,14px);pointer-events:none;transition:opacity .22s,transform .22s}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast svg{width:16px;height:16px;color:#25D366}
+.totop{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;width:46px;height:46px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.9);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--saffron-deep);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transform:translateY(8px) scale(.92);transition:opacity .2s,transform .2s}
+.totop.show{opacity:1;pointer-events:auto;transform:none}
+.totop svg{width:22px;height:22px}
+.foot{max-width:820px;margin:8px auto 0;padding:28px 16px calc(40px + env(safe-area-inset-bottom));text-align:center}
+.foot .div{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin-bottom:22px}
+.foot .lotus-sm{width:40px;height:40px;border-radius:11px;margin:0 auto 12px;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.3);overflow:hidden}
+.foot .lotus-sm img{width:28px;height:28px;object-fit:contain;filter:brightness(0) invert(1)}
+.foot .lotus-sm .fallback{font-size:20px}
+.foot .love{font-size:14px;font-weight:500;color:var(--ink)}
+.foot .love .heart{color:#E0245E}
+.foot .by{font-family:'Sora';font-weight:800;font-size:15px;background:linear-gradient(90deg,var(--saffron-deep),var(--green-deep));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-top:2px}
+.foot .org{font-size:11.5px;color:var(--ink-soft);margin-top:10px}
+@media (min-width:680px){.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cards .kcard{margin-bottom:0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="hdr-bar"></div>
+  <div class="hdr-in">
+    <div class="lotus"><img src="bjplogo.svg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+    <div class="hdr-txt">
+      <h1>Prabhari &amp; Pramukh</h1>
+      <div class="kn">ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ</div>
+      <div class="sub">Shakti Kendra · Lead &amp; In-charge Directory</div>
+    </div>
+    <span class="badge">PRAMUKH</span>
+  </div>
+</header>
+
+<div class="backbar">
+  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>Mandal Directory</a>
+</div>
+
+<main class="wrap">
+  <div class="stats" id="stats"></div>
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+    <input id="search" type="search" inputmode="search" placeholder="Search kendra, name, role, booth or phone" autocomplete="off">
+    <button class="clear" id="clear" aria-label="Clear search">&times;</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="count" id="count"></div>
+  <div id="list"></div>
+</main>
+
+<footer class="foot">
+  <div class="div"></div>
+  <div class="lotus-sm"><img src="bjplogo.svg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+  <div class="love">Developed with <span class="heart">&hearts;</span> by</div>
+  <div class="by">Roshan Belvai</div>
+  <div class="org">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<button class="totop" id="totop" type="button" aria-label="Scroll to top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>
+</button>
+
+<script>
+const DATA = [
+{ msk:"Shirthady",
+  office:{president:["Somanath Kotyan","8296551141"],secretary:["Jayanth Hegde","9741508311"],prabhari:["Kumar Prasad","9611479922"],pramukh:["Vinod Bellayaru","9844603268"],sir:["Dinesh Putran","9845258281"]},
+  kendras:[
+    {v:"Omalke",booths:"27,28,29,30,31",pk:["Harshavarma Hegde","9845817539"],pr:["Dixith Panapila","9535588971","OBC Morcha"]},
+    {v:"Kesaragadde",booths:"32,33,34,35",pk:["Vandana Prabhu","7760361341"],pr:["Bola Vishwanath Kamath","7760487725","Pramukh"]},
+    {v:"Padumarnadu",booths:"36,37,38",pk:["Santhosh Jain","9980153487"],pr:["Roshan Shetty","7349495469","Yuva Morcha Secretary"]},
+    {v:"Moodumarnadu",booths:"39,40,41",pk:["Rajeshwara Nayak","8105306077"],pr:["Vandana Prabhu","7760361341","Mandal Member"]},
+    {v:"Panapila",booths:"42,43,44,45",pk:["Sudhakar D Poojari","9902170299"],pr:["Sachin Panapila","9902354750","OBC Morcha Treasurer"]},
+    {v:"Mantadi",booths:"46,47,48,49",pk:["Jayaraj","9449913547"],pr:["Muniraj Hegde","9901726467","Panchayat Member"]},
+    {v:"Konaje",booths:"50,51,55,56,57",pk:["Latha Hegde","9741589200"],pr:["Ashwath Panapila","7022129648","OBC Morcha Vice President"]},
+    {v:"Aliyooru",booths:"52,53,54",pk:["Lakshan","9632923104"],pr:["Pradeep Walpady","9535617794","OBC Morcha President"]},
+  ]},
+{ msk:"Moodbidri Nagara",
+  office:{president:["Lakshmana Poojari","9663766075"],secretary:["Yashavanth Mastikatte","9902189910"],prabhari:["Poornima","9964677575"],pramukh:["Nagaraja Poojari","9845959863"],sir:["Umanath Kotyan","9380778203"]},
+  kendras:[
+    {v:"Alangaru",booths:"58,59,60,61",pk:["Karunakara Shetty","9845052331"],pr:["Gautham Rai","8105039396","Yuva Morcha"]},
+    {v:"Ontikatte",booths:"62,63,64,65,66",pk:["Nagaraja Poojari","9845959863"],pr:["Bahubali Prasad","9845838548","Senior Member"]},
+    {v:"Jain Pete",booths:"67,68,69,70",pk:["Rajesh Shetty","9448412379"],pr:["Shwetha Jain","9632944623","Former Municipal Member"]},
+    {v:"Ladi",booths:"71,72,73,74,75",pk:["Satvik Mallya","9743078534"],pr:["Sampath Poojari","9164174331","OBC Morcha Gen. Secretary"]},
+    {v:"Kallabettu",booths:"76,77,209,210",pk:["Shashikiran Kallabettu","9740940991"],pr:["Prasad Bhandari","9663993284","Former Municipal President"]},
+    {v:"Maruru",booths:"211,212,213,214",pk:["Dinesh Thirumalabettu","8748093266"],pr:["Dinesh Maruru","9632658242","Pramukh"]},
+  ]},
+{ msk:"Puttige",
+  office:{president:["Nagesh Amin","9008851593"],secretary:["Shivakumar Shetty","9900405078"],prabhari:["Sooraj Jain Marnad","9902576893"],pramukh:["Surekha","9591590421"],sir:["Dinesh Putran","9845258281"]},
+  kendras:[
+    {v:"Kallamundkur",booths:"17,18,19,20",pk:["Vasanth Naik","9008514363"],pr:["Prashanth Amin","8105484497","Social Media"]},
+    {v:"Niddodi",booths:"91,92,93",pk:["Janardhana Gowda","9108124621"],pr:["Surekha","9591590421","Former Panchayat Member"]},
+    {v:"Kadandale",booths:"21,22,23",pk:["Santhosh Bhandari","9535209109"],pr:["Jivandhar Shettigar","8105198531","OBC Morcha Vice President"]},
+    {v:"Paladka",booths:"24,25,26",pk:["Chandrashekhar Poojari","9004858419"],pr:["Sudarshan Kolakebailu","9663766014","Social Media Convener"]},
+    {v:"Nelligudde",booths:"80,81,82,83",pk:["Uday Kumar Shetty","9845590798"],pr:["Prabhakar Kulal","9945998528","Mandal Treasurer"]},
+    {v:"Sampige",booths:"78,79,84,85",pk:["Nagaraj Karkera","9945183522"],pr:["Nagesh Prabhu","8861131880","Yuva Morcha Secretary"]},
+    {v:"Ashwathpura",booths:"89,90,201,202",pk:["Raghavendra Rao","8197136911"],pr:["Shalini Salyan","9901660124","Former Panchayat President"]},
+    {v:"Mijaru",booths:"86,87,88,203",pk:["Mahesh Gowda","9964684876"],pr:["Shashidhar Nayak","9845290952","Pramukh"]},
+    {v:"Thodaru",booths:"204,205,206",pk:["Sunil Shetty","9880010358"],pr:["Harish M K","9845240064","Pramukh"]},
+    {v:"Puchamogaru",booths:"207,208,215,216",pk:["Divakara Shetty","9880869947"],pr:["Sujatha Shyam Kundar","9482644896","Mahila Morcha Vice President"]},
+    {v:"Iruvailu",booths:"217,218,219",pk:["Balachandra Shetty","9945564944"],pr:["Sundar Niddodi","9164314149","Pramukh"]},
+  ]},
+{ msk:"Kinnigoli",
+  office:{president:["Abhilash Shetty","9902404920"],secretary:["Yatish Acharya","7349730576"],prabhari:["Vinod Bolluru","9448039431"],pramukh:["Ishwar Kateel","9448300700"],sir:["Krishnaraja Shetty","9448549704"]},
+  kendras:[
+    {v:"Kondemoola",booths:"96,97,132,133,141",pk:["Arun Kumar","9964212980"],pr:["Dhanush Shettigar","9741676023","Town Panchayat Member"]},
+    {v:"Mennabettu",booths:"98,99,100,101,102",pk:["Damodar Shetty","9964277884"],pr:["Shailesh Anchan","9964218369","Town Panchayat Member"]},
+    {v:"Thalipadi",booths:"103,104,105,106",pk:["Divakara Karkera","9845459263"],pr:["Pranik","8861115538","Town Panchayat Member"]},
+    {v:"Punaruru",booths:"107,108,109",pk:["Hemalatha Punaruru","9901971741"],pr:["Gopala Krishna","8971651298","SC Morcha President"]},
+  ]},
+{ msk:"Mulki Nagara",
+  office:{president:["Shailesh Kumar Mulki","9916824181"],secretary:["Prashanth Mulki","9880363940"],prabhari:["Sukesh Shetty","9945909267"],pramukh:["Jayananda Mulki","9880585187"],sir:["Umanath Kotyan","9380778203"]},
+  kendras:[
+    {v:"Bappanadu",booths:"1,2,3,4,5",pk:["Satyendra","8861276777"],pr:["Subhash Shetty","9008147217","Mandal Secretary"]},
+    {v:"Karnad",booths:"115,116,117,122",pk:["Ashok Kumar","9964141989"],pr:["Satish Anchan","9535204350","Former City Panchayat President"]},
+    {v:"K.S. Rao Nagar",booths:"118,119,120,121",pk:["Harishchandra Kotyan","9844615498"],pr:["Naveen Raj","9844813751","District Yuva Morcha Secretary"]},
+  ]},
+{ msk:"Haleyangadi",
+  office:{president:["Lakshman Salyan Bellayaru","9980359035"],secretary:["Jeevan Shetty","9845323164"],prabhari:["Rajesh Amin","8618082106"],pramukh:["Gururaj Sapaliga","9844996015"],sir:["Krishnaraja Shetty","9448549704"]},
+  kendras:[
+    {v:"Shimanthooru",booths:"6,7,110,111",pk:["Praveen","9902181665"],pr:["Vikas Shetty","9448627568","Panchayat President"]},
+    {v:"Karnire Kavathar",booths:"08,09,10",pk:["Dhanraj Kundar","8861249253"],pr:["Naveenchandra Shetty","9742251991","Former Panchayat Vice President"]},
+    {v:"Balkunje Kolluru",booths:"11,12,13",pk:["Hariprasad Shetty","9632508345"],pr:["Jayalakshmi K","8105543211","Mahila Morcha Secretary"]},
+    {v:"Elinje",booths:"14,15,16,94,95",pk:["Bhaskar Shetty","9945308798"],pr:["Purushottam Shettigar","9743111451","Yuva Morcha Gen. Secretary"]},
+    {v:"Kilpady",booths:"112,113,114",pk:["Harikrishna Das","9945948477"],pr:["Jayananda Mulki","9880585187","Pramukh"]},
+    {v:"Bellayaru",booths:"123,124,125",pk:["Dinesh Shetty","9110258458"],pr:["Shobhendra Sasihithlu","9945619138","District Secretary"]},
+    {v:"10th Thokuru",booths:"126,127,128",pk:["Lohith","7760303081"],pr:["Jeevan Prakash","9945935679","Pramukh"]},
+    {v:"Sasihithlu",booths:"129,130,131,142",pk:["Sachin Shetty","9845577162"],pr:["Vinod Bolluru","9448039431","Mandal Vice President"]},
+    {v:"Kemral",booths:"143,144,145",pk:["Hariprasad Shetty","8296763357"],pr:["Mohan Das","9980753865","Former Padupanamboor President"]},
+    {v:"Haleyangadi",booths:"146,147,148,149",pk:["Nagaraj","9480355876"],pr:["Hemanath Amin","8105008609","Panchayat Vice President"]},
+    {v:"Sasihithlu",booths:"150,151,152,153",pk:["Anil Kundar","9743082089"],pr:["Shashikumar Mulki","9036543472","District Cell"]},
+  ]},
+{ msk:"62nd Thokuru / Permude",
+  office:{president:["Harish Moodushedde","9844192162"],secretary:["Dinesh Kukyan","9945957913"],prabhari:["Bharath Shetty","9741765423"],pramukh:["Jayanth Salyan","9448480368"],sir:["Umanath Kotyan","9380778203"]},
+  kendras:[
+    {v:"Ekkaru",booths:"134,135,136,137,138",pk:["Satish Shetty","9880933364"],pr:["Praveen Acharya","9980810164","Former Panchayat President"]},
+    {v:"Delanthabettu",booths:"139,140,159,160,161",pk:["Dinesh","9134253217"],pr:["Manohar Shetty","9980018907","Pramukh"]},
+    {v:"Madhya Chelyaru",booths:"154,155,156,157,158",pk:["Balakrishna","9964582917"],pr:["Jayananda Chelyaru","9964590138","Panchayat President"]},
+    {v:"Kuthethoor",booths:"162,163,164,165",pk:["Prasad Anchan","9481761894"],pr:["Durgaprasad Kuthethoor","8971409230","Pramukh"]},
+    {v:"Kalavaru",booths:"174,175,176",pk:["Kiran Rai","7829133882"],pr:["Shankar Jogi","8197102092","Former Panchayat President"]},
+    {v:"Jokatte",booths:"177,178,179,180,181,182",pk:["Jayanth Salyan","9448480368"],pr:["Jayanth Salyan","9448480368","Pramukh"]},
+    {v:"Jara",booths:"192,193,194,195,196",pk:["Mukesh","9916246942"],pr:["Prakhyath Shetty","8123096729","Pramukh"]},
+    {v:"Jara",booths:"197,198,199,200",pk:["Anil Moodushedde","9845372080"],pr:["Anil Moodushedde","9845372080","Former Panchayat President"]},
+  ]},
+{ msk:"Bajpe",
+  office:{president:["Vijay Kumar","9845182478"],secretary:["Dinesh Shetty","9845271888"],prabhari:["Keshava Karkera","9880889288"],pramukh:["Naveen Raj","9844813751"],sir:["Umanath Kotyan","9380778203"]},
+  kendras:[
+    {v:"Bajpe Nagar",booths:"166,167,168,169",pk:["Chitresh Shetty","9880723921"],pr:["Rajesh Amin","8123721329","Kisan Morcha President"]},
+    {v:"Bajpe Rural",booths:"170,171,172,173",pk:["Leelavathi","9449283928"],pr:["Sudhakar Kamath","9448887764","Pramukh"]},
+    {v:"Kenjaru",booths:"183,184,185,186,187",pk:["Sharath C Babu","9964107734"],pr:["Geethalakshmi","7760645515","Mahila Morcha President"]},
+    {v:"Karambaru",booths:"188,189,190,191",pk:["Satish Devadiga","9845910567"],pr:["Lokesh Bajpe","9945690178","Town Panchayat President"]},
+  ]},
+];
+
+const PALETTES = [['#FF6A00','#E85D04'],['#138808','#0B6E04'],['#2563EB','#1E40AF'],['#9333EA','#6B21A8'],['#DB2777','#9D174D'],['#0891B2','#0E7490'],['#CA8A04','#854D0E'],['#DC2626','#991B1B'],['#475569','#1E293B']];
+function initials(name){const p=name.replace(/\(.\)/g,'').trim().split(/\s+/).filter(Boolean);return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase()||'#';}
+function palette(name){let h=0;for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0;return PALETTES[h%PALETTES.length];}
+function digits(p){return (p||'').replace(/\D/g,'');}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function haptic(ms){try{if(navigator.vibrate)navigator.vibrate(ms);}catch(e){}}
+const WA_GREETING='ನಮಸ್ಕಾರ 🙏';
+const SVG_CALL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+const SVG_WA='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.82 11.82 0 0 1 8.413 3.488 11.82 11.82 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.82 9.82 0 0 0 1.523 5.26l-.999 3.648 3.736-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>';
+const SVG_COPY='<svg class="cp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const SVG_TICK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+const listEl=document.getElementById('list');
+const searchEl=document.getElementById('search');
+const clearEl=document.getElementById('clear');
+const chipsEl=document.getElementById('chips');
+const countEl=document.getElementById('count');
+const statsEl=document.getElementById('stats');
+const toastEl=document.getElementById('toast');
+const totopEl=document.getElementById('totop');
+
+let totalK=0; DATA.forEach(s=>totalK+=s.kendras.length);
+statsEl.innerHTML='<b>'+DATA.length+'</b> Maha Shakti Kendras<span class="sep"></span><b>'+totalK+'</b> Shakti Kendras';
+let activeMsk='';
+
+function acts(person,sm){
+  const d=digits(person[1]); const ok=d.length>=10; const tel='+91'+d; const nm=esc(person[0]); const c=sm?'fab sm':'fab';
+  const call=ok?'<a class="'+c+' call" href="tel:'+tel+'" data-haptic aria-label="Call '+nm+'">'+SVG_CALL+'</a>':'<span class="'+c+' call" aria-disabled="true">'+SVG_CALL+'</span>';
+  const wa=ok?'<a class="'+c+' wa" href="https://wa.me/91'+d+'?text='+encodeURIComponent(WA_GREETING)+'" target="_blank" rel="noopener" data-haptic aria-label="WhatsApp '+nm+'">'+SVG_WA+'</a>':'<span class="'+c+' wa" aria-disabled="true">'+SVG_WA+'</span>';
+  return call+wa;
+}
+function phoneBtn(p){const d=digits(p);if(d.length<10)return '<span class="pph">No number</span>';return '<button type="button" class="pph" data-copy="'+esc(p)+'" aria-label="Copy '+esc(p)+'">'+esc(p)+SVG_COPY+'</button>';}
+
+function personRow(person,kind,role){
+  const [c1,c2]=palette(person[0]);
+  const tag='<span class="tag '+(kind==='pk'?'pk':'pr')+'">'+(kind==='pk'?'Pramukh':'Prabhari')+'</span>';
+  const roleHtml=role?'<span class="prole">'+esc(role)+'</span>':'';
+  return '<div class="prow">'+
+    '<div class="pav" style="background:linear-gradient(150deg,'+c1+','+c2+')">'+initials(person[0])+'</div>'+
+    '<div class="pmeta"><div class="pname">'+esc(person[0])+'</div>'+
+      '<div class="psub">'+tag+roleHtml+phoneBtn(person[1])+'</div></div>'+
+    '<div class="pacts">'+acts(person,false)+'</div></div>';
+}
+function leadRow(role,person){
+  if(!person||!person[0])return '';
+  return '<div class="lrow"><div class="lrole">'+esc(role)+'</div><div class="lname">'+esc(person[0])+'</div><div class="lacts">'+acts(person,true)+'</div></div>';
+}
+function kcardHTML(k){
+  return '<div class="kcard"><div class="ktop"><span class="kv">'+esc(k.v)+'</span><span class="kb">Booths '+esc(k.booths)+'</span></div>'+
+    personRow(k.pk,'pk','')+personRow(k.pr,'pr',k.pr[2])+'</div>';
+}
+function leadHTML(o){
+  const rows=leadRow('President',o.president)+leadRow('Secretary',o.secretary)+leadRow('MSK Prabhari',o.prabhari)+leadRow('MSK Pramukh',o.pramukh)+leadRow('Zonal In-charge',o.sir);
+  return '<details class="lead"><summary><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>Maha Shakti Kendra leadership<span class="sx">President · Secretary · Prabhari · Pramukh</span></summary><div class="lrows">'+rows+'</div></details>';
+}
+
+function kMatch(k,q){
+  if(!q)return true;
+  return (k.v+' '+k.booths+' '+k.pk[0]+' '+k.pk[1]+' '+k.pr[0]+' '+k.pr[1]+' '+(k.pr[2]||'')).toLowerCase().includes(q);
+}
+function leadMatch(s,q){
+  if(!q)return false;
+  const o=s.office; const all=[s.msk,o.president,o.secretary,o.prabhari,o.pramukh,o.sir].map(x=>Array.isArray(x)?x.join(' '):x).join(' ').toLowerCase();
+  return all.includes(q);
+}
+
+function buildChips(){
+  const mk=(label,val,n)=>{const b=document.createElement('button');b.className='chip';b.type='button';b.setAttribute('aria-pressed',val===activeMsk);b.innerHTML=esc(label)+'<span class="n">'+n+'</span>';b.onclick=()=>{haptic(8);activeMsk=val;buildChips();render(true);window.scrollTo({top:0,behavior:'smooth'});};return b;};
+  chipsEl.innerHTML='';
+  chipsEl.appendChild(mk('All',' ',totalK));
+  DATA.forEach(s=>chipsEl.appendChild(mk(s.msk,s.msk,s.kendras.length)));
+}
+
+function render(animate){
+  const q=searchEl.value.trim().toLowerCase();
+  clearEl.classList.toggle('show',!!searchEl.value);
+  let shown=0; let html='';
+  DATA.forEach(s=>{
+    if(activeMsk && s.msk!==activeMsk) return;
+    const lm=leadMatch(s,q);
+    const ks=s.kendras.filter(k=>lm||kMatch(k,q));
+    if(!ks.length) return;
+    shown+=ks.length;
+    html+='<section class="group"><div class="group-head"><span class="dot"></span><h2>'+esc(s.msk)+'</h2><span class="gc">'+ks.length+(ks.length===1?' kendra':' kendras')+'</span></div>'+
+      leadHTML(s.office)+
+      '<div class="cards'+(animate?' anim':'')+'">'+ks.map(kcardHTML).join('')+'</div></section>';
+  });
+  countEl.innerHTML='<b>'+shown+'</b> Shakti '+(shown===1?'Kendra':'Kendras')+(activeMsk?' in '+esc(activeMsk):'');
+  if(!shown){listEl.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>Nothing found</h3><p>Try a different kendra, name, role, booth or phone.</p></div>';return;}
+  listEl.innerHTML=html;
+}
+
+let toastTimer=null;
+function showToast(msg){toastEl.innerHTML=SVG_TICK+'<span>'+esc(msg)+'</span>';toastEl.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),1900);}
+async function copyText(t){try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(t);}else{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}return true;}catch(e){return false;}}
+
+listEl.addEventListener('click',e=>{
+  const cp=e.target.closest('[data-copy]');
+  if(cp){const num=cp.getAttribute('data-copy');copyText(num).then(ok=>{haptic(ok?12:0);if(ok)showToast('Number copied · '+num);});return;}
+  const fab=e.target.closest('[data-haptic]');
+  if(fab)haptic(12);
+});
+searchEl.addEventListener('input',()=>render(false));
+clearEl.addEventListener('click',()=>{searchEl.value='';searchEl.focus();render(false);});
+window.addEventListener('scroll',()=>{totopEl.classList.toggle('show',window.scrollY>520);},{passive:true});
+totopEl.addEventListener('click',()=>{haptic(8);window.scrollTo({top:0,behavior:'smooth'});});
+
+buildChips();
+render(true);
+</script>
+</body>
+</html>
