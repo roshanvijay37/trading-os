@@ -14,3 +14,6 @@ auto-trade-state.json
 auto-trade-audit.jsonl
 alerts.jsonl
 data/
+# ...but DO track committed static site data (SIR daily snapshots) under public/
+!public/data/
+!public/data/**
