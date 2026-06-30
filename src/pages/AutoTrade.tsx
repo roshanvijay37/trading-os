@@ -35,7 +35,7 @@ export function AutoTrade() {
     fixedLots: 1,
     selectedStrategies: ["EMA5"],
     selectedInstruments: ["NIFTY", "BANKNIFTY"],
-    timeframeMinutes: 5,
+    selectedTimeframes: [5],
   });
   const [logs, setLogs] = useState<string[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -93,7 +93,7 @@ export function AutoTrade() {
         fixedLots: status.fixedLots ?? prev.fixedLots,
         selectedStrategies: status.selectedStrategies ?? prev.selectedStrategies,
         selectedInstruments: status.selectedInstruments ?? prev.selectedInstruments,
-        timeframeMinutes: status.timeframeMinutes ?? prev.timeframeMinutes,
+        selectedTimeframes: status.selectedTimeframes ?? prev.selectedTimeframes,
       }));
     }
   }, [status, showConfig]);
@@ -207,7 +207,7 @@ export function AutoTrade() {
               </p>
               <p className="text-2xs text-zinc-600">
                 {isRunning
-                  ? `Scanning ${status?.selectedStrategies?.join(", ") || "EMA5"} on ${status?.selectedInstruments?.join(" / ") || "NIFTY / BANKNIFTY"} @ ${status?.timeframeMinutes === 60 ? "1h" : `${status?.timeframeMinutes ?? 5}m`}`
+                  ? `Scanning ${status?.selectedStrategies?.join(", ") || "EMA5"} on ${status?.selectedInstruments?.join(" / ") || "NIFTY / BANKNIFTY"} @ ${(status?.selectedTimeframes ?? [5]).map((t) => (t === 60 ? "1h" : `${t}m`)).join(" + ")}`
                   : "Ready for operator command"}
               </p>
             </div>
@@ -376,7 +376,7 @@ export function AutoTrade() {
             </div>
           </div>
           <div className="mt-3">
-            <label className="text-2xs text-zinc-600">Timeframe</label>
+            <label className="text-2xs text-zinc-600">Timeframes</label>
             <div className="mt-1.5 flex flex-wrap gap-3">
               {[
                 { id: 5, label: "5 Minutes" },
@@ -386,11 +386,15 @@ export function AutoTrade() {
               ].map((tf) => (
                 <label key={tf.id} className="flex items-center gap-2 text-2xs text-zinc-400">
                   <input
-                    type="radio"
-                    name="timeframe"
-                    checked={configForm.timeframeMinutes === tf.id}
-                    onChange={() => setConfigForm({ ...configForm, timeframeMinutes: tf.id })}
-                    className="h-3.5 w-3.5 border-border bg-surface"
+                    type="checkbox"
+                    checked={configForm.selectedTimeframes.includes(tf.id)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...configForm.selectedTimeframes, tf.id]
+                        : configForm.selectedTimeframes.filter((id) => id !== tf.id);
+                      setConfigForm({ ...configForm, selectedTimeframes: next });
+                    }}
+                    className="h-3.5 w-3.5 rounded border-border bg-surface"
                   />
                   {tf.label}
                 </label>

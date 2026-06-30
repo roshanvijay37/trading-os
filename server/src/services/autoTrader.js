@@ -82,8 +82,9 @@ const CONFIG = {
   EMERGENCY_STOP: false,
   SELECTED_STRATEGIES: ["EMA5"],
   SELECTED_INSTRUMENTS: ["NIFTY", "BANKNIFTY"],
-  // Candle timeframe (in minutes) the strategy evaluates on. One of ALLOWED_TIMEFRAMES.
-  TIMEFRAME_MINUTES: 5,
+  // Candle timeframes (in minutes) the strategy scans — each is evaluated INDEPENDENTLY (a 5m
+  // and a 15m signal each trade on their own). Subset of ALLOWED_TIMEFRAMES; never empty.
+  SELECTED_TIMEFRAMES: [5],
 };
 
 // Selectable candle timeframes (minutes); 60 = 1 hour. Drives BOTH the live-tick aggregation
@@ -95,10 +96,15 @@ const ALLOWED_TIMEFRAMES = [5, 15, 30, 60];
 // harmless, the engine only reads the most recent ones.
 const HISTORY_CANDLES = 80;
 
-// Defensive read of the configured timeframe: falls back to 5m if a corrupt/persisted value ever
-// slips through, so candle fetching can never break on a bad interval string/resolution.
-function getTimeframeMinutes() {
-  return ALLOWED_TIMEFRAMES.includes(CONFIG.TIMEFRAME_MINUTES) ? CONFIG.TIMEFRAME_MINUTES : 5;
+// Defensive read of the configured timeframes: filter to the allowed set, dedupe, and fall back
+// to [5] if a corrupt/persisted/empty value ever slips through, so candle fetching can never
+// break on a bad interval/resolution.
+function getTimeframes() {
+  const list = (Array.isArray(CONFIG.SELECTED_TIMEFRAMES) ? CONFIG.SELECTED_TIMEFRAMES : [])
+    .map(Number)
+    .filter((t) => ALLOWED_TIMEFRAMES.includes(t));
+  const deduped = [...new Set(list)];
+  return deduped.length ? deduped : [5];
 }
 
 function getActiveUnderlyings() {
@@ -126,7 +132,7 @@ const CONFIG_FIELD_MAP = {
   allowCorrelatedTrades: "ALLOW_CORRELATED_TRADES",
   selectedStrategies: "SELECTED_STRATEGIES",
   selectedInstruments: "SELECTED_INSTRUMENTS",
-  timeframeMinutes: "TIMEFRAME_MINUTES",
+  selectedTimeframes: "SELECTED_TIMEFRAMES",
 };
 const PERSISTED_CONFIG_KEYS = Object.values(CONFIG_FIELD_MAP);
 
@@ -209,6 +215,10 @@ function loadState() {
         for (const key of PERSISTED_CONFIG_KEYS) {
           if (s.config[key] !== undefined) CONFIG[key] = s.config[key];
         }
+        // Migrate the pre-multi-timeframe single field if an older state file is loaded.
+        if (s.config.SELECTED_TIMEFRAMES === undefined && s.config.TIMEFRAME_MINUTES !== undefined) {
+          CONFIG.SELECTED_TIMEFRAMES = [s.config.TIMEFRAME_MINUTES];
+        }
       }
     }
   } catch (err) {
@@ -225,9 +235,9 @@ function getSymbolShortName(symbol) {
   return symbol;
 }
 
-async function fetchCandlesWithTickFallback(symbol, session) {
+async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
   const shortName = getSymbolShortName(symbol);
-  const tf = `${getTimeframeMinutes()}m`;
+  const tf = `${timeframeMinutes}m`;
   // NOTE: higher timeframes need a long stretch of ticks to form 6 complete candles (e.g. 6x
   // 1h = 6 hours), so the live-tick path will usually be short until the buffer fills and the
   // engine legitimately runs off the REST history below — which returns proper candles for the
@@ -238,7 +248,7 @@ async function fetchCandlesWithTickFallback(symbol, session) {
     return tickCandles.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
   }
   logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, timeframe: tf, reason: "insufficient_tick_data", tickCount: tickCandles.length });
-  return fetchLatestCandles(symbol, session);
+  return fetchLatestCandles(symbol, session, timeframeMinutes);
 }
 
 async function fetchOptionQuoteWithTickFallback(optionSymbol, session) {
@@ -965,88 +975,99 @@ function calculatePositionSize(entryPrice, stopLoss, underlying) {
 
 async function processCandles(underlying, session) {
   try {
-    const candles = await fetchCandlesWithTickFallback(underlying.symbol, session);
-    if (candles.length < 6) return;
-    latestData[underlying.name] = {
-      candles,
-      lastUpdated: new Date().toISOString(),
-      ltp: candles[candles.length - 1][4],
-    };
-    for (const strategy of CONFIG.SELECTED_STRATEGIES) {
-      const alert = detectAlertCandle(candles, strategy);
-      if (alert) {
-        console.log(`[AUTO-TRADER] ${underlying.name} ${alert.type} detected`);
-        activeAlerts.set(`${underlying.name}:${strategy}`, {
-          ...alert,
-          underlying: underlying.name,
-          symbol: underlying.symbol,
-          detectedAt: new Date().toISOString(),
-        });
-      }
-      const currentAlert = activeAlerts.get(`${underlying.name}:${strategy}`);
-      if (!currentAlert) continue;
-      const signal = detectBreakout(candles, currentAlert);
-      if (!signal) continue;
-      if (!canTakeTrade(underlying.name)) {
-        activeAlerts.delete(`${underlying.name}:${strategy}`);
-        continue;
-      }
-      const signalId = `${underlying.name}:${strategy}-${signal.timestamp}-${signal.type}`;
-      if (processedSignals.has(signalId)) {
-        activeAlerts.delete(`${underlying.name}:${strategy}`);
-        continue;
-      }
-      processedSignals.add(signalId);
-      if (!checkVIXFilter()) {
-        activeAlerts.delete(`${underlying.name}:${strategy}`);
-        continue;
-      }
-      const optionChain = await fetchOptionChain(underlying.symbol, session);
-      const optionType = signal.type === "LONG" ? "CE" : "PE";
-      const optionSymbol = getATMOption(underlying.name, signal.entryPrice, optionType, optionChain);
-      if (!optionSymbol) {
-        activeAlerts.delete(`${underlying.name}:${strategy}`);
-        continue;
-      }
-      const liquidity = await checkLiquidity(optionSymbol, session);
-      if (!liquidity.pass) {
-        console.log(`[AUTO-TRADER] Liquidity check failed: ${liquidity.reason}`);
-        activeAlerts.delete(`${underlying.name}:${strategy}`);
-        continue;
-      }
-      const rawQty = calculatePositionSize(signal.entryPrice, signal.stopLoss, underlying);
-      const qty = roundToLotSize(rawQty, underlying);
-      if (qty <= 0) {
-        activeAlerts.delete(`${underlying.name}:${strategy}`);
-        continue;
-      }
-      const entryPremium = liquidity.quote?.ask || liquidity.quote?.lp || 0;
-      const margin = await checkMargin(optionSymbol, qty, underlying, session, entryPremium);
-      if (!margin.pass) {
-        console.log(`[AUTO-TRADER] Margin insufficient: need Γé╣${margin.required.toFixed(2)}, have Γé╣${margin.available.toFixed(2)}`);
-        activeAlerts.delete(`${underlying.name}:${strategy}`);
-        continue;
-      }
-      const tradeSignal = {
-        ...signal,
-        strategy,
-        quantity: qty,
-        optionSymbol,
-        underlying: underlying.name,
-        underlyingSymbol: underlying.symbol,
+    // Scan EACH selected timeframe independently — a 5m and a 15m setup on the same underlying
+    // are separate signals that each trade on their own. Global risk limits (max trades/day,
+    // daily-loss cap, capital, correlation filter) are SHARED across all timeframes.
+    for (const tf of getTimeframes()) {
+      const candles = await fetchCandlesWithTickFallback(underlying.symbol, session, tf);
+      if (candles.length < 6) continue;
+      latestData[underlying.name] = {
+        candles,
+        lastUpdated: new Date().toISOString(),
+        ltp: candles[candles.length - 1][4],
+        timeframe: tf,
       };
-      storeSignal(tradeSignal);
-      try {
-        const position = await openPosition(tradeSignal, optionSymbol, qty, session, liquidity.quote);
-        if (!position) {
-          activeAlerts.delete(`${underlying.name}:${strategy}`);
+      for (const strategy of CONFIG.SELECTED_STRATEGIES) {
+        // Alerts/signals are keyed per (underlying, strategy, timeframe) so each timeframe runs
+        // independently and never clobbers another timeframe's pending setup.
+        const key = `${underlying.name}:${strategy}:${tf}m`;
+        const alert = detectAlertCandle(candles, strategy);
+        if (alert) {
+          console.log(`[AUTO-TRADER] ${underlying.name} ${alert.type} detected (${tf}m)`);
+          activeAlerts.set(key, {
+            ...alert,
+            underlying: underlying.name,
+            symbol: underlying.symbol,
+            timeframe: tf,
+            detectedAt: new Date().toISOString(),
+          });
+        }
+        const currentAlert = activeAlerts.get(key);
+        if (!currentAlert) continue;
+        const signal = detectBreakout(candles, currentAlert);
+        if (!signal) continue;
+        if (!canTakeTrade(underlying.name)) {
+          activeAlerts.delete(key);
           continue;
         }
-      } catch (orderError) {
-        console.error(`[AUTO-TRADER] Order failed:`, orderError.message);
-        logAudit({ type: "ORDER_FAILED", error: orderError.message, signal: tradeSignal });
+        const signalId = `${key}-${signal.timestamp}-${signal.type}`;
+        if (processedSignals.has(signalId)) {
+          activeAlerts.delete(key);
+          continue;
+        }
+        processedSignals.add(signalId);
+        if (!checkVIXFilter()) {
+          activeAlerts.delete(key);
+          continue;
+        }
+        const optionChain = await fetchOptionChain(underlying.symbol, session);
+        const optionType = signal.type === "LONG" ? "CE" : "PE";
+        const optionSymbol = getATMOption(underlying.name, signal.entryPrice, optionType, optionChain);
+        if (!optionSymbol) {
+          activeAlerts.delete(key);
+          continue;
+        }
+        const liquidity = await checkLiquidity(optionSymbol, session);
+        if (!liquidity.pass) {
+          console.log(`[AUTO-TRADER] Liquidity check failed: ${liquidity.reason}`);
+          activeAlerts.delete(key);
+          continue;
+        }
+        const rawQty = calculatePositionSize(signal.entryPrice, signal.stopLoss, underlying);
+        const qty = roundToLotSize(rawQty, underlying);
+        if (qty <= 0) {
+          activeAlerts.delete(key);
+          continue;
+        }
+        const entryPremium = liquidity.quote?.ask || liquidity.quote?.lp || 0;
+        const margin = await checkMargin(optionSymbol, qty, underlying, session, entryPremium);
+        if (!margin.pass) {
+          console.log(`[AUTO-TRADER] Margin insufficient: need ₹${margin.required.toFixed(2)}, have ₹${margin.available.toFixed(2)}`);
+          activeAlerts.delete(key);
+          continue;
+        }
+        const tradeSignal = {
+          ...signal,
+          strategy,
+          timeframe: tf,
+          quantity: qty,
+          optionSymbol,
+          underlying: underlying.name,
+          underlyingSymbol: underlying.symbol,
+        };
+        storeSignal(tradeSignal);
+        try {
+          const position = await openPosition(tradeSignal, optionSymbol, qty, session, liquidity.quote);
+          if (!position) {
+            activeAlerts.delete(key);
+            continue;
+          }
+        } catch (orderError) {
+          console.error(`[AUTO-TRADER] Order failed:`, orderError.message);
+          logAudit({ type: "ORDER_FAILED", error: orderError.message, signal: tradeSignal });
+        }
+        activeAlerts.delete(key);
       }
-      activeAlerts.delete(`${underlying.name}:${strategy}`);
     }
   } catch (error) {
     console.error(`[AUTO-TRADER] Error:`, error.message);
@@ -1054,8 +1075,8 @@ async function processCandles(underlying, session) {
 }
 
 // ─── DATA FETCHING ────────────────────────────────────────────────────
-async function fetchLatestCandles(symbol, session) {
-  const tf = getTimeframeMinutes();
+async function fetchLatestCandles(symbol, session, timeframeMinutes) {
+  const tf = timeframeMinutes;
   const now = Math.floor(Date.now() / 1000);
   // Scale the lookback window with the timeframe so every resolution yields enough candles for
   // the EMA/alert/breakout logic. A flat 1h window only gives ~4 fifteen-minute candles (and 1
@@ -1184,7 +1205,7 @@ export async function startAutoTrader(sessionId) {
     console.error("[AUTO-TRADER] Tick feed connect failed (will use REST fallback):", err.message);
   }
   console.log(
-    `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | TF: ${CONFIG.TIMEFRAME_MINUTES}m | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
+    `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | TF: ${getTimeframes().join("/")}m | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
   );
   isRunning = true;
   // Preserve same-day risk counters across a restart so circuit breakers (daily-loss,
@@ -1216,7 +1237,7 @@ export async function startAutoTrader(sessionId) {
       fixedLots: CONFIG.FIXED_LOTS,
       selectedStrategies: CONFIG.SELECTED_STRATEGIES,
       selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
-      timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
+      selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
     },
     startedAt: new Date().toISOString(),
   };
@@ -1316,7 +1337,7 @@ export function getAutoTraderStatus() {
     fixedLots: CONFIG.FIXED_LOTS,
     selectedStrategies: CONFIG.SELECTED_STRATEGIES,
     selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
-    timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
+    selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -1356,13 +1377,17 @@ export function setPaperTrading(enabled) {
 }
 
 export function updateConfig(updates) {
-  // Sanitize the timeframe up front — only supported candle intervals are accepted. Coerce a
-  // numeric string to a number; drop an unsupported value so it can't be stored and break
-  // candle fetching.
-  if (updates.timeframeMinutes !== undefined) {
-    const tf = Number(updates.timeframeMinutes);
-    if (ALLOWED_TIMEFRAMES.includes(tf)) updates.timeframeMinutes = tf;
-    else delete updates.timeframeMinutes;
+  // Sanitize the timeframes up front — accept an array (or single value) of supported candle
+  // intervals only: coerce to numbers, keep allowed ones, dedupe. Also accept a legacy single
+  // `timeframeMinutes` field from an older client. Drop the update if nothing valid remains so
+  // an empty/garbage selection can't be stored and break candle fetching.
+  if (updates.selectedTimeframes !== undefined || updates.timeframeMinutes !== undefined) {
+    const raw = updates.selectedTimeframes !== undefined ? updates.selectedTimeframes : updates.timeframeMinutes;
+    const arr = (Array.isArray(raw) ? raw : [raw]).map(Number).filter((t) => ALLOWED_TIMEFRAMES.includes(t));
+    const deduped = [...new Set(arr)];
+    if (deduped.length) updates.selectedTimeframes = deduped;
+    else delete updates.selectedTimeframes;
+    delete updates.timeframeMinutes; // legacy alias consumed
   }
   // Translate camelCase UI fields to CONFIG keys, applying only the ones actually sent so a
   // partial update doesn't clobber unrelated settings. Then persist so the change survives a
@@ -1389,7 +1414,7 @@ export function updateConfig(updates) {
       allowCorrelatedTrades: CONFIG.ALLOW_CORRELATED_TRADES,
       selectedStrategies: CONFIG.SELECTED_STRATEGIES,
       selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
-      timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
+      selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
     },
   };
 }
