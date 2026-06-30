@@ -69,6 +69,8 @@ const CONFIG = {
   ORDER_TYPE: "LIMIT",
   LIMIT_BUFFER_PCT: 0.3,
   SLIPPAGE_BUFFER_PCT: 0.5,
+  // L2 (audited): option BUYING only needs ~1× premium; 2× is a deliberate safety buffer that
+  // ~halves position capacity. Intentional, but tune to 1× if you want full premium deployment.
   MARGIN_SAFETY_MULTIPLIER: 2,
   MAX_VIX: 25,
   MAX_SPREAD_PCT: 2,

@@ -1,14 +1,17 @@
 /**
  * Subhasish Pani's 5 EMA Strategy Engine
  * 
- * Rules:
- * 1. Use 5-minute timeframe
- * 2. Alert candle: Price crosses below/above 5 EMA (bearish/bullish alert)
- * 3. Entry: Next candle breaks alert candle high/low (bullish/bearish)
- * 4. Stop Loss: Alert candle low/high
- * 5. Risk per trade: 1% of capital
- * 6. No trading after 3:00 PM for new positions
- * 7. Square off by 3:15 PM
+ * Rules (as actually enforced by the code — kept in sync with the audit):
+ * 1. Timeframe: configurable (CONFIG.SELECTED_TIMEFRAMES, default 5m); each selected timeframe is
+ *    scanned independently.
+ * 2. Alert candle: a candle ENTIRELY beyond the 5 EMA (Subhasish Pani's rule; see signalCore.js) —
+ *    NOT a simple cross.
+ * 3. Entry: the next COMPLETED candle breaks the alert candle high/low (bullish/bearish).
+ * 4. Stop Loss: alert candle low/high.
+ * 5. Risk per trade: CONFIG.RISK_PERCENT (default 0.5%) of capital.
+ * 6. No NEW entries after CONFIG.MAX_TIME_ENTRY_HOUR (default 14:00 IST) — EARLIER than Pani's 3 PM;
+ *    isValidTradingTime also blocks new entries after 15:00 IST.
+ * 7. Square off open positions at 15:15 IST (isSquareOffTime).
  */
 
 import { randomUUID } from "crypto";
