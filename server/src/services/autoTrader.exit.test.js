@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyExit } from "./autoTrader.js";
+import { classifyExit, dropInProgressCandle } from "./autoTrader.js";
 
 // classifyExit is the pure decision behind C2: a partial or unfilled market exit must NOT mark the
 // position CLOSED and orphan the unsold remainder (which would sit at the broker with no stop-loss).
@@ -29,5 +29,35 @@ describe("classifyExit (C2 partial-exit safety)", () => {
     expect(classifyExit({ paper: false, entryQty: 75, fillQty: undefined })).toEqual({ action: "unfilled", exitQty: 0, remainder: 75 });
     expect(classifyExit({ paper: false, entryQty: 75, fillQty: NaN })).toEqual({ action: "unfilled", exitQty: 0, remainder: 75 });
     expect(classifyExit({ paper: false, entryQty: 75, fillQty: -10 })).toEqual({ action: "unfilled", exitQty: 0, remainder: 75 });
+  });
+});
+
+// dropInProgressCandle (C6): signals must run on COMPLETED candles only, or the trailing forming
+// bar's OHLC/EMA shift intra-period and the alert/breakout flip within a bar (and diverge from the
+// backtest). Row = [periodStartSec, o, h, l, c, v]; nowSec is injected for deterministic tests.
+describe("dropInProgressCandle (C6 completed-candle signals)", () => {
+  const bar = (startSec) => [startSec, 100, 101, 99, 100, 0];
+
+  it("drops a trailing 5m candle whose period has not elapsed", () => {
+    const candles = [bar(0), bar(300), bar(600)];
+    const out = dropInProgressCandle(candles, 5, 700); // 600-bar only 100s into its 300s period
+    expect(out).toHaveLength(2);
+    expect(out[out.length - 1][0]).toBe(300);
+  });
+
+  it("keeps the trailing candle once its period has fully elapsed", () => {
+    const candles = [bar(0), bar(300), bar(600)];
+    expect(dropInProgressCandle(candles, 5, 900)).toHaveLength(3); // 600+300 = complete
+  });
+
+  it("respects the timeframe (15m = 900s period)", () => {
+    const candles = [bar(0), bar(900)];
+    expect(dropInProgressCandle(candles, 15, 900 + 100)).toHaveLength(1); // still forming
+    expect(dropInProgressCandle(candles, 15, 900 + 900)).toHaveLength(2); // complete
+  });
+
+  it("handles empty / non-array inputs safely", () => {
+    expect(dropInProgressCandle([], 5, 100)).toEqual([]);
+    expect(dropInProgressCandle(undefined, 5, 100)).toEqual([]);
   });
 });

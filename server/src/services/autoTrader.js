@@ -48,6 +48,8 @@ import path from "path";
 
 import { computeExecutionStats } from "./executionStats.js";
 import { computeHealthSnapshot } from "./healthSnapshot.js";
+// Statutory + brokerage cost model, shared with the backtest so live P&L is reported NET (not gross).
+import { computeOptionCosts } from "./blackScholes.js";
 
 // ΓöÇΓöÇΓöÇ CONFIGURATION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const CONFIG = {
@@ -235,6 +237,22 @@ function getSymbolShortName(symbol) {
   return symbol;
 }
 
+/**
+ * C6: signals must be judged on COMPLETED candles only. Both the tick aggregation and the FYERS
+ * history endpoint can return a trailing IN-PROGRESS candle (the current period). If kept, the last
+ * bar's OHLC and the EMA shift intra-period, so the alert/breakout can flip within a bar and live
+ * diverges from the backtest (which uses closed bars). Drop the trailing candle when its period has
+ * not fully elapsed. Row = [timeSec, o, h, l, c, v]; timeSec is the period START (epoch seconds).
+ * Pure (nowSec injectable) for unit testing.
+ */
+export function dropInProgressCandle(candles, timeframeMinutes, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!Array.isArray(candles) || candles.length === 0) return candles || [];
+  const startSec = Number(candles[candles.length - 1]?.[0]) || 0;
+  const periodSec = (Number(timeframeMinutes) || 5) * 60;
+  if (startSec > 0 && nowSec < startSec + periodSec) return candles.slice(0, -1);
+  return candles;
+}
+
 async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
   const shortName = getSymbolShortName(symbol);
   const tf = `${timeframeMinutes}m`;
@@ -245,10 +263,11 @@ async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
   const tickCandles = aggregateOHLC(shortName, tf, HISTORY_CANDLES);
   if (tickCandles.length >= 6) {
     logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, timeframe: tf, count: tickCandles.length });
-    return tickCandles.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
+    const rows = tickCandles.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
+    return dropInProgressCandle(rows, timeframeMinutes); // C6: completed candles only
   }
   logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, timeframe: tf, reason: "insufficient_tick_data", tickCount: tickCandles.length });
-  return fetchLatestCandles(symbol, session, timeframeMinutes);
+  return dropInProgressCandle(await fetchLatestCandles(symbol, session, timeframeMinutes), timeframeMinutes); // C6
 }
 
 async function fetchOptionQuoteWithTickFallback(optionSymbol, session) {
@@ -641,7 +660,11 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
   position.exitPrice = exitPrice;
   position.quantity = exitQty;
 
-  const pnl = (exitPrice - position.avgFillPrice) * exitQty;
+  // C4: report NET P&L — deduct brokerage + statutory costs (same model the backtest uses) so the
+  // dashboard/audit isn't optimistic. Paper mode has no real costs.
+  const gross = (exitPrice - position.avgFillPrice) * exitQty;
+  const costs = CONFIG.PAPER_TRADING ? 0 : computeOptionCosts(position.avgFillPrice, exitPrice, exitQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER });
+  const pnl = gross - costs;
   position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
   position.pnl = position.realizedPnl;
   dailyRealizedPnL += pnl;
@@ -659,9 +682,11 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
     avgFillPrice: position.avgFillPrice,
     exitPrice,
     qty: exitQty,
+    gross,
+    costs,
     pnl: position.realizedPnl,
   });
-  console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: ₹${position.realizedPnl.toFixed(2)} | ${reason}`);
+  console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | NET P&L: ₹${position.realizedPnl.toFixed(2)} (gross ₹${gross.toFixed(2)} − costs ₹${costs.toFixed(2)}) | ${reason}`);
 
   // Stop streaming this option's ticks and reclaim its tick buffer (index symbols are protected
   // from removal inside unsubscribeFromSymbols).
@@ -734,10 +759,12 @@ async function closePosition(position, session, reason) {
   // the leftover quantity, re-arm a broker SL on it, and let the next monitor cycle retry the exit.
   if (plan.action === "partial" || plan.action === "unfilled") {
     if (plan.action === "partial") {
-      const realized = (exitPrice - position.avgFillPrice) * plan.exitQty;
+      const grossLeg = (exitPrice - position.avgFillPrice) * plan.exitQty;
+      const costsLeg = computeOptionCosts(position.avgFillPrice, exitPrice, plan.exitQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER });
+      const realized = grossLeg - costsLeg; // C4: net of costs for the filled leg
       position.realizedPnl = (position.realizedPnl || 0) + realized;
       dailyRealizedPnL += realized;
-      logAudit({ type: "PARTIAL_EXIT", optionSymbol: position.optionSymbol, reason, exitPrice, exitQty: plan.exitQty, remainder: plan.remainder, realized });
+      logAudit({ type: "PARTIAL_EXIT", optionSymbol: position.optionSymbol, reason, exitPrice, exitQty: plan.exitQty, remainder: plan.remainder, gross: grossLeg, costs: costsLeg, realized });
       console.error(`[AUTO-TRADER] PARTIAL EXIT ${position.optionSymbol}: filled ${plan.exitQty}/${entryQty} — ${plan.remainder} still held; re-arming SL, will retry exit`);
     } else {
       logAudit({ type: "EXIT_UNFILLED", optionSymbol: position.optionSymbol, reason, exitOrderId: exitOrder.orderId, fillStatus: fill.status });
@@ -979,6 +1006,16 @@ async function monitorPositions(session) {
   }
 
   recalcDailyPnL();
+
+  // C7: the daily-loss breaker must also FLATTEN, not just block new entries — an open position can
+  // otherwise blow well past the 2% cap. If breached while positions are still open, square them off.
+  const stillOpen = openPositions.filter((p) => p.status === "OPEN");
+  if (stillOpen.length > 0 && !checkDailyLossLimit()) {
+    console.error(`[AUTO-TRADER] DAILY LOSS LIMIT breached — flattening ${stillOpen.length} open position(s)`);
+    for (const pos of stillOpen) {
+      await closePosition(pos, session, "DAILY_LOSS_LIMIT");
+    }
+  }
 }
 
 // ─── MAIN TRADING LOGIC ───────────────────────────────────────────────
