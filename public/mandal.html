@@ -64,6 +64,7 @@ body{
 .link::before{content:"";position:absolute;inset:0 auto 0 0;width:5px;background:linear-gradient(180deg,var(--saffron),var(--saffron-deep))}
 .link.green::before{background:linear-gradient(180deg,#1aa608,var(--green-deep))}
 .link.blue::before{background:linear-gradient(180deg,#2563EB,#1E40AF)}
+.link.violet::before{background:linear-gradient(180deg,#7C3AED,#5B21B6)}
 .link:active{transform:scale(.985)}
 .ic{
   width:58px;height:58px;border-radius:17px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;
@@ -71,6 +72,7 @@ body{
 }
 .link.green .ic{background:linear-gradient(150deg,#1aa608,var(--green-deep));box-shadow:0 6px 16px rgba(11,110,4,.3)}
 .link.blue .ic{background:linear-gradient(150deg,#2563EB,#1E40AF);box-shadow:0 6px 16px rgba(37,99,235,.3)}
+.link.violet .ic{background:linear-gradient(150deg,#7C3AED,#5B21B6);box-shadow:0 6px 16px rgba(124,58,237,.3)}
 .ic svg{width:30px;height:30px}
 .lx{flex:1;min-width:0}
 .lx .t{font-family:'Sora';font-size:17px;font-weight:700;letter-spacing:-.01em}
@@ -78,6 +80,7 @@ body{
 .lx .c{display:inline-flex;align-items:center;gap:6px;margin-top:9px;font-family:'Sora';font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--saffron-deep);background:rgba(255,106,0,.09);border:1px solid rgba(255,106,0,.18);padding:4px 10px;border-radius:999px}
 .link.green .lx .c{color:var(--green-deep);background:rgba(19,136,8,.09);border-color:rgba(19,136,8,.18)}
 .link.blue .lx .c{color:#1E40AF;background:rgba(37,99,235,.09);border-color:rgba(37,99,235,.18)}
+.link.violet .lx .c{color:#5B21B6;background:rgba(124,58,237,.09);border-color:rgba(124,58,237,.18)}
 .arr{flex:0 0 auto;color:var(--ink-soft);opacity:.55}
 .arr svg{width:22px;height:22px}
 
@@ -136,6 +139,18 @@ body{
         <div class="t">Prabhari &amp; Pramukh</div>
         <div class="d">Shakti Kendra leads + in-charges, by Maha Shakti Kendra</div>
         <span class="c">55 Shakti Kendras · with Pramukh</span>
+      </div>
+      <span class="arr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+    </a>
+
+    <a class="link violet" href="sir.html">
+      <div class="ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><rect x="7" y="11" width="3" height="6"></rect><rect x="12" y="7" width="3" height="10"></rect><rect x="17" y="9" width="3" height="8"></rect></svg>
+      </div>
+      <div class="lx">
+        <div class="t">SIR Part-wise Tracking</div>
+        <div class="d">Daily Enumeration-Form progress with day-over-day changes</div>
+        <span class="c">AC 201 Moodabidri · 219 parts · updated daily</span>
       </div>
       <span class="arr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
     </a>
