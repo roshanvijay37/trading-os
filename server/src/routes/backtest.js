@@ -432,7 +432,9 @@ function runBacktest(candles, config) {
         } else {
           // INDEX mode — original open-aware fill + slippage arithmetic preserved.
           let exitPrice;
-          if (exitReason === "TIME") {
+          if (exitReason === "TIME" || exitReason === "SQUARE_OFF") {
+            // SQUARE_OFF (and TIME) exit at the bar close — NOT the target branch. Without this the
+            // 15:15 forced exit was mispriced to min(open,target), distorting INDEX-mode parity P&L.
             exitPrice = candle.close;
           } else if (exitReason === "SL") {
             const rawExit = position.side === "LONG" ? Math.max(candle.open, position.sl) : Math.min(candle.open, position.sl);
@@ -847,6 +849,14 @@ router.post("/run-multi", async (req, res) => {
       ivSource,
       ivMultiplier,
       ivSeries,
+      // C3 live-parity controls — forwarded so /run-multi matches /run (defaults to full parity).
+      applyLiveFilters: req.body.applyLiveFilters,
+      maxTimeEntryHour: req.body.maxTimeEntryHour,
+      maxTradesPerDay: req.body.maxTradesPerDay,
+      maxRiskPerDayPercent: req.body.maxRiskPerDayPercent,
+      maxConsecutiveLossesLimit: req.body.maxConsecutiveLossesLimit,
+      maxVix: req.body.maxVix,
+      marginSafetyMultiplier: req.body.marginSafetyMultiplier,
     });
       results.push({
         strategy: strat,

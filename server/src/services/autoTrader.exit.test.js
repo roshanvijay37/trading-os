@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyExit, dropInProgressCandle } from "./autoTrader.js";
+import { classifyExit, dropInProgressCandle, planSlSettlement } from "./autoTrader.js";
 
 // classifyExit is the pure decision behind C2: a partial or unfilled market exit must NOT mark the
 // position CLOSED and orphan the unsold remainder (which would sit at the broker with no stop-loss).
@@ -59,5 +59,37 @@ describe("dropInProgressCandle (C6 completed-candle signals)", () => {
   it("handles empty / non-array inputs safely", () => {
     expect(dropInProgressCandle([], 5, 100)).toEqual([]);
     expect(dropInProgressCandle(undefined, 5, 100)).toEqual([]);
+  });
+});
+
+// planSlSettlement (C1 oversell-prevention): account for what the broker stop-loss has ALREADY sold
+// before placing a market exit, so closePosition never sells more than is actually held (a partial
+// broker-SL fill reports status PENDING with filledQty>0 — FYERS has no PARTIAL status).
+describe("planSlSettlement (C1 no-oversell)", () => {
+  it("a fully-FILLED broker SL closes the whole position with no market exit", () => {
+    expect(planSlSettlement({ status: "FILLED", slFilled: 150, heldQty: 150 }))
+      .toEqual({ fullSlClose: true, slLegQty: 150, marketExitQty: 0 });
+  });
+
+  it("a PARTIAL broker-SL fill (PENDING, filledQty>0) only market-exits the unsold remainder", () => {
+    expect(planSlSettlement({ status: "PENDING", slFilled: 75, heldQty: 150 }))
+      .toEqual({ fullSlClose: false, slLegQty: 75, marketExitQty: 75 });
+  });
+
+  it("no SL fill yet → market-exit the full held qty", () => {
+    expect(planSlSettlement({ status: "PENDING", slFilled: 0, heldQty: 150 }))
+      .toEqual({ fullSlClose: false, slLegQty: 0, marketExitQty: 150 });
+  });
+
+  it("filledQty covering the whole held qty is a full close even if status lags", () => {
+    expect(planSlSettlement({ status: "PENDING", slFilled: 150, heldQty: 150 }).fullSlClose).toBe(true);
+    // and an over-reported fill never produces a negative market exit
+    expect(planSlSettlement({ status: "PENDING", slFilled: 200, heldQty: 150 }))
+      .toEqual({ fullSlClose: true, slLegQty: 150, marketExitQty: 0 });
+  });
+
+  it("unknown status with no fill → market-exit everything (safe default under an API read failure)", () => {
+    expect(planSlSettlement({ status: undefined, slFilled: undefined, heldQty: 150 }))
+      .toEqual({ fullSlClose: false, slLegQty: 0, marketExitQty: 150 });
   });
 });
