@@ -567,6 +567,7 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
     slOrderId,
     optionSymbol,
     quantity: filledQty,
+    entryQty: filledQty, // original held qty — never overwritten, so a partial exit can't orphan it
     avgFillPrice,
     entryPrice: tradeSignal.entryPrice,
     stopLoss: optionSL,
@@ -608,13 +609,95 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
 }
 
 // ─── POSITION MANAGEMENT ──────────────────────────────────────────────
+/**
+ * Pure decision (C2): classify an exit fill so a partial/unfilled market exit never marks the
+ * position CLOSED and orphans the unsold remainder at the broker. Side-effect-free for unit tests.
+ *   paper            → always "full" (paper fills the whole qty)
+ *   fillQty >= entry → "full"     (exit completely)
+ *   0 < fillQty < e  → "partial"  (keep open with `remainder`, re-arm SL, retry)
+ *   fillQty <= 0     → "unfilled" (keep open with full `remainder`, re-arm SL, retry)
+ * @returns {{action:"full"|"partial"|"unfilled", exitQty:number, remainder:number}}
+ */
+export function classifyExit({ paper, entryQty, fillQty }) {
+  const e = Number(entryQty) || 0;
+  if (paper) return { action: "full", exitQty: e, remainder: 0 };
+  const filled = Math.max(0, Number(fillQty) || 0);
+  if (filled <= 0) return { action: "unfilled", exitQty: 0, remainder: e };
+  if (filled < e) return { action: "partial", exitQty: filled, remainder: e - filled };
+  return { action: "full", exitQty: e, remainder: 0 };
+}
+
+/**
+ * Single place that records a FULLY-closed position: realized PnL (accumulating any prior partial
+ * fill), daily totals, the consecutive-loss counter (on the whole-trade outcome), audit, log, and
+ * tick unsubscribe. Used by closePosition, the broker-SL-already-filled path, and
+ * reconcileStopLossOrders so the CLOSED bookkeeping can never diverge between them.
+ */
+function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
+  position.status = "CLOSED";
+  position.exitTime = new Date().toISOString();
+  position.exitReason = reason;
+  position.exitOrderId = exitOrderId;
+  position.exitPrice = exitPrice;
+  position.quantity = exitQty;
+
+  const pnl = (exitPrice - position.avgFillPrice) * exitQty;
+  position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
+  position.pnl = position.realizedPnl;
+  dailyRealizedPnL += pnl;
+  consecutiveLosses = position.realizedPnl < 0 ? consecutiveLosses + 1 : 0;
+
+  recalcDailyPnL();
+  saveState();
+
+  logAudit({
+    type: "POSITION_CLOSED",
+    orderId: position.id,
+    exitOrderId,
+    optionSymbol: position.optionSymbol,
+    reason,
+    avgFillPrice: position.avgFillPrice,
+    exitPrice,
+    qty: exitQty,
+    pnl: position.realizedPnl,
+  });
+  console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: ₹${position.realizedPnl.toFixed(2)} | ${reason}`);
+
+  // Stop streaming this option's ticks and reclaim its tick buffer (index symbols are protected
+  // from removal inside unsubscribeFromSymbols).
+  try {
+    unsubscribeFromSymbols([position.optionSymbol]);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
+  }
+  return position.realizedPnl;
+}
+
 async function closePosition(position, session, reason) {
   if (position.status !== "OPEN") return;
 
-  const currentLTP = position.currentLTP || position.avgFillPrice;
-  const paperFillPrice = reason === "TARGET" ? position.target : currentLTP;
+  const entryQty = position.entryQty ?? position.quantity;
 
+  // ─── C1: never double-exit into a naked short ──────────────────────────────────────────────
+  // If a live broker SL is attached, settle it FIRST. If it has ALREADY filled at the exchange the
+  // position is flat there, so record that exit and DO NOT place a market order (a second SELL on a
+  // flat option = naked short / rejected order). Only cancel + self-exit if the SL is still live.
   if (position.slOrderId) {
+    if (!CONFIG.PAPER_TRADING) {
+      let slDetails = null;
+      try {
+        slDetails = await getOrderDetails(position.slOrderId, session);
+      } catch (err) {
+        console.error(`[AUTO-TRADER] Pre-exit SL status check failed for ${position.optionSymbol}:`, err.message);
+      }
+      if (slDetails && slDetails.status === "FILLED") {
+        const slExitPrice = slDetails.avgFillPrice || position.currentSL || position.stopLoss;
+        const slExitQty = slDetails.filledQty || entryQty;
+        console.log(`[AUTO-TRADER] Broker SL already filled for ${position.optionSymbol}; settling without a second exit`);
+        finalizeClose(position, { exitPrice: slExitPrice, exitQty: slExitQty, reason: "STOPLOSS", exitOrderId: position.slOrderId });
+        return;
+      }
+    }
     try {
       await cancelOrder(position.slOrderId, session, logAudit);
     } catch (err) {
@@ -622,9 +705,12 @@ async function closePosition(position, session, reason) {
     }
   }
 
+  const currentLTP = position.currentLTP || position.avgFillPrice;
+  const paperFillPrice = reason === "TARGET" ? position.target : currentLTP;
+
   const exitOrder = await placeMarketExit({
     symbol: position.optionSymbol,
-    qty: position.quantity,
+    qty: entryQty,
     session,
     paperTrading: CONFIG.PAPER_TRADING,
     paperFillPrice,
@@ -639,51 +725,34 @@ async function closePosition(position, session, reason) {
     auditLogger: logAudit,
   });
 
-  const exitQty = CONFIG.PAPER_TRADING ? position.quantity : fill.filledQty;
   const exitPrice = fill.avgFillPrice || paperFillPrice;
+  const plan = classifyExit({ paper: CONFIG.PAPER_TRADING, entryQty, fillQty: fill.filledQty });
 
-  position.status = "CLOSED";
-  position.exitTime = new Date().toISOString();
-  position.exitReason = reason;
-  position.exitOrderId = exitOrder.orderId;
-  position.exitPrice = exitPrice;
-  position.quantity = exitQty;
-
-  const pnl = (exitPrice - position.avgFillPrice) * exitQty;
-  position.realizedPnl = pnl;
-  position.pnl = pnl;
-  dailyRealizedPnL += pnl;
-
-  if (pnl < 0) {
-    consecutiveLosses++;
-  } else {
-    consecutiveLosses = 0;
+  // ─── C2: a partial / unfilled exit must NOT mark the position CLOSED ────────────────────────
+  // Marking it CLOSED while the broker still holds the remainder orphans an unprotected position
+  // (no stop-loss, no tracking). Instead: realize any filled portion, keep the position OPEN with
+  // the leftover quantity, re-arm a broker SL on it, and let the next monitor cycle retry the exit.
+  if (plan.action === "partial" || plan.action === "unfilled") {
+    if (plan.action === "partial") {
+      const realized = (exitPrice - position.avgFillPrice) * plan.exitQty;
+      position.realizedPnl = (position.realizedPnl || 0) + realized;
+      dailyRealizedPnL += realized;
+      logAudit({ type: "PARTIAL_EXIT", optionSymbol: position.optionSymbol, reason, exitPrice, exitQty: plan.exitQty, remainder: plan.remainder, realized });
+      console.error(`[AUTO-TRADER] PARTIAL EXIT ${position.optionSymbol}: filled ${plan.exitQty}/${entryQty} — ${plan.remainder} still held; re-arming SL, will retry exit`);
+    } else {
+      logAudit({ type: "EXIT_UNFILLED", optionSymbol: position.optionSymbol, reason, exitOrderId: exitOrder.orderId, fillStatus: fill.status });
+      console.error(`[AUTO-TRADER] EXIT UNFILLED for ${position.optionSymbol} (${fill.status}); still held — re-arming SL, will retry`);
+    }
+    position.quantity = plan.remainder;
+    position.entryQty = plan.remainder;
+    position.slOrderId = null; // old SL was cancelled/filled above; ensureStopLoss places a fresh one
+    recalcDailyPnL();
+    await ensureStopLoss(position, session);
+    saveState();
+    return;
   }
 
-  recalcDailyPnL();
-  saveState();
-
-  logAudit({
-    type: "POSITION_CLOSED",
-    orderId: position.id,
-    exitOrderId: exitOrder.orderId,
-    optionSymbol: position.optionSymbol,
-    reason,
-    avgFillPrice: position.avgFillPrice,
-    exitPrice,
-    qty: exitQty,
-    pnl,
-  });
-
-  console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)} | ${reason}`);
-
-  // Stop streaming this option's ticks and reclaim its tick buffer now that the position is
-  // closed (index symbols are protected from removal inside unsubscribeFromSymbols).
-  try {
-    unsubscribeFromSymbols([position.optionSymbol]);
-  } catch (err) {
-    console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
-  }
+  finalizeClose(position, { exitPrice, exitQty: plan.exitQty, reason, exitOrderId: exitOrder.orderId });
 }
 
 async function reconcileStopLossOrders(session) {
@@ -693,34 +762,9 @@ async function reconcileStopLossOrders(session) {
       const details = await getOrderDetails(position.slOrderId, session);
       if (details.status === "FILLED") {
         const exitPrice = details.avgFillPrice || position.stopLoss;
-        position.status = "CLOSED";
-        position.exitTime = new Date().toISOString();
-        position.exitReason = "STOPLOSS";
-        position.exitOrderId = position.slOrderId;
-        position.exitPrice = exitPrice;
-        const pnl = (exitPrice - position.avgFillPrice) * position.quantity;
-        position.realizedPnl = pnl;
-        position.pnl = pnl;
-        dailyRealizedPnL += pnl;
-        consecutiveLosses = pnl < 0 ? consecutiveLosses + 1 : 0;
-        recalcDailyPnL();
-        saveState();
-        logAudit({
-          type: "POSITION_CLOSED",
-          orderId: position.id,
-          exitOrderId: position.slOrderId,
-          optionSymbol: position.optionSymbol,
-          reason: "STOPLOSS",
-          exitPrice,
-          qty: position.quantity,
-          pnl,
-        });
-        console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)}`);
-        try {
-          unsubscribeFromSymbols([position.optionSymbol]);
-        } catch (err) {
-          console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
-        }
+        const exitQty = details.filledQty || position.quantity;
+        finalizeClose(position, { exitPrice, exitQty, reason: "STOPLOSS", exitOrderId: position.slOrderId });
+        console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol}`);
       } else if (["REJECTED", "CANCELLED", "EXPIRED"].includes(details.status)) {
         // SL order is gone — protect the position immediately with a market exit.
         console.error(`[AUTO-TRADER] SL order ${position.slOrderId} ${details.status}; flattening ${position.optionSymbol}`);
@@ -900,6 +944,12 @@ async function reconcilePositionsWithBroker(session) {
 async function monitorPositions(session) {
   if (openPositions.length === 0) return;
 
+  // C1: settle any broker SL that has already FILLED (and re-flatten on a failed SL) BEFORE the
+  // local backstop runs. Otherwise the local slHit check below could fire a SECOND market exit on
+  // a position the exchange already closed via its resting SL — a naked short. After this, the
+  // per-position loop skips anything now CLOSED, and closePosition re-checks the SL as a final guard.
+  await reconcileStopLossOrders(session);
+
   for (const position of openPositions) {
     if (position.status !== "OPEN") continue;
     try {
@@ -910,11 +960,9 @@ async function monitorPositions(session) {
       position.currentLTP = ltp;
       position.unrealizedPnl = (ltp - position.avgFillPrice) * position.quantity;
 
-      // Local stop-loss check. In paper mode this is the only stop. In live mode the broker
-      // SL-M order is primary, but we keep a local backstop: if the broker SL is stuck
-      // PENDING through a fast move/gap, this flattens the position rather than leaving it
-      // unprotected. reconcileStopLossOrders cancels the broker SL on close to avoid a
-      // double exit.
+      // Local backstop. In paper mode this is the only stop. In live mode the broker SL-M order is
+      // primary (reconciled above first); this catches a broker SL stuck PENDING through a fast
+      // move/gap. closePosition verifies the broker SL isn't already filled before placing an exit.
       const slHit = ltp <= position.currentSL;
       const targetHit = ltp >= position.target;
 
@@ -930,7 +978,6 @@ async function monitorPositions(session) {
     }
   }
 
-  await reconcileStopLossOrders(session);
   recalcDailyPnL();
 }
 
