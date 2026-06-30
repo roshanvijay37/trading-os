@@ -7,9 +7,9 @@
 <meta name="description" content="Karnataka SIR Enumeration-Form tracking, part-wise — daily list with day-over-day differences.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="SIR Part-wise">
+<meta name="apple-mobile-web-app-title" content="SIR-201">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23FF6A00'/%3E%3Cpath d='M50 20 C63 40 63 58 50 80 C37 58 37 40 50 20 Z' fill='%23ffffff'/%3E%3C/svg%3E">
-<title>Karnataka SIR · Part-wise</title>
+<title>SIR-201 Moodabidre</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -119,7 +119,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
   <div class="hdr-in">
     <div class="lotus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><rect x="7" y="11" width="3" height="6"></rect><rect x="12" y="7" width="3" height="10"></rect><rect x="17" y="9" width="3" height="8"></rect></svg></div>
     <div class="hdr-txt">
-      <h1>Karnataka SIR · Part-wise</h1>
+      <h1>SIR-201 Moodabidre</h1>
       <div class="sub" id="subt">Enumeration Form tracking</div>
     </div>
     <div class="hdr-date" id="hdate"></div>
@@ -148,9 +148,9 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 <script>
 const BASE='data/sir/';
 const SHORT={
-  "Total Elector":"Electors","Total EFs Printed":"Printed","Total EFs Distributed":"Distributed",
-  "Total EFs Digitized":"Digitized","Trained Blo Count":"Trained BLOs","Total Blo Count":"Total BLOs",
-  "EFs Submitted by Elector ( Not verified by BLO)":"Submitted (unverified)","EFs Verified by BLO":"Verified",
+  "Total Elector":"Electors","Total EFs Printed":"Printed","Total EFs Distributed":"Distributed EF",
+  "Total EFs Digitized":"Digitized EF","Trained Blo Count":"Trained BLOs","Total Blo Count":"Total BLOs",
+  "EFs Submitted by Elector ( Not verified by BLO)":"Submitted (unverified)","EFs Verified by BLO":"Verified EF",
   "Mapped as Progeny":"Mapped: Progeny","Mapped as Self":"Mapped: Self","No Mapping":"No Mapping",
   "UEF Death":"UEF Death","UEF Permanent Shifting":"UEF Shifted","UEF Already Enrolled":"UEF Enrolled",
   "UEF Absent":"UEF Absent","UEF Others":"UEF Others","Total UEF":"Total UEF","EF Parts Downloaded":"Parts Downloaded"
@@ -271,7 +271,7 @@ async function boot(){
     STATE.headline=HEADLINE.filter(m=>today.metrics.includes(m)); if(!STATE.headline.length) STATE.headline=today.metrics.slice(0,4);
     STATE.summary=SUMMARY.filter(m=>today.metrics.includes(m)); if(!STATE.summary.length) STATE.summary=today.metrics.slice(0,5);
     STATE.diff=buildDiff(today,prev);
-    el.subt.textContent=(today.rows[0]?.["Asmbly Name"]?('AC '+today.rows[0]["AC Number"]+' · '+today.rows[0]["Asmbly Name"]):'Enumeration Form tracking');
+    el.subt.textContent='Enumeration Form tracking';
     el.hdate.innerHTML='<div class="d">'+esc(latest)+'</div><div class="v">'+(prevDate?'vs '+esc(prevDate):'baseline')+'</div>';
     el.note.innerHTML=prev
       ? '<div class="note"><b>Changes since '+esc(prevDate)+':</b> '+STATE.diff.changed.length+' parts changed, '+STATE.diff.added.length+' added, '+STATE.diff.removed.length+' removed. Tap a part for field-level old → new.</div>'
