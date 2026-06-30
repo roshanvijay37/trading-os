@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+<meta name="theme-color" content="#FF6A00">
+<meta name="description" content="Karnataka SIR Enumeration-Form tracking, part-wise — daily list with day-over-day differences.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SIR Part-wise">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23FF6A00'/%3E%3Cpath d='M50 20 C63 40 63 58 50 80 C37 58 37 40 50 20 Z' fill='%23ffffff'/%3E%3C/svg%3E">
+<title>Karnataka SIR · Part-wise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --saffron:#FF6A00;--saffron-deep:#E85D04;--green:#138808;--green-deep:#0B6E04;
+  --up:#0B8A3E;--up-bg:rgba(11,138,62,.1);--down:#C2410C;--down-bg:rgba(194,65,12,.1);
+  --ink:#181410;--ink-soft:#6b635a;--paper:#FBF8F4;--card:#FFFFFF;--line:#EFE7DD;
+  --ring:rgba(255,106,0,.28);--shadow:0 1px 2px rgba(24,20,16,.04),0 4px 14px rgba(24,20,16,.06);--shadow-lg:0 8px 30px rgba(24,20,16,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;background-image:radial-gradient(circle at 12% -8%,rgba(255,106,0,.07),transparent 42%),radial-gradient(circle at 88% -4%,rgba(19,136,8,.06),transparent 40%);background-attachment:fixed;}
+.hdr{position:sticky;top:0;z-index:50;background:rgba(251,248,244,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.hdr-bar{height:4px;background:linear-gradient(90deg,var(--saffron) 0%,var(--saffron) 33%,#fff 33%,#fff 66%,var(--green) 66%,var(--green) 100%)}
+.hdr-in{max-width:900px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 12px max(16px,env(safe-area-inset-right));display:flex;align-items:center;gap:12px}
+.lotus{width:46px;height:46px;border-radius:13px;flex:0 0 auto;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34)}
+.lotus svg{width:26px;height:26px;color:#fff}
+.hdr-txt{min-width:0;flex:1}
+.hdr-txt h1{font-family:'Sora';font-size:15.5px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
+.hdr-txt .sub{font-size:11.5px;color:var(--ink-soft);margin-top:1px}
+.hdr-date{flex:0 0 auto;text-align:right}
+.hdr-date .d{font-family:'Sora';font-size:12.5px;font-weight:700;color:var(--saffron-deep)}
+.hdr-date .v{font-size:10px;color:var(--ink-soft)}
+.wrap{max-width:900px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-left)) 40px max(16px,env(safe-area-inset-right))}
+
+.note{font-size:12.5px;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);border-radius:13px;padding:10px 13px;margin-bottom:14px;box-shadow:var(--shadow)}
+.note b{color:var(--ink)}
+.note.warn{border-color:rgba(255,106,0,.3);background:rgba(255,106,0,.05)}
+
+/* summary stat cards */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:14px}
+@media(min-width:560px){.stats{grid-template-columns:repeat(3,1fr)}}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:12px 13px;box-shadow:var(--shadow)}
+.stat .l{font-size:10.5px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .v{font-family:'Sora';font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:3px;font-variant-numeric:tabular-nums}
+.stat .dl{display:inline-flex;align-items:center;gap:3px;margin-top:4px;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;padding:2px 7px;border-radius:999px}
+.dl.up{color:var(--up);background:var(--up-bg)}.dl.down{color:var(--down);background:var(--down-bg)}.dl.flat{color:var(--ink-soft);background:var(--paper)}
+
+/* controls */
+.search{position:relative;margin-bottom:10px}
+.search svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-soft);pointer-events:none}
+.search input{width:100%;height:48px;padding:0 44px;font-size:16px;font-family:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);outline:none;transition:border-color .15s,box-shadow .15s}
+.search input:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring)}
+.search .clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:none;background:transparent;color:var(--ink-soft);font-size:20px;cursor:pointer;border-radius:8px;display:none;align-items:center;justify-content:center}
+.search .clear.show{display:flex}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;font-family:'Sora';font-size:12.5px;font-weight:600;white-space:nowrap;padding:8px 13px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);cursor:pointer;transition:all .15s;box-shadow:var(--shadow)}
+.tab[aria-pressed="true"]{background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(232,93,4,.3)}
+.tab .n{opacity:.65;font-weight:500;margin-left:5px;font-size:11px}
+.tab[aria-pressed="true"] .n{opacity:.85}
+.count{font-size:12.5px;color:var(--ink-soft);padding:0 2px 10px;font-weight:500}
+.count b{color:var(--ink)}
+
+/* part cards */
+.cards{display:flex;flex-direction:column;gap:9px}
+@media(min-width:680px){.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
+.pcard{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.pcard.ch{border-color:rgba(255,106,0,.35)}
+.pcard.add{border-color:rgba(11,138,62,.4)}
+.pcard.rem{border-color:rgba(194,65,12,.4);opacity:.92}
+.ph{display:flex;align-items:center;gap:10px;padding:11px 13px}
+.pn{font-family:'Sora';font-weight:800;font-size:15px;letter-spacing:-.01em;flex:0 0 auto}
+.pn .hash{color:var(--ink-soft);font-weight:600}
+.pmeta{flex:1;min-width:0;font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.flag{flex:0 0 auto;font-family:'Sora';font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:3px 8px;border-radius:999px;text-transform:uppercase}
+.flag.ch{color:var(--saffron-deep);background:rgba(255,106,0,.1);border:1px solid rgba(255,106,0,.2)}
+.flag.add{color:var(--up);background:var(--up-bg);border:1px solid rgba(11,138,62,.2)}
+.flag.rem{color:var(--down);background:var(--down-bg);border:1px solid rgba(194,65,12,.2)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.cell{background:var(--card);padding:8px 13px}
+.cell .cl{font-size:10px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .cv{font-family:'Sora';font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px}
+.cell .cd{font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;margin-left:5px}
+.cd.up{color:var(--up)}.cd.down{color:var(--down)}
+.more{border-top:1px solid var(--line)}
+.more>summary{list-style:none;cursor:pointer;padding:9px 13px;font-family:'Sora';font-size:11.5px;font-weight:700;color:var(--saffron-deep);display:flex;align-items:center;gap:7px}
+.more>summary::-webkit-details-marker{display:none}
+.more>summary .ic{width:15px;height:15px;transition:transform .2s}
+.more[open]>summary .ic{transform:rotate(90deg)}
+.full{padding:2px 13px 12px}
+.frow{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--line);font-size:12.5px}
+.frow:first-child{border-top:none}
+.frow .fl{flex:1;min-width:0;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow .fv{font-family:'Sora';font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.frow.changed .fl{color:var(--ink)}
+.frow .fromto{font-size:11px;color:var(--ink-soft);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.frow .fd{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto;padding:1px 6px;border-radius:999px}
+.fd.up{color:var(--up);background:var(--up-bg)}.fd.down{color:var(--down);background:var(--down-bg)}
+
+.empty,.loading{text-align:center;padding:50px 20px;color:var(--ink-soft)}
+.empty .ico{font-size:38px;margin-bottom:10px}
+.empty h3{font-family:'Sora';font-size:16px;color:var(--ink);margin-bottom:5px;font-weight:700}
+.spin{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--saffron);border-radius:50%;margin:0 auto 12px;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.foot{max-width:900px;margin:8px auto 0;padding:26px 16px calc(36px + env(safe-area-inset-bottom));text-align:center}
+.foot .div{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin-bottom:18px}
+.foot .org{font-size:11.5px;color:var(--ink-soft)}
+.foot .by{font-family:'Sora';font-weight:800;font-size:13.5px;background:linear-gradient(90deg,var(--saffron-deep),var(--green-deep));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-top:6px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.001ms!important}}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="hdr-bar"></div>
+  <div class="hdr-in">
+    <div class="lotus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><rect x="7" y="11" width="3" height="6"></rect><rect x="12" y="7" width="3" height="10"></rect><rect x="17" y="9" width="3" height="8"></rect></svg></div>
+    <div class="hdr-txt">
+      <h1>Karnataka SIR · Part-wise</h1>
+      <div class="sub" id="subt">Enumeration Form tracking</div>
+    </div>
+    <div class="hdr-date" id="hdate"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="note"></div>
+  <div class="stats" id="stats"></div>
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+    <input id="search" type="search" inputmode="numeric" placeholder="Search part number or value" autocomplete="off">
+    <button class="clear" id="clear" aria-label="Clear">&times;</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="count" id="count"></div>
+  <div id="list"><div class="loading"><div class="spin"></div>Loading latest snapshot…</div></div>
+</main>
+
+<footer class="foot">
+  <div class="div"></div>
+  <div class="org">ECI SIR Enumeration-Form tracking · AC 201 Moodabidri · Dakshina Kannada</div>
+  <div class="by">roshanvijay.com</div>
+</footer>
+
+<script>
+const BASE='data/sir/';
+const SHORT={
+  "Total Elector":"Electors","Total EFs Printed":"Printed","Total EFs Distributed":"Distributed",
+  "Total EFs Digitized":"Digitized","Trained Blo Count":"Trained BLOs","Total Blo Count":"Total BLOs",
+  "EFs Submitted by Elector ( Not verified by BLO)":"Submitted (unverified)","EFs Verified by BLO":"Verified",
+  "Mapped as Progeny":"Mapped: Progeny","Mapped as Self":"Mapped: Self","No Mapping":"No Mapping",
+  "UEF Death":"UEF Death","UEF Permanent Shifting":"UEF Shifted","UEF Already Enrolled":"UEF Enrolled",
+  "UEF Absent":"UEF Absent","UEF Others":"UEF Others","Total UEF":"Total UEF","EF Parts Downloaded":"Parts Downloaded"
+};
+const HEADLINE=["Total Elector","Total EFs Distributed","Total EFs Digitized","EFs Verified by BLO"];
+const SUMMARY=["Total Elector","Total EFs Distributed","Total EFs Digitized","EFs Verified by BLO","Total UEF","EF Parts Downloaded"];
+const fmt=n=>(typeof n==='number')?n.toLocaleString('en-IN'):n;
+const sh=m=>SHORT[m]||m;
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const el={note:'note',stats:'stats',search:'search',clear:'clear',tabs:'tabs',count:'count',list:'list',subt:'subt',hdate:'hdate'};
+for(const k in el) el[k]=document.getElementById(el[k]);
+
+let STATE={today:null,prev:null,diff:null,metrics:[],key:[],headline:[],summary:[],tab:'all',q:''};
+
+const keyOf=(r,k)=>k.map(c=>r[c]).join('|');
+const sum=(rows,m)=>rows.reduce((a,r)=>a+(typeof r[m]==='number'?r[m]:0),0);
+
+function buildDiff(today,prev){
+  const k=today.key, M=today.metrics;
+  const tMap=new Map(today.rows.map(r=>[keyOf(r,k),r]));
+  const pMap=prev?new Map(prev.rows.map(r=>[keyOf(r,k),r])):new Map();
+  const added=[],removed=[],changed=[],same=[];
+  for(const [kk,r] of tMap){
+    if(!prev){ same.push(r); continue; }
+    const pr=pMap.get(kk);
+    if(!pr){ added.push(r); continue; }
+    const diffs=[];
+    for(const m of M){ const a=r[m]??0,b=pr[m]??0; if(a!==b) diffs.push({field:m,from:b,to:a,delta:(typeof a==='number'&&typeof b==='number')?a-b:null}); }
+    if(diffs.length) changed.push({row:r,prev:pr,diffs,dmap:Object.fromEntries(diffs.map(d=>[d.field,d]))}); else same.push(r);
+  }
+  if(prev) for(const [kk,pr] of pMap) if(!tMap.has(kk)) removed.push(pr);
+  const totals={}; for(const m of M) totals[m]={now:sum(today.rows,m),delta:prev?sum(today.rows,m)-sum(prev.rows,m):null};
+  return {added,removed,changed,same,totals,partsDelta:prev?today.rows.length-prev.rows.length:null};
+}
+
+function deltaChip(d,cls){ if(d==null) return ''; if(d===0) return '<span class="'+(cls||'dl')+' flat">±0</span>'; const up=d>0; return '<span class="'+(cls||'dl')+' '+(up?'up':'down')+'">'+(up?'▲':'▼')+' '+fmt(Math.abs(d))+'</span>'; }
+
+function renderStats(){
+  const t=STATE.today, df=STATE.diff;
+  const cards=[];
+  cards.push('<div class="stat"><div class="l">Parts</div><div class="v">'+fmt(t.rows.length)+'</div>'+(df.partsDelta!=null?'<div>'+deltaChip(df.partsDelta)+'</div>':'')+'</div>');
+  STATE.summary.forEach(m=>{
+    const tt=df.totals[m]||{now:sum(t.rows,m),delta:null};
+    cards.push('<div class="stat"><div class="l">'+esc(sh(m))+'</div><div class="v">'+fmt(tt.now)+'</div>'+(tt.delta!=null?'<div>'+deltaChip(tt.delta)+'</div>':'')+'</div>');
+  });
+  el.stats.innerHTML=cards.join('');
+}
+
+function renderTabs(){
+  const df=STATE.diff, hasPrev=!!STATE.prev;
+  const defs=[['all','All parts',STATE.today.rows.length]];
+  if(hasPrev){ defs.push(['changed','Changed',df.changed.length],['added','Added',df.added.length],['removed','Removed',df.removed.length]); }
+  el.tabs.innerHTML=defs.map(([id,lab,n])=>'<button class="tab" type="button" data-tab="'+id+'" aria-pressed="'+(STATE.tab===id)+'">'+lab+'<span class="n">'+n+'</span></button>').join('');
+}
+
+function headlineCells(r,dmap){
+  return STATE.headline.map(m=>{
+    const d=dmap&&dmap[m];
+    const dd=d&&d.delta!=null?'<span class="cd '+(d.delta>0?'up':'down')+'">'+(d.delta>0?'+':'')+fmt(d.delta)+'</span>':'';
+    return '<div class="cell"><div class="cl">'+esc(sh(m))+'</div><div class="cv">'+fmt(r[m]??0)+dd+'</div></div>';
+  }).join('');
+}
+function fullRows(r,dmap){
+  return STATE.metrics.map(m=>{
+    const d=dmap&&dmap[m];
+    if(d){ const dl=d.delta!=null?'<span class="fd '+(d.delta>0?'up':'down')+'">'+(d.delta>0?'+':'')+fmt(d.delta)+'</span>':''; return '<div class="frow changed"><div class="fl">'+esc(sh(m))+'</div><div class="fromto">'+fmt(d.from)+' → '+fmt(d.to)+'</div>'+dl+'</div>'; }
+    return '<div class="frow"><div class="fl">'+esc(sh(m))+'</div><div class="fv">'+fmt(r[m]??0)+'</div></div>';
+  }).join('');
+}
+function partCard(r,opts){
+  opts=opts||{}; const dmap=opts.dmap; const kind=opts.kind||'';
+  const pn=r["Part Number"], asm=r["Asmbly Name"]||'', ac=r["AC Number"];
+  let flag='';
+  if(kind==='add') flag='<span class="flag add">New</span>';
+  else if(kind==='rem') flag='<span class="flag rem">Removed</span>';
+  else if(dmap){ const n=Object.keys(dmap).length; flag='<span class="flag ch">▲ '+n+' changed</span>'; }
+  return '<div class="pcard '+(kind==='add'?'add':kind==='rem'?'rem':(dmap?'ch':''))+'">'+
+    '<div class="ph"><div class="pn"><span class="hash">Part </span>'+esc(String(pn))+'</div><div class="pmeta">AC '+esc(String(ac))+' · '+esc(asm)+'</div>'+flag+'</div>'+
+    '<div class="grid">'+headlineCells(r,dmap)+'</div>'+
+    '<details class="more"><summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>'+(dmap?'All fields & changes':'All '+STATE.metrics.length+' fields')+'</summary><div class="full">'+fullRows(r,dmap)+'</div></details>'+
+    '</div>';
+}
+
+function currentList(){
+  const df=STATE.diff, q=STATE.q.trim().toLowerCase();
+  let items;
+  if(STATE.tab==='changed') items=df.changed.map(c=>({r:c.row,dmap:c.dmap}));
+  else if(STATE.tab==='added') items=df.added.map(r=>({r,kind:'add'}));
+  else if(STATE.tab==='removed') items=df.removed.map(r=>({r,kind:'rem'}));
+  else { // all: attach dmap if changed
+    const cm=new Map(df.changed.map(c=>[keyOf(c.row,STATE.key),c.dmap]));
+    items=STATE.today.rows.map(r=>({r,dmap:cm.get(keyOf(r,STATE.key))}));
+  }
+  if(q){ items=items.filter(it=>{ const r=it.r; if(String(r["Part Number"]).includes(q)) return true; return STATE.metrics.some(m=>String(r[m]).includes(q)) || String(r["Asmbly Name"]||'').toLowerCase().includes(q); }); }
+  return items;
+}
+function render(){
+  const items=currentList();
+  const lbl=STATE.tab==='all'?'parts':STATE.tab;
+  el.count.innerHTML='<b>'+items.length+'</b> '+(STATE.tab==='all'?(items.length===1?'part':'parts'):lbl);
+  if(!items.length){ el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>Nothing here</h3><p>'+(STATE.q?'No part matches your search.':'No '+lbl+' for this view.')+'</p></div>'; return; }
+  el.list.innerHTML='<div class="cards">'+items.map(it=>partCard(it.r,it)).join('')+'</div>';
+}
+
+function setTab(t){ STATE.tab=t; [...el.tabs.children].forEach(b=>b.setAttribute('aria-pressed',b.dataset.tab===t)); render(); }
+
+async function getJSON(u){ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error(u+' '+r.status); return r.json(); }
+
+async function boot(){
+  try{
+    const idx=await getJSON(BASE+'index.json?t='+Date.now());
+    const dates=(idx.dates||[]).slice().sort();
+    if(!dates.length) throw new Error('no snapshots');
+    const latest=dates[dates.length-1], prevDate=dates.length>1?dates[dates.length-2]:null;
+    const today=await getJSON(BASE+latest+'.json');
+    const prev=prevDate?await getJSON(BASE+prevDate+'.json'):null;
+    STATE.today=today; STATE.prev=prev; STATE.key=today.key; STATE.metrics=today.metrics;
+    STATE.headline=HEADLINE.filter(m=>today.metrics.includes(m)); if(!STATE.headline.length) STATE.headline=today.metrics.slice(0,4);
+    STATE.summary=SUMMARY.filter(m=>today.metrics.includes(m)); if(!STATE.summary.length) STATE.summary=today.metrics.slice(0,5);
+    STATE.diff=buildDiff(today,prev);
+    el.subt.textContent=(today.rows[0]?.["Asmbly Name"]?('AC '+today.rows[0]["AC Number"]+' · '+today.rows[0]["Asmbly Name"]):'Enumeration Form tracking');
+    el.hdate.innerHTML='<div class="d">'+esc(latest)+'</div><div class="v">'+(prevDate?'vs '+esc(prevDate):'baseline')+'</div>';
+    el.note.innerHTML=prev
+      ? '<div class="note"><b>Changes since '+esc(prevDate)+':</b> '+STATE.diff.changed.length+' parts changed, '+STATE.diff.added.length+' added, '+STATE.diff.removed.length+' removed. Tap a part for field-level old → new.</div>'
+      : '<div class="note warn">This is the <b>first snapshot (baseline)</b> for '+esc(latest)+'. Day-over-day differences will appear once a second day is added.</div>';
+    renderStats(); renderTabs(); setTab(STATE.prev?'all':'all'); render();
+  }catch(e){
+    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>';
+    el.stats.innerHTML='';
+  }
+}
+
+el.tabs.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab);});
+el.search.addEventListener('input',()=>{STATE.q=el.search.value;el.clear.classList.toggle('show',!!el.search.value);render();});
+el.clear.addEventListener('click',()=>{el.search.value='';STATE.q='';el.clear.classList.remove('show');render();el.search.focus();});
+boot();
+</script>
+</body>
+</html>
