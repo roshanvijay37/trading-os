@@ -151,6 +151,15 @@ router.post("/reset-emergency", requireAuth, (req, res) => {
 router.post("/paper-trading", requireAuth, (req, res) => {
   try {
     const { enabled } = req.body;
+    // L3: a money-mode toggle must never default to LIVE. Require an explicit boolean; otherwise
+    // setPaperTrading(undefined) would set PAPER_TRADING=falsy → real-money trading by accident.
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid request",
+        message: "`enabled` must be a boolean (true = paper, false = live)",
+      });
+    }
     const result = setPaperTrading(enabled);
     res.json({
       success: true,

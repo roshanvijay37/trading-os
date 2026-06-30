@@ -48,6 +48,8 @@ import path from "path";
 
 import { computeExecutionStats } from "./executionStats.js";
 import { computeHealthSnapshot } from "./healthSnapshot.js";
+// Statutory + brokerage cost model, shared with the backtest so live P&L is reported NET (not gross).
+import { computeOptionCosts } from "./blackScholes.js";
 
 // ΓöÇΓöÇΓöÇ CONFIGURATION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const CONFIG = {
@@ -67,6 +69,8 @@ const CONFIG = {
   ORDER_TYPE: "LIMIT",
   LIMIT_BUFFER_PCT: 0.3,
   SLIPPAGE_BUFFER_PCT: 0.5,
+  // L2 (audited): option BUYING only needs ~1× premium; 2× is a deliberate safety buffer that
+  // ~halves position capacity. Intentional, but tune to 1× if you want full premium deployment.
   MARGIN_SAFETY_MULTIPLIER: 2,
   MAX_VIX: 25,
   MAX_SPREAD_PCT: 2,
@@ -235,6 +239,22 @@ function getSymbolShortName(symbol) {
   return symbol;
 }
 
+/**
+ * C6: signals must be judged on COMPLETED candles only. Both the tick aggregation and the FYERS
+ * history endpoint can return a trailing IN-PROGRESS candle (the current period). If kept, the last
+ * bar's OHLC and the EMA shift intra-period, so the alert/breakout can flip within a bar and live
+ * diverges from the backtest (which uses closed bars). Drop the trailing candle when its period has
+ * not fully elapsed. Row = [timeSec, o, h, l, c, v]; timeSec is the period START (epoch seconds).
+ * Pure (nowSec injectable) for unit testing.
+ */
+export function dropInProgressCandle(candles, timeframeMinutes, nowSec = Math.floor(Date.now() / 1000)) {
+  if (!Array.isArray(candles) || candles.length === 0) return candles || [];
+  const startSec = Number(candles[candles.length - 1]?.[0]) || 0;
+  const periodSec = (Number(timeframeMinutes) || 5) * 60;
+  if (startSec > 0 && nowSec < startSec + periodSec) return candles.slice(0, -1);
+  return candles;
+}
+
 async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
   const shortName = getSymbolShortName(symbol);
   const tf = `${timeframeMinutes}m`;
@@ -242,13 +262,19 @@ async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
   // 1h = 6 hours), so the live-tick path will usually be short until the buffer fills and the
   // engine legitimately runs off the REST history below — which returns proper candles for the
   // selected resolution.
-  const tickCandles = aggregateOHLC(shortName, tf, HISTORY_CANDLES);
-  if (tickCandles.length >= 6) {
-    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, timeframe: tf, count: tickCandles.length });
-    return tickCandles.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
+  // C6: drop the trailing in-progress bar BEFORE the >=6 gate. Otherwise a buffer of exactly 6 raw
+  // candles passed the gate, then lost its in-progress bar to 5 and processCandles skipped the scan
+  // (and the websocket branch had already returned, so the REST fallback never ran).
+  const tickRows = dropInProgressCandle(
+    aggregateOHLC(shortName, tf, HISTORY_CANDLES).map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]),
+    timeframeMinutes
+  );
+  if (tickRows.length >= 6) {
+    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, timeframe: tf, count: tickRows.length });
+    return tickRows;
   }
-  logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, timeframe: tf, reason: "insufficient_tick_data", tickCount: tickCandles.length });
-  return fetchLatestCandles(symbol, session, timeframeMinutes);
+  logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, timeframe: tf, reason: "insufficient_tick_data", tickCount: tickRows.length });
+  return dropInProgressCandle(await fetchLatestCandles(symbol, session, timeframeMinutes), timeframeMinutes); // C6
 }
 
 async function fetchOptionQuoteWithTickFallback(optionSymbol, session) {
@@ -477,6 +503,12 @@ function computeEntryLimitPrice(quote) {
 }
 
 function computeOptionSLAndTarget(avgFillPrice, signal) {
+  // C5 (residual, audited): this uses a fixed delta (OPTION_DELTA_ESTIMATE=0.5) to convert the
+  // underlying-point stop/target into OPTION-PREMIUM levels, and the live SL/target then trigger on
+  // the option PREMIUM. The backtest instead triggers on the INDEX level and prices the option via
+  // Black-Scholes. Backtest filters/warmup/costs/square-off are now aligned (C3), but this premium-vs-
+  // index trigger model is a deeper divergence; aligning it changes live position sizing/stops, so it
+  // is deferred to a separately paper-validated change rather than rushed here. Tracked in the audit.
   // An option premium moves ~delta rupees per 1 rupee move in the underlying. Convert the
   // strategy's underlying-point risk/target into option-premium points and apply them as
   // absolute rupee distances from the fill price. (The previous version multiplied a
@@ -566,7 +598,9 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
     entryOrderId: entryOrder.orderId,
     slOrderId,
     optionSymbol,
-    quantity: filledQty,
+    quantity: filledQty, // currently-held qty (reduced as legs exit)
+    entryQty: filledQty, // qty going into the current close (synced to quantity across legs)
+    origEntryQty: filledQty, // IMMUTABLE original — used to charge round-trip costs exactly once
     avgFillPrice,
     entryPrice: tradeSignal.entryPrice,
     stopLoss: optionSL,
@@ -608,12 +642,147 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
 }
 
 // ─── POSITION MANAGEMENT ──────────────────────────────────────────────
+/**
+ * Pure decision (C2): classify an exit fill so a partial/unfilled market exit never marks the
+ * position CLOSED and orphans the unsold remainder at the broker. Side-effect-free for unit tests.
+ *   paper            → always "full" (paper fills the whole qty)
+ *   fillQty >= entry → "full"     (exit completely)
+ *   0 < fillQty < e  → "partial"  (keep open with `remainder`, re-arm SL, retry)
+ *   fillQty <= 0     → "unfilled" (keep open with full `remainder`, re-arm SL, retry)
+ * @returns {{action:"full"|"partial"|"unfilled", exitQty:number, remainder:number}}
+ */
+export function classifyExit({ paper, entryQty, fillQty }) {
+  const e = Number(entryQty) || 0;
+  if (paper) return { action: "full", exitQty: e, remainder: 0 };
+  const filled = Math.max(0, Number(fillQty) || 0);
+  if (filled <= 0) return { action: "unfilled", exitQty: 0, remainder: e };
+  if (filled < e) return { action: "partial", exitQty: filled, remainder: e - filled };
+  return { action: "full", exitQty: e, remainder: 0 };
+}
+
+/**
+ * Pure decision (C1): given the broker SL order's status + already-filled qty and what we currently
+ * hold, decide how to settle so we NEVER market-exit more than is actually held (oversell → naked
+ * short). Side-effect-free for unit tests.
+ *   fullSlClose=true → the SL already closed the whole position; settle on it, place NO market order.
+ *   slLegQty         → qty the SL already sold that must be realized as a leg before our exit.
+ *   marketExitQty    → qty to send as the market exit (held minus what the SL took).
+ * A partial broker fill reports status PENDING (FYERS has no PARTIAL code) with filledQty>0, so this
+ * keys off filledQty, not just status. Unknown status + no fill → market-exit the whole held qty.
+ */
+export function planSlSettlement({ status, slFilled, heldQty }) {
+  const held = Math.max(0, Number(heldQty) || 0);
+  const filled = Math.min(Math.max(0, Number(slFilled) || 0), held);
+  if (status === "FILLED" || (held > 0 && filled >= held)) return { fullSlClose: true, slLegQty: held, marketExitQty: 0 };
+  return { fullSlClose: false, slLegQty: filled, marketExitQty: held - filled };
+}
+
+/**
+ * Single place that records a FULLY-closed position: realized PnL (accumulating any prior partial
+ * fill), daily totals, the consecutive-loss counter (on the whole-trade outcome), audit, log, and
+ * tick unsubscribe. Used by closePosition, the broker-SL-already-filled path, and
+ * reconcileStopLossOrders so the CLOSED bookkeeping can never diverge between them.
+ */
+function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
+  position.status = "CLOSED";
+  position.exitTime = new Date().toISOString();
+  position.exitReason = reason;
+  position.exitOrderId = exitOrderId;
+  position.exitPrice = exitPrice;
+  position.quantity = exitQty;
+
+  // C4: report NET P&L — deduct brokerage + statutory costs (same model the backtest uses) so the
+  // dashboard/audit isn't optimistic. Paper mode has no real costs. The round-trip cost is charged
+  // ONCE for the whole position (on the original entry qty), so a multi-leg exit — where earlier
+  // legs were realized GROSS via settleLeg — never double-counts brokerage / buy-side charges.
+  const gross = (exitPrice - position.avgFillPrice) * exitQty;
+  const costQty = position.origEntryQty || exitQty;
+  const costs = CONFIG.PAPER_TRADING ? 0 : computeOptionCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER });
+  const pnl = gross - costs;
+  position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
+  position.pnl = position.realizedPnl;
+  dailyRealizedPnL += pnl;
+  consecutiveLosses = position.realizedPnl < 0 ? consecutiveLosses + 1 : 0;
+
+  recalcDailyPnL();
+  saveState();
+
+  logAudit({
+    type: "POSITION_CLOSED",
+    orderId: position.id,
+    exitOrderId,
+    optionSymbol: position.optionSymbol,
+    reason,
+    avgFillPrice: position.avgFillPrice,
+    exitPrice,
+    qty: exitQty,
+    gross,
+    costs,
+    pnl: position.realizedPnl,
+  });
+  console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | NET P&L: ₹${position.realizedPnl.toFixed(2)} (gross ₹${gross.toFixed(2)} − costs ₹${costs.toFixed(2)}) | ${reason}`);
+
+  // Stop streaming this option's ticks and reclaim its tick buffer (index symbols are protected
+  // from removal inside unsubscribeFromSymbols).
+  try {
+    unsubscribeFromSymbols([position.optionSymbol]);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
+  }
+  return position.realizedPnl;
+}
+
+/**
+ * Realize a partially-exited LEG at GROSS P&L and reduce the held quantity. Costs are charged once
+ * for the whole position in finalizeClose (on origEntryQty), so multi-leg exits never double-count
+ * brokerage / buy-side charges. Recomputes unrealizedPnl on the reduced quantity so the daily-loss
+ * breaker is never evaluated on a stale full-quantity figure. Returns the remaining held qty.
+ */
+function settleLeg(position, exitPrice, qty, source) {
+  const q = Math.min(Math.max(0, Number(qty) || 0), position.quantity || 0);
+  if (q <= 0) return position.quantity || 0;
+  const gross = (exitPrice - position.avgFillPrice) * q;
+  position.realizedPnl = (position.realizedPnl || 0) + gross;
+  position.pnl = position.realizedPnl;
+  dailyRealizedPnL += gross;
+  position.quantity = (position.quantity || 0) - q;
+  position.entryQty = position.quantity;
+  position.unrealizedPnl = position.currentLTP ? (position.currentLTP - position.avgFillPrice) * position.quantity : 0;
+  logAudit({ type: "PARTIAL_EXIT", optionSymbol: position.optionSymbol, source, exitPrice, qty: q, remainder: position.quantity, gross });
+  console.error(`[AUTO-TRADER] PARTIAL EXIT ${position.optionSymbol} [${source}]: ${q} @ ₹${Number(exitPrice).toFixed(2)} — ${position.quantity} still held`);
+  return position.quantity;
+}
+
 async function closePosition(position, session, reason) {
   if (position.status !== "OPEN") return;
 
-  const currentLTP = position.currentLTP || position.avgFillPrice;
-  const paperFillPrice = reason === "TARGET" ? position.target : currentLTP;
+  let heldQty = position.entryQty ?? position.quantity;
 
+  // ─── C1: never double-exit into a naked short. Account for what the broker SL has ALREADY sold ──
+  if (position.slOrderId && !CONFIG.PAPER_TRADING) {
+    let slDetails = null;
+    try {
+      slDetails = await getOrderDetails(position.slOrderId, session);
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Pre-exit SL status check failed for ${position.optionSymbol}:`, err.message);
+    }
+    const slPrice = slDetails?.avgFillPrice || position.currentSL || position.stopLoss;
+    const sl = planSlSettlement({ status: slDetails?.status, slFilled: slDetails?.filledQty, heldQty });
+    if (slDetails && sl.fullSlClose) {
+      // Broker SL already closed the WHOLE position — settle on it, place NO market order.
+      console.log(`[AUTO-TRADER] Broker SL already closed ${position.optionSymbol}; settling without a second exit`);
+      finalizeClose(position, { exitPrice: slPrice, exitQty: heldQty, reason: "STOPLOSS", exitOrderId: position.slOrderId });
+      return;
+    }
+    if (slDetails && sl.slLegQty > 0) {
+      // PARTIAL broker-SL fill: that qty is already sold. Realize it and SHRINK what we still hold so
+      // the market exit below can never oversell the position into a naked short / rejected order.
+      console.error(`[AUTO-TRADER] Broker SL partial-filled ${sl.slLegQty}/${heldQty} on ${position.optionSymbol}; exiting only the remainder`);
+      heldQty = settleLeg(position, slPrice, sl.slLegQty, "BROKER_SL_PARTIAL");
+    }
+  }
+
+  // Cancel any still-live broker SL before placing our own exit (a filled/gone order just no-ops).
   if (position.slOrderId) {
     try {
       await cancelOrder(position.slOrderId, session, logAudit);
@@ -622,9 +791,18 @@ async function closePosition(position, session, reason) {
     }
   }
 
+  if (heldQty <= 0) {
+    // Nothing left to exit (the broker SL filled it all) — finalize without a second order.
+    finalizeClose(position, { exitPrice: position.currentLTP || position.avgFillPrice, exitQty: 0, reason, exitOrderId: position.id });
+    return;
+  }
+
+  const currentLTP = position.currentLTP || position.avgFillPrice;
+  const paperFillPrice = reason === "TARGET" ? position.target : currentLTP;
+
   const exitOrder = await placeMarketExit({
     symbol: position.optionSymbol,
-    qty: position.quantity,
+    qty: heldQty,
     session,
     paperTrading: CONFIG.PAPER_TRADING,
     paperFillPrice,
@@ -639,51 +817,29 @@ async function closePosition(position, session, reason) {
     auditLogger: logAudit,
   });
 
-  const exitQty = CONFIG.PAPER_TRADING ? position.quantity : fill.filledQty;
   const exitPrice = fill.avgFillPrice || paperFillPrice;
+  const plan = classifyExit({ paper: CONFIG.PAPER_TRADING, entryQty: heldQty, fillQty: fill.filledQty });
 
-  position.status = "CLOSED";
-  position.exitTime = new Date().toISOString();
-  position.exitReason = reason;
-  position.exitOrderId = exitOrder.orderId;
-  position.exitPrice = exitPrice;
-  position.quantity = exitQty;
-
-  const pnl = (exitPrice - position.avgFillPrice) * exitQty;
-  position.realizedPnl = pnl;
-  position.pnl = pnl;
-  dailyRealizedPnL += pnl;
-
-  if (pnl < 0) {
-    consecutiveLosses++;
-  } else {
-    consecutiveLosses = 0;
+  // ─── C2: a partial / unfilled exit must NOT mark the position CLOSED and orphan the remainder ──
+  // Realize any filled portion, keep the position OPEN with the leftover qty, re-arm a broker SL on
+  // it, and let the next monitor cycle retry the exit.
+  if (plan.action === "partial" || plan.action === "unfilled") {
+    if (plan.action === "partial") {
+      settleLeg(position, exitPrice, plan.exitQty, `MARKET_PARTIAL:${reason}`);
+    } else {
+      logAudit({ type: "EXIT_UNFILLED", optionSymbol: position.optionSymbol, reason, exitOrderId: exitOrder.orderId, fillStatus: fill.status });
+      console.error(`[AUTO-TRADER] EXIT UNFILLED for ${position.optionSymbol} (${fill.status}); ${plan.remainder} still held — re-arming SL, will retry`);
+      position.quantity = plan.remainder;
+      position.entryQty = plan.remainder;
+    }
+    position.slOrderId = null; // cancelled/used above; ensureStopLoss places a fresh one on the remainder
+    recalcDailyPnL();
+    await ensureStopLoss(position, session);
+    saveState();
+    return;
   }
 
-  recalcDailyPnL();
-  saveState();
-
-  logAudit({
-    type: "POSITION_CLOSED",
-    orderId: position.id,
-    exitOrderId: exitOrder.orderId,
-    optionSymbol: position.optionSymbol,
-    reason,
-    avgFillPrice: position.avgFillPrice,
-    exitPrice,
-    qty: exitQty,
-    pnl,
-  });
-
-  console.log(`[AUTO-TRADER] CLOSED: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)} | ${reason}`);
-
-  // Stop streaming this option's ticks and reclaim its tick buffer now that the position is
-  // closed (index symbols are protected from removal inside unsubscribeFromSymbols).
-  try {
-    unsubscribeFromSymbols([position.optionSymbol]);
-  } catch (err) {
-    console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
-  }
+  finalizeClose(position, { exitPrice, exitQty: plan.exitQty, reason, exitOrderId: exitOrder.orderId });
 }
 
 async function reconcileStopLossOrders(session) {
@@ -693,34 +849,9 @@ async function reconcileStopLossOrders(session) {
       const details = await getOrderDetails(position.slOrderId, session);
       if (details.status === "FILLED") {
         const exitPrice = details.avgFillPrice || position.stopLoss;
-        position.status = "CLOSED";
-        position.exitTime = new Date().toISOString();
-        position.exitReason = "STOPLOSS";
-        position.exitOrderId = position.slOrderId;
-        position.exitPrice = exitPrice;
-        const pnl = (exitPrice - position.avgFillPrice) * position.quantity;
-        position.realizedPnl = pnl;
-        position.pnl = pnl;
-        dailyRealizedPnL += pnl;
-        consecutiveLosses = pnl < 0 ? consecutiveLosses + 1 : 0;
-        recalcDailyPnL();
-        saveState();
-        logAudit({
-          type: "POSITION_CLOSED",
-          orderId: position.id,
-          exitOrderId: position.slOrderId,
-          optionSymbol: position.optionSymbol,
-          reason: "STOPLOSS",
-          exitPrice,
-          qty: position.quantity,
-          pnl,
-        });
-        console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol} | P&L: ₹${pnl.toFixed(2)}`);
-        try {
-          unsubscribeFromSymbols([position.optionSymbol]);
-        } catch (err) {
-          console.error(`[AUTO-TRADER] Could not unsubscribe ticks for ${position.optionSymbol}:`, err.message);
-        }
+        const exitQty = details.filledQty || position.quantity;
+        finalizeClose(position, { exitPrice, exitQty, reason: "STOPLOSS", exitOrderId: position.slOrderId });
+        console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol}`);
       } else if (["REJECTED", "CANCELLED", "EXPIRED"].includes(details.status)) {
         // SL order is gone — protect the position immediately with a market exit.
         console.error(`[AUTO-TRADER] SL order ${position.slOrderId} ${details.status}; flattening ${position.optionSymbol}`);
@@ -900,6 +1031,12 @@ async function reconcilePositionsWithBroker(session) {
 async function monitorPositions(session) {
   if (openPositions.length === 0) return;
 
+  // C1: settle any broker SL that has already FILLED (and re-flatten on a failed SL) BEFORE the
+  // local backstop runs. Otherwise the local slHit check below could fire a SECOND market exit on
+  // a position the exchange already closed via its resting SL — a naked short. After this, the
+  // per-position loop skips anything now CLOSED, and closePosition re-checks the SL as a final guard.
+  await reconcileStopLossOrders(session);
+
   for (const position of openPositions) {
     if (position.status !== "OPEN") continue;
     try {
@@ -910,11 +1047,9 @@ async function monitorPositions(session) {
       position.currentLTP = ltp;
       position.unrealizedPnl = (ltp - position.avgFillPrice) * position.quantity;
 
-      // Local stop-loss check. In paper mode this is the only stop. In live mode the broker
-      // SL-M order is primary, but we keep a local backstop: if the broker SL is stuck
-      // PENDING through a fast move/gap, this flattens the position rather than leaving it
-      // unprotected. reconcileStopLossOrders cancels the broker SL on close to avoid a
-      // double exit.
+      // Local backstop. In paper mode this is the only stop. In live mode the broker SL-M order is
+      // primary (reconciled above first); this catches a broker SL stuck PENDING through a fast
+      // move/gap. closePosition verifies the broker SL isn't already filled before placing an exit.
       const slHit = ltp <= position.currentSL;
       const targetHit = ltp >= position.target;
 
@@ -930,8 +1065,17 @@ async function monitorPositions(session) {
     }
   }
 
-  await reconcileStopLossOrders(session);
   recalcDailyPnL();
+
+  // C7: the daily-loss breaker must also FLATTEN, not just block new entries — an open position can
+  // otherwise blow well past the 2% cap. If breached while positions are still open, square them off.
+  const stillOpen = openPositions.filter((p) => p.status === "OPEN");
+  if (stillOpen.length > 0 && !checkDailyLossLimit()) {
+    console.error(`[AUTO-TRADER] DAILY LOSS LIMIT breached — flattening ${stillOpen.length} open position(s)`);
+    for (const pos of stillOpen) {
+      await closePosition(pos, session, "DAILY_LOSS_LIMIT");
+    }
+  }
 }
 
 // ─── MAIN TRADING LOGIC ───────────────────────────────────────────────
@@ -1385,6 +1529,12 @@ export function setPaperTrading(enabled) {
 }
 
 export function updateConfig(updates) {
+  // L3 (audited): the /config route writes PAPER_TRADING via CONFIG_FIELD_MAP just like /paper-trading,
+  // so it must apply the SAME guard — never let a non-boolean (0/""/null) silently flip the bot to
+  // LIVE money. Drop a malformed paperTrading so the current mode is preserved.
+  if (updates.paperTrading !== undefined && typeof updates.paperTrading !== "boolean") {
+    delete updates.paperTrading;
+  }
   // Sanitize the timeframes up front — accept an array (or single value) of supported candle
   // intervals only: coerce to numbers, keep allowed ones, dedupe. Also accept a legacy single
   // `timeframeMinutes` field from an older client. Drop the update if nothing valid remains so
