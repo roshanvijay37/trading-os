@@ -432,11 +432,14 @@ function checkCorrelationFilter(underlyingName) {
   return true;
 }
 
-async function checkLiquidity(optionSymbol, session) {
+async function checkLiquidity(optionSymbol, session, oi = 0) {
   try {
     const quote = await fetchOptionQuote(optionSymbol, session);
     if (!quote) return { pass: false, reason: "NO_QUOTE" };
-    const oi = quote.oi || 0;
+    // OI is passed in from the option CHAIN. The /data/quotes endpoint this function reads for
+    // bid/ask/spread does NOT return an `oi` field, so sourcing OI from the quote was always 0
+    // and the LOW_OI check below blocked 100% of trades. Fall back to quote.oi only if present.
+    if (!oi) oi = quote.oi || 0;
     if (!quote.bid || !quote.ask || quote.lp <= 0) {
       return { pass: false, reason: "INVALID_QUOTE", quote };
     }
@@ -1027,7 +1030,12 @@ async function processCandles(underlying, session) {
           activeAlerts.delete(key);
           continue;
         }
-        const liquidity = await checkLiquidity(optionSymbol, session);
+        // OI must come from the option CHAIN — the /data/quotes endpoint checkLiquidity uses for
+        // bid/ask does NOT return an `oi` field, so reading it from the quote was always 0 and
+        // LOW_OI blocked every trade. Match the selected symbol back to its chain row.
+        const chainRow = optionChain.find((r) => (r.symbol || r.tradingSymbol || r.ts) === optionSymbol);
+        const optionOi = Number(chainRow?.oi ?? chainRow?.openInterest ?? 0) || 0;
+        const liquidity = await checkLiquidity(optionSymbol, session, optionOi);
         if (!liquidity.pass) {
           console.log(`[AUTO-TRADER] Liquidity check failed: ${liquidity.reason}`);
           activeAlerts.delete(key);
