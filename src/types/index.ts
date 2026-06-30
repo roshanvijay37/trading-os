@@ -128,6 +128,7 @@ export interface BotConfig {
   fixedLots: number;
   selectedStrategies: string[];
   selectedInstruments: string[];
+  timeframeMinutes: number;
 }
 
 export interface BotStatus {
@@ -147,6 +148,7 @@ export interface BotStatus {
   fixedLots?: number;
   selectedStrategies?: string[];
   selectedInstruments?: string[];
+  timeframeMinutes?: number;
   dailyPnL?: string;
   consecutiveLosses?: number;
   tickStatus?: {

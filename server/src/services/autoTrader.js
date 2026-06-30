@@ -82,7 +82,24 @@ const CONFIG = {
   EMERGENCY_STOP: false,
   SELECTED_STRATEGIES: ["EMA5"],
   SELECTED_INSTRUMENTS: ["NIFTY", "BANKNIFTY"],
+  // Candle timeframe (in minutes) the strategy evaluates on. One of ALLOWED_TIMEFRAMES.
+  TIMEFRAME_MINUTES: 5,
 };
+
+// Selectable candle timeframes (minutes); 60 = 1 hour. Drives BOTH the live-tick aggregation
+// interval and the REST history resolution, and bounds what updateConfig will accept.
+const ALLOWED_TIMEFRAMES = [5, 15, 30, 60];
+
+// How many candles of history to pull (REST fallback) and to keep from the tick buffer. Kept
+// generous so the EMA/alert/breakout math is stable on every timeframe — extra candles are
+// harmless, the engine only reads the most recent ones.
+const HISTORY_CANDLES = 80;
+
+// Defensive read of the configured timeframe: falls back to 5m if a corrupt/persisted value ever
+// slips through, so candle fetching can never break on a bad interval string/resolution.
+function getTimeframeMinutes() {
+  return ALLOWED_TIMEFRAMES.includes(CONFIG.TIMEFRAME_MINUTES) ? CONFIG.TIMEFRAME_MINUTES : 5;
+}
 
 function getActiveUnderlyings() {
   return CONFIG.UNDERLYINGS.filter((u) => CONFIG.SELECTED_INSTRUMENTS.includes(u.name));
@@ -109,6 +126,7 @@ const CONFIG_FIELD_MAP = {
   allowCorrelatedTrades: "ALLOW_CORRELATED_TRADES",
   selectedStrategies: "SELECTED_STRATEGIES",
   selectedInstruments: "SELECTED_INSTRUMENTS",
+  timeframeMinutes: "TIMEFRAME_MINUTES",
 };
 const PERSISTED_CONFIG_KEYS = Object.values(CONFIG_FIELD_MAP);
 
@@ -209,12 +227,17 @@ function getSymbolShortName(symbol) {
 
 async function fetchCandlesWithTickFallback(symbol, session) {
   const shortName = getSymbolShortName(symbol);
-  const tickCandles = aggregateOHLC(shortName, "5m", 25);
+  const tf = `${getTimeframeMinutes()}m`;
+  // NOTE: higher timeframes need a long stretch of ticks to form 6 complete candles (e.g. 6x
+  // 1h = 6 hours), so the live-tick path will usually be short until the buffer fills and the
+  // engine legitimately runs off the REST history below — which returns proper candles for the
+  // selected resolution.
+  const tickCandles = aggregateOHLC(shortName, tf, HISTORY_CANDLES);
   if (tickCandles.length >= 6) {
-    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, count: tickCandles.length });
+    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, timeframe: tf, count: tickCandles.length });
     return tickCandles.map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]);
   }
-  logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, reason: "insufficient_tick_data", tickCount: tickCandles.length });
+  logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, timeframe: tf, reason: "insufficient_tick_data", tickCount: tickCandles.length });
   return fetchLatestCandles(symbol, session);
 }
 
@@ -1032,9 +1055,14 @@ async function processCandles(underlying, session) {
 
 // ─── DATA FETCHING ────────────────────────────────────────────────────
 async function fetchLatestCandles(symbol, session) {
+  const tf = getTimeframeMinutes();
   const now = Math.floor(Date.now() / 1000);
-  const from = now - 3600;
-  const url = `${FYERS_DATA_BASE}/history?symbol=${encodeURIComponent(symbol)}&resolution=5&date_format=0&range_from=${from}&range_to=${now}&cont_flag=1`;
+  // Scale the lookback window with the timeframe so every resolution yields enough candles for
+  // the EMA/alert/breakout logic. A flat 1h window only gives ~4 fifteen-minute candles (and 1
+  // hourly), far short of the >=6 the engine needs; HISTORY_CANDLES worth of continuous time is
+  // generous and FYERS returns only the actual market candles within the range.
+  const from = now - tf * 60 * HISTORY_CANDLES;
+  const url = `${FYERS_DATA_BASE}/history?symbol=${encodeURIComponent(symbol)}&resolution=${tf}&date_format=0&range_from=${from}&range_to=${now}&cont_flag=1`;
   const data = await fyersDataFetch(url, session);
   return data.candles || [];
 }
@@ -1156,7 +1184,7 @@ export async function startAutoTrader(sessionId) {
     console.error("[AUTO-TRADER] Tick feed connect failed (will use REST fallback):", err.message);
   }
   console.log(
-    `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
+    `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | TF: ${CONFIG.TIMEFRAME_MINUTES}m | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
   );
   isRunning = true;
   // Preserve same-day risk counters across a restart so circuit breakers (daily-loss,
@@ -1188,6 +1216,7 @@ export async function startAutoTrader(sessionId) {
       fixedLots: CONFIG.FIXED_LOTS,
       selectedStrategies: CONFIG.SELECTED_STRATEGIES,
       selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
+      timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
     },
     startedAt: new Date().toISOString(),
   };
@@ -1287,6 +1316,7 @@ export function getAutoTraderStatus() {
     fixedLots: CONFIG.FIXED_LOTS,
     selectedStrategies: CONFIG.SELECTED_STRATEGIES,
     selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
+    timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -1326,6 +1356,14 @@ export function setPaperTrading(enabled) {
 }
 
 export function updateConfig(updates) {
+  // Sanitize the timeframe up front — only supported candle intervals are accepted. Coerce a
+  // numeric string to a number; drop an unsupported value so it can't be stored and break
+  // candle fetching.
+  if (updates.timeframeMinutes !== undefined) {
+    const tf = Number(updates.timeframeMinutes);
+    if (ALLOWED_TIMEFRAMES.includes(tf)) updates.timeframeMinutes = tf;
+    else delete updates.timeframeMinutes;
+  }
   // Translate camelCase UI fields to CONFIG keys, applying only the ones actually sent so a
   // partial update doesn't clobber unrelated settings. Then persist so the change survives a
   // server restart, not just the in-memory session.
@@ -1351,6 +1389,7 @@ export function updateConfig(updates) {
       allowCorrelatedTrades: CONFIG.ALLOW_CORRELATED_TRADES,
       selectedStrategies: CONFIG.SELECTED_STRATEGIES,
       selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
+      timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
     },
   };
 }
