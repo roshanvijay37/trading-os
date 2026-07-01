@@ -20,7 +20,7 @@
   --ink:#181410;--ink-soft:#6b635a;--paper:#FBF8F4;--card:#FFFFFF;--line:#EFE7DD;
   --ring:rgba(255,106,0,.28);--shadow:0 1px 2px rgba(24,20,16,.04),0 4px 14px rgba(24,20,16,.06);--shadow-lg:0 8px 30px rgba(24,20,16,.12);
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html{-webkit-text-size-adjust:100%}
 body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--paper);color:var(--ink);line-height:1.5;background-image:radial-gradient(circle at 12% -8%,rgba(255,106,0,.07),transparent 42%),radial-gradient(circle at 88% -4%,rgba(19,136,8,.06),transparent 40%);background-attachment:fixed;}
 .hdr{position:sticky;top:0;z-index:50;background:rgba(251,248,244,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
@@ -129,6 +129,11 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .isec h3 .in{font-family:'Inter';font-size:11px;font-weight:700;color:#fff;background:var(--saffron-deep);padding:1px 8px;border-radius:999px}
 .isub{font-size:11.5px;color:var(--ink-soft);margin:4px 0 10px}
 .ilist{display:flex;flex-direction:column;gap:8px}
+.imore{display:flex;flex-direction:column;gap:8px}
+.imore[hidden]{display:none}
+.morebtn{width:100%;margin-top:2px;font-family:'Sora';font-size:12px;font-weight:700;color:var(--saffron-deep);background:var(--card);border:1px dashed var(--line);border-radius:12px;padding:10px;cursor:pointer;transition:transform .1s,color .1s}
+.morebtn:active{transform:scale(.99)}
+.morebtn[aria-expanded="true"]{color:var(--ink-soft)}
 .irow{border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--paper)}
 .irhead{font-size:12.5px;color:var(--ink-soft)}
 .irhead b{color:var(--ink);font-family:'Sora'}
@@ -154,6 +159,10 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .foot .org{font-size:11.5px;color:var(--ink-soft)}
 .foot .by{font-family:'Sora';font-weight:800;font-size:13.5px;background:linear-gradient(90deg,var(--saffron-deep),var(--green-deep));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-top:6px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.001ms!important}}
+.backbar{max-width:900px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--saffron-deep);text-decoration:none;font-family:'Sora';min-height:40px;padding:4px 2px;margin:-4px -2px;touch-action:manipulation}
+.back svg{width:15px;height:15px}
+.back:active{opacity:.6}
 </style>
 </head>
 <body>
@@ -168,6 +177,10 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
     <div class="hdr-date" id="hdate"></div>
   </div>
 </header>
+
+<div class="backbar">
+  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>Mandal Directory</a>
+</div>
 
 <main class="wrap">
   <div class="ctrl" id="ctrl"></div>
@@ -289,6 +302,7 @@ function contactMini(person,label){
 function partContacts(pn){const c=PART_CONTACT[pn];if(!c)return '<span class="conn muted">no contact on file</span>';return contactMini(c.pk,'Pramukh')+contactMini(c.pr,'Prabhari');}
 function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>Part '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(kendra)+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
 
+function insList(rows,cap){cap=cap||20;if(rows.length<=cap)return '<div class="ilist">'+rows.join('')+'</div>';const closed='Show all '+rows.length+'  ·  +'+(rows.length-cap)+' more';return '<div class="ilist">'+rows.slice(0,cap).join('')+'<div class="imore" hidden>'+rows.slice(cap).join('')+'</div><button type="button" class="morebtn" data-more data-closed="'+closed+'" data-open="▴ Show fewer" aria-expanded="false">▾ '+closed+'</button></div>';}
 function renderInsights(){
   const t=STATE.today,prev=STATE.prev;
   const T=m=>sum(t.rows,m),pct=(a,b)=>b?Math.round(a/b*100):0;
@@ -305,12 +319,12 @@ function renderInsights(){
   if(!prev){h+='<h3>⚠️ Needs a nudge</h3><p class="isub">Pick two days (From → To) to see which booths didn\'t move.</p>';}
   else{
     const L=t.rows.filter(r=>((r[D]||0)<(r[E]||0))&&(Math.abs(pd(r,D))+Math.abs(pd(r,V))+Math.abs(pd(r,G))+Math.abs(pd(r,S)))===0).sort((a,b)=>(b[E]||0)-(a[E]||0));
-    h+='<h3>⚠️ Needs a nudge <span class="in">'+L.length+'</span></h3><p class="isub">No movement '+esc(STATE.from)+' → '+esc(STATE.to)+', not yet complete — biggest booths first.</p><div class="ilist">'+L.slice(0,20).map(r=>{const pn=r["Part Number"];const m=(r[D]||0)>0?('stalled · '+fmt(r[D])+' / '+fmt(r[E])+' distributed'):'<b class="hot">not started</b>';return insRow(pn,kv(pn),m);}).join('')+'</div>'+(L.length>20?'<p class="isub">…and '+(L.length-20)+' more.</p>':'');
+    h+='<h3>⚠️ Needs a nudge <span class="in">'+L.length+'</span></h3><p class="isub">No movement '+esc(STATE.from)+' → '+esc(STATE.to)+', not yet complete — biggest booths first.</p>'+(L.length?insList(L.map(r=>{const pn=r["Part Number"];const m=(r[D]||0)>0?('stalled · '+fmt(r[D])+' / '+fmt(r[E])+' distributed'):'<b class="hot">not started</b>';return insRow(pn,kv(pn),m);})):'<p class="isub">Every booth moved. 🎉</p>');
   }
   h+='</section>';
   // 2) no-mapping hotspots
   const NL=t.rows.filter(r=>(r[NM]||0)>0).sort((a,b)=>(b[NM]||0)-(a[NM]||0));
-  h+='<section class="isec"><h3>📄 No-mapping hotspots'+(NL.length?' <span class="in">'+NL.length+'</span>':'')+'</h3><p class="isub">Voters who are neither Self nor Progeny → they\'ll need documents. Most first.</p>'+(NL.length?'<div class="ilist">'+NL.slice(0,20).map(r=>{const pn=r["Part Number"];return insRow(pn,kv(pn),'<b class="hot">'+fmt(r[NM])+'</b> no-mapping');}).join('')+'</div>'+(NL.length>20?'<p class="isub">…and '+(NL.length-20)+' more.</p>':''):'<p class="isub">None yet.</p>')+'</section>';
+  h+='<section class="isec"><h3>📄 No-mapping hotspots'+(NL.length?' <span class="in">'+NL.length+'</span>':'')+'</h3><p class="isub">Voters who are neither Self nor Progeny → they\'ll need documents. Most first.</p>'+(NL.length?insList(NL.map(r=>{const pn=r["Part Number"];return insRow(pn,kv(pn),'<b class="hot">'+fmt(r[NM])+'</b> no-mapping');})):'<p class="isub">None yet.</p>')+'</section>';
   // 3) pace vs deadline
   h+='<section class="isec">';
   if(!prev){h+='<h3>⏱️ Pace vs '+DEADLINE+'</h3><p class="isub">Pick two days to project the finish date from the daily rate.</p>';}
@@ -318,7 +332,7 @@ function renderInsights(){
     const days=daysBetween(STATE.from,STATE.to),dl=Math.max(0,Math.round((new Date(DEADLINE)-new Date(STATE.to))/864e5));
     const M=[];t.rows.forEach(r=>{const rem=(r[E]||0)-(r[D]||0);if(rem<=0)return;const vel=pd(r,D)/days,eta=vel>0?rem/vel:Infinity;if(eta===Infinity||eta>dl)M.push({r,rem,eta});});
     M.sort((a,b)=>(b.eta===Infinity?1e9:b.eta)-(a.eta===Infinity?1e9:a.eta));
-    h+='<h3>⏱️ Won\'t finish by '+DEADLINE+(M.length?' <span class="in">'+M.length+'</span>':'')+'</h3><p class="isub">'+dl+' days left · projected at the '+esc(STATE.from)+' → '+esc(STATE.to)+' distribution rate.</p>'+(M.length?'<div class="ilist">'+M.slice(0,20).map(o=>{const pn=o.r["Part Number"];const late=o.eta===Infinity?'no movement — stalled':('ETA '+addDays(STATE.to,Math.ceil(o.eta))+' · '+Math.ceil(o.eta-dl)+'d late');return insRow(pn,kv(pn),'<b class="hot">'+esc(late)+'</b> · '+fmt(o.rem)+' left');}).join('')+'</div>'+(M.length>20?'<p class="isub">…and '+(M.length-20)+' more.</p>':''):'<p class="isub">On track. 🎉</p>');
+    h+='<h3>⏱️ Won\'t finish by '+DEADLINE+(M.length?' <span class="in">'+M.length+'</span>':'')+'</h3><p class="isub">'+dl+' days left · projected at the '+esc(STATE.from)+' → '+esc(STATE.to)+' distribution rate.</p>'+(M.length?insList(M.map(o=>{const pn=o.r["Part Number"];const late=o.eta===Infinity?'no movement — stalled':('ETA '+addDays(STATE.to,Math.ceil(o.eta))+' · '+Math.ceil(o.eta-dl)+'d late');return insRow(pn,kv(pn),'<b class="hot">'+esc(late)+'</b> · '+fmt(o.rem)+' left');})):'<p class="isub">On track. 🎉</p>');
   }
   h+='</section></div>';
   el.list.innerHTML=h;
@@ -485,7 +499,19 @@ async function boot(){
 }
 
 el.tabs.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab);});
-el.list.addEventListener('click',e=>{if(e.target.closest('[data-haptic]'))haptic(12);});
+el.list.addEventListener('click',e=>{
+  const mb=e.target.closest('[data-more]');
+  if(mb){
+    const box=mb.parentElement.querySelector('.imore');
+    if(box){
+      const open=box.hasAttribute('hidden');
+      if(open){box.removeAttribute('hidden');mb.setAttribute('aria-expanded','true');mb.textContent=mb.getAttribute('data-open');}
+      else{box.setAttribute('hidden','');mb.setAttribute('aria-expanded','false');mb.textContent=mb.getAttribute('data-closed');}
+    }
+    haptic(8);return;
+  }
+  if(e.target.closest('[data-haptic]'))haptic(12);
+});
 el.search.addEventListener('input',()=>{STATE.q=el.search.value;el.clear.classList.toggle('show',!!el.search.value);render();});
 el.clear.addEventListener('click',()=>{el.search.value='';STATE.q='';el.clear.classList.remove('show');render();el.search.focus();});
 boot();
