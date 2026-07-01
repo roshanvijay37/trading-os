@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+<meta name="theme-color" content="#FF6A00">
+<meta name="description" content="Send a personalised WhatsApp or call every booth BLA-2 across the Mulki–Moodbidri Mandal, one tap each — with live SIR status per booth.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Booth Outreach">
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23FF6A00'/%3E%3Cpath d='M50 20 C63 40 63 58 50 80 C37 58 37 40 50 20 Z' fill='%23ffffff'/%3E%3C/svg%3E">
+<title>Booth Outreach · Mulki–Moodbidri Mandal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --saffron:#FF6A00;
+  --saffron-deep:#E85D04;
+  --green:#138808;
+  --green-deep:#0B6E04;
+  --ink:#181410;
+  --ink-soft:#6b635a;
+  --paper:#FBF8F4;
+  --card:#FFFFFF;
+  --line:#EFE7DD;
+  --ring:rgba(255,106,0,.28);
+  --shadow:0 1px 2px rgba(24,20,16,.04),0 4px 14px rgba(24,20,16,.06);
+  --shadow-lg:0 8px 30px rgba(24,20,16,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--paper);color:var(--ink);line-height:1.5;
+  background-image:radial-gradient(circle at 12% -8%,rgba(255,106,0,.07),transparent 42%),radial-gradient(circle at 88% -4%,rgba(19,136,8,.06),transparent 40%);
+  background-attachment:fixed;
+}
+
+/* ---------- Header ---------- */
+.hdr{
+  position:sticky;top:0;z-index:50;
+  background:rgba(251,248,244,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+  padding-top:env(safe-area-inset-top);
+}
+.hdr-bar{height:4px;background:linear-gradient(90deg,var(--saffron) 0%,var(--saffron) 33%,#fff 33%,#fff 66%,var(--green) 66%,var(--green) 100%)}
+.hdr-in{max-width:760px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 12px max(16px,env(safe-area-inset-right));display:flex;align-items:center;gap:12px}
+.lotus{
+  width:46px;height:46px;border-radius:13px;flex:0 0 auto;
+  background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));
+  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34);overflow:hidden;
+}
+.lotus img{width:34px;height:34px;object-fit:contain;filter:brightness(0) invert(1)}
+.lotus .fallback{font-size:24px;line-height:1}
+.hdr-txt{min-width:0;flex:1}
+.hdr-txt h1{font-family:'Sora';font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
+.hdr-txt .kn{font-size:11.5px;color:var(--saffron-deep);font-weight:600}
+.hdr-txt .sub{font-size:11px;color:var(--ink-soft);margin-top:1px}
+.badge{flex:0 0 auto;font-family:'Sora';font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--green-deep);background:rgba(19,136,8,.1);border:1px solid rgba(19,136,8,.2);padding:5px 9px;border-radius:999px}
+
+/* back link */
+.backbar{max-width:760px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--saffron-deep);text-decoration:none;font-family:'Sora'}
+.back svg{width:15px;height:15px}
+.back:active{opacity:.6}
+
+/* ---------- Layout ---------- */
+.wrap{max-width:760px;margin:0 auto;padding:14px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+
+/* ---------- Composer ---------- */
+.composer{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px 14px 13px;margin-bottom:12px}
+.composer .lbl{display:flex;align-items:center;gap:7px;font-family:'Sora';font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:9px}
+.composer .lbl .ic{font-size:15px}
+textarea#msg{
+  width:100%;min-height:104px;resize:vertical;font-family:inherit;font-size:15px;color:var(--ink);line-height:1.5;
+  background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:12px 13px;outline:none;transition:border-color .15s,box-shadow .15s;
+}
+textarea#msg:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring);background:#fff}
+.tokrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;align-items:center}
+.tok{
+  font-family:'Sora';font-size:12px;font-weight:600;white-space:nowrap;padding:7px 11px;border-radius:999px;
+  border:1px solid var(--line);background:var(--paper);color:var(--saffron-deep);cursor:pointer;transition:all .12s;
+}
+.tok:active{transform:scale(.94)}
+.tok.ghost{color:var(--ink-soft)}
+.tok .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+.cmeta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px;font-size:11.5px;color:var(--ink-soft)}
+.cmeta .cc{font-variant-numeric:tabular-nums;flex:0 0 auto}
+.preview{
+  margin-top:10px;background:linear-gradient(150deg,rgba(37,211,102,.06),rgba(18,140,127,.05));
+  border:1px solid rgba(18,140,127,.18);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink);
+  white-space:pre-wrap;word-break:break-word;max-height:150px;overflow:auto;
+}
+.preview .pv-h{display:block;font-family:'Sora';font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#0E7490;margin-bottom:5px}
+.preview .pv-empty{color:var(--ink-soft);font-style:italic}
+.tip{margin-top:10px;font-size:11.5px;color:var(--ink-soft);line-height:1.45}
+.tip b{color:var(--green-deep);font-weight:700}
+
+/* ---------- Progress ---------- */
+.prog{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:12px 14px;margin-bottom:12px}
+.prog-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+.prog-top .pl{font-size:13px;color:var(--ink-soft);font-weight:500}
+.prog-top .pl b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums;font-size:15px}
+.reset{font-family:'Sora';font-size:11.5px;font-weight:600;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:6px 11px;cursor:pointer;transition:all .12s}
+.reset:active{transform:scale(.94)}
+.reset[disabled]{opacity:.4;pointer-events:none}
+.progbar{height:9px;background:var(--line);border-radius:999px;overflow:hidden}
+.progbar i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#1aa608,var(--green-deep));transition:width .35s cubic-bezier(.22,.61,.36,1)}
+
+/* ---------- Search ---------- */
+.search{position:relative;margin-bottom:10px}
+.search svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-soft);pointer-events:none}
+.search input{
+  width:100%;height:50px;padding:0 44px;font-size:16px;font-family:inherit;color:var(--ink);
+  background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);outline:none;transition:border-color .15s,box-shadow .15s;
+}
+.search input:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring)}
+.search .clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:none;background:transparent;color:var(--ink-soft);font-size:20px;cursor:pointer;border-radius:8px;display:none;align-items:center;justify-content:center}
+.search .clear.show{display:flex}
+
+/* chips */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none;-ms-overflow-style:none;scroll-snap-type:x proximity}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;scroll-snap-align:start;font-family:'Sora';font-size:12.5px;font-weight:600;white-space:nowrap;
+  padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+  cursor:pointer;transition:all .15s;box-shadow:var(--shadow);
+}
+.chip[aria-pressed="true"]{background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(232,93,4,.3)}
+.chip .n{opacity:.6;font-weight:500;margin-left:5px;font-size:11px}
+.chip[aria-pressed="true"] .n{opacity:.85}
+
+/* filter bar */
+.filters{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:0 0 10px}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px;gap:2px;box-shadow:var(--shadow)}
+.seg button{
+  font-family:'Sora';font-size:12px;font-weight:600;color:var(--ink-soft);background:transparent;border:none;
+  padding:7px 12px;border-radius:9px;cursor:pointer;transition:all .12s;white-space:nowrap;
+}
+.seg button[aria-pressed="true"]{background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));color:#fff;box-shadow:0 3px 9px rgba(232,93,4,.28)}
+.sortbtn{
+  font-family:'Sora';font-size:12px;font-weight:600;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:8px 12px;cursor:pointer;transition:all .12s;box-shadow:var(--shadow);
+}
+.sortbtn[aria-pressed="true"]{color:#fff;background:linear-gradient(150deg,#2563EB,#1E40AF);border-color:transparent;box-shadow:0 3px 9px rgba(37,99,235,.28)}
+
+.count{font-size:12.5px;color:var(--ink-soft);padding:0 2px 10px;font-weight:500}
+.count b{color:var(--ink);font-weight:700}
+
+/* ---------- Group ---------- */
+.group{margin-bottom:18px}
+.group-head{display:flex;align-items:center;gap:9px;padding:4px 4px 9px}
+.group-head .dot{width:8px;height:8px;border-radius:50%;background:var(--saffron);flex:0 0 auto;box-shadow:0 0 0 4px rgba(255,106,0,.14)}
+.group-head h2{font-family:'Sora';font-size:13.5px;font-weight:700;letter-spacing:.01em;color:var(--ink)}
+.group-head .gc{font-size:11px;color:var(--ink-soft);font-weight:600;margin-left:auto;background:var(--card);border:1px solid var(--line);padding:3px 9px;border-radius:999px}
+
+/* ---------- Card ---------- */
+.cards{display:flex;flex-direction:column;gap:9px}
+.card{
+  display:flex;align-items:center;gap:12px;padding:11px 12px;background:var(--card);
+  border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow);transition:transform .12s,box-shadow .12s,opacity .2s;
+}
+.card:active{transform:scale(.992)}
+.card.sent{opacity:.62;background:#FbFdfa;border-color:#dcecdc}
+.avatar{
+  width:46px;height:46px;border-radius:13px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  font-family:'Sora';font-weight:700;font-size:17px;color:#fff;position:relative;
+}
+.avatar .bn{position:absolute;bottom:-5px;right:-5px;font-size:9.5px;font-weight:700;font-family:'Sora';background:var(--ink);color:#fff;border:2px solid var(--card);border-radius:7px;padding:1px 5px;line-height:1.4}
+.card.sent .avatar .bn{border-color:#FbFdfa}
+.meta{flex:1;min-width:0}
+.meta .nm{font-weight:600;font-size:15px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta .ph{
+  display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums;
+  margin-top:2px;letter-spacing:.02em;font-family:inherit;background:none;border:none;padding:8px 6px 8px 0;min-height:36px;cursor:pointer;
+}
+.meta .ph .cp{width:13px;height:13px;opacity:0;transform:scale(.8);transition:opacity .15s,transform .15s;color:var(--saffron-deep)}
+.meta .ph:active .cp,.card:hover .ph .cp{opacity:.7;transform:scale(1)}
+.meta .ph.nophone{cursor:default}
+.tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px}
+.sir{
+  display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;font-family:'Sora';
+  padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink-soft);background:var(--paper);
+  font-variant-numeric:tabular-nums;
+}
+.sir.ns{color:#B45309;background:rgba(217,119,6,.1);border-color:rgba(217,119,6,.22)}
+.sir.low{color:#9A3412;background:rgba(234,88,12,.09);border-color:rgba(234,88,12,.2)}
+.sir.ok{color:var(--green-deep);background:rgba(19,136,8,.09);border-color:rgba(19,136,8,.2)}
+.done{
+  display:none;align-items:center;gap:5px;font-size:11px;font-weight:700;font-family:'Sora';
+  padding:7px 11px;min-height:32px;border-radius:999px;border:1px solid rgba(19,136,8,.28);color:var(--green-deep);background:rgba(19,136,8,.12);cursor:pointer;
+}
+.done svg{width:12px;height:12px}
+.card.sent .done{display:inline-flex}
+.acts{display:flex;gap:9px;flex:0 0 auto}
+.fab{
+  width:44px;height:44px;border-radius:13px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:#fff;transition:transform .12s,filter .12s;font-family:inherit;padding:0;text-decoration:none;
+}
+.fab:active{transform:scale(.9)}
+.fab svg{width:20px;height:20px}
+.fab.call{background:linear-gradient(150deg,#1aa608,var(--green-deep));box-shadow:0 4px 11px rgba(11,110,4,.32)}
+.fab.wa{background:linear-gradient(150deg,#25D366,#128C7E);box-shadow:0 4px 11px rgba(18,140,127,.3);position:relative}
+.fab.wa .chk{position:absolute;top:-4px;right:-4px;width:17px;height:17px;border-radius:50%;background:var(--green-deep);border:2px solid var(--card);display:none;align-items:center;justify-content:center}
+.fab.wa .chk svg{width:9px;height:9px}
+.card.sent .fab.wa .chk{display:flex}
+.fab[disabled],.fab[aria-disabled="true"]{background:#d9d2c8;box-shadow:none;cursor:not-allowed;pointer-events:none}
+
+/* ---------- entrance ---------- */
+.cards.anim .card{animation:cardIn .4s cubic-bezier(.22,.61,.36,1) both}
+.cards.anim .card:nth-child(1){animation-delay:.02s}
+.cards.anim .card:nth-child(2){animation-delay:.05s}
+.cards.anim .card:nth-child(3){animation-delay:.08s}
+.cards.anim .card:nth-child(4){animation-delay:.11s}
+.cards.anim .card:nth-child(5){animation-delay:.14s}
+.cards.anim .card:nth-child(n+6){animation-delay:.17s}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ---------- states ---------- */
+.empty{text-align:center;padding:52px 20px;color:var(--ink-soft)}
+.empty .ico{font-size:40px;margin-bottom:10px}
+.empty h3{font-family:'Sora';font-size:16px;color:var(--ink);margin-bottom:5px;font-weight:700}
+.empty p{font-size:13.5px}
+.loading{text-align:center;padding:50px 20px;color:var(--ink-soft);font-size:13.5px}
+.spin{width:30px;height:30px;margin:0 auto 14px;border:3px solid var(--line);border-top-color:var(--saffron);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- Toast ---------- */
+.toast{
+  position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));z-index:100;
+  display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:13px;
+  background:var(--ink);color:#fff;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);
+  opacity:0;transform:translate(-50%,14px);pointer-events:none;transition:opacity .22s,transform .22s;max-width:calc(100% - 32px)
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast svg{width:16px;height:16px;color:#25D366;flex:0 0 auto}
+
+/* scroll to top */
+.totop{
+  position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;
+  width:46px;height:46px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.9);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--saffron-deep);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow-lg);
+  opacity:0;pointer-events:none;transform:translateY(8px) scale(.92);transition:opacity .2s,transform .2s;
+  bottom:calc(80px + env(safe-area-inset-bottom));
+}
+.totop.show{opacity:1;pointer-events:auto;transform:none}
+.totop svg{width:22px;height:22px}
+
+.foot{max-width:760px;margin:8px auto 0;padding:26px 16px calc(40px + env(safe-area-inset-bottom));text-align:center}
+.foot .div{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin-bottom:20px}
+.foot .by{font-family:'Sora';font-weight:800;font-size:14px;background:linear-gradient(90deg,var(--saffron-deep),var(--green-deep));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.foot .org{font-size:11.5px;color:var(--ink-soft);margin-top:8px}
+
+@media (min-width:640px){
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="hdr-bar"></div>
+  <div class="hdr-in">
+    <div class="lotus"><img src="bjplogo.svg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+    <div class="hdr-txt">
+      <h1>Booth Outreach</h1>
+      <div class="kn">ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ</div>
+      <div class="sub" id="hsub">Message every booth BLA-2 — one tap each</div>
+    </div>
+    <span class="badge">BLA 2</span>
+  </div>
+</header>
+
+<div class="backbar">
+  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>Mandal Directory</a>
+</div>
+
+<main class="wrap">
+  <!-- Composer -->
+  <div class="composer">
+    <div class="lbl"><span class="ic">✍️</span><span>Your message</span></div>
+    <textarea id="msg" placeholder="Type the message you want to send to every booth agent…&#10;&#10;Tip: use {name} and {booth} — each person gets it personalised." spellcheck="true"></textarea>
+    <div class="tokrow">
+      <button class="tok" data-tok="{name}" type="button">＋ <span class="mono">{name}</span></button>
+      <button class="tok" data-tok="{booth}" type="button">＋ <span class="mono">{booth}</span></button>
+      <button class="tok ghost" id="sampleBtn" type="button">Insert sample</button>
+      <button class="tok ghost" id="clearMsg" type="button">Clear</button>
+    </div>
+    <div class="cmeta">
+      <span>Personalised per person — not a group. Never looks like spam.</span>
+      <span class="cc" id="cc">0</span>
+    </div>
+    <div class="preview" id="preview"></div>
+    <div class="tip">Tap <b>WhatsApp</b> on a booth → it opens with your message ready → you hit send. Sending marks that booth <b>done</b>, so you never lose your place.</div>
+  </div>
+
+  <!-- Progress -->
+  <div class="prog">
+    <div class="prog-top">
+      <div class="pl">Messaged <b id="sentN">0</b> / <span id="totN">0</span> booths</div>
+      <button class="reset" id="reset" disabled>Reset progress</button>
+    </div>
+    <div class="progbar"><i id="progFill"></i></div>
+  </div>
+
+  <!-- Search -->
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+    <input id="search" type="search" inputmode="search" placeholder="Search name, booth or phone" autocomplete="off">
+    <button class="clear" id="clear" aria-label="Clear search">&times;</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="filters" id="filters"></div>
+  <div class="count" id="count"></div>
+  <div id="list"><div class="loading"><div class="spin"></div>Loading booth contacts…</div></div>
+</main>
+
+<footer class="foot">
+  <div class="div"></div>
+  <div class="by">Roshan Belvai</div>
+  <div class="org">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<button class="totop" id="totop" type="button" aria-label="Scroll to top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>
+</button>
+
+<script>
+/* ---------- SVG ---------- */
+const SVG_CALL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+const SVG_WA='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.82 11.82 0 0 1 8.413 3.488 11.82 11.82 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.82 9.82 0 0 0 1.523 5.26l-.999 3.648 3.736-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>';
+const SVG_COPY='<svg class="cp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const SVG_TICK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>';
+const SVG_TICK_W='<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+/* ---------- helpers ---------- */
+const PALETTES=[['#FF6A00','#E85D04'],['#138808','#0B6E04'],['#2563EB','#1E40AF'],['#9333EA','#6B21A8'],['#DB2777','#9D174D'],['#0891B2','#0E7490'],['#CA8A04','#854D0E'],['#DC2626','#991B1B'],['#475569','#1E293B']];
+function initials(name){const p=name.replace(/\(.\)/g,'').trim().split(/\s+/).filter(Boolean);return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase()||'#';}
+function palette(name){let h=0;for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0;return PALETTES[h%PALETTES.length];}
+function digits(p){return (p||'').replace(/\D/g,'');}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function haptic(ms){try{if(navigator.vibrate)navigator.vibrate(ms);}catch(e){}}
+function fmt(n){return (n==null?'—':Number(n).toLocaleString('en-IN'));}
+async function getJSON(u){const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw new Error(u+' '+r.status);return r.json();}
+
+/* ---------- state ---------- */
+let DATA=[];                 // [{kendra,booth,name,phone}]
+let byBooth={};              // booth -> record
+let KENDRAS=[];
+const SIR={};                // booth(partNo) -> metrics row
+let sirOK=false, sirDate='';
+let activeKendra='';
+let filterMode='all';        // all | unsent | ns
+let sortLeast=false;
+const sent=new Set();
+
+const K_SENT='outreach.sent.v1';
+const K_MSG='outreach.msg.v1';
+
+/* ---------- DOM ---------- */
+const el={
+  list:document.getElementById('list'),
+  search:document.getElementById('search'),
+  clear:document.getElementById('clear'),
+  chips:document.getElementById('chips'),
+  filters:document.getElementById('filters'),
+  count:document.getElementById('count'),
+  toast:document.getElementById('toast'),
+  totop:document.getElementById('totop'),
+  msg:document.getElementById('msg'),
+  cc:document.getElementById('cc'),
+  preview:document.getElementById('preview'),
+  sentN:document.getElementById('sentN'),
+  totN:document.getElementById('totN'),
+  progFill:document.getElementById('progFill'),
+  reset:document.getElementById('reset'),
+  hsub:document.getElementById('hsub'),
+};
+
+/* ---------- message building ---------- */
+const SAMPLE='ನಮಸ್ಕಾರ {name} 🙏\n\nಬೂತ್ ಸಂಖ್ಯೆ {booth} — ';
+function buildMsg(r){
+  return (el.msg.value||'')
+    .replace(/\{name\}/gi, r?(()=>r.name):'{name}')
+    .replace(/\{booth\}/gi, r?String(r.booth):'{booth}');
+}
+function refreshComposer(){
+  const v=el.msg.value||'';
+  el.cc.textContent=v.length+' chars';
+  const sample=DATA[0];
+  if(!v.trim()){
+    el.preview.innerHTML='<span class="pv-h">Preview</span><span class="pv-empty">Empty — WhatsApp will just open the chat with no pre-typed text. Type above to pre-fill a message.</span>';
+  }else if(sample){
+    el.preview.innerHTML='<span class="pv-h">Preview → to '+esc(sample.name)+' (booth '+sample.booth+')</span>'+esc(buildMsg(sample));
+  }else{
+    el.preview.innerHTML='<span class="pv-h">Preview</span><span class="pv-empty">Loading contacts…</span>';
+  }
+  try{localStorage.setItem(K_MSG,v);}catch(e){}
+}
+function insToken(t){
+  const a=el.msg, s=a.selectionStart??a.value.length, e=a.selectionEnd??a.value.length;
+  a.value=a.value.slice(0,s)+t+a.value.slice(e);
+  a.focus(); const c=s+t.length; a.selectionStart=a.selectionEnd=c;
+  refreshComposer();
+}
+
+/* ---------- sent tracking ---------- */
+function loadSent(){
+  try{const raw=localStorage.getItem(K_SENT);if(raw)JSON.parse(raw).forEach(b=>sent.add(+b));}catch(e){}
+}
+function persistSent(){try{localStorage.setItem(K_SENT,JSON.stringify([...sent]));}catch(e){}}
+function updateProgress(){
+  const tot=DATA.length;
+  el.sentN.textContent=sent.size;
+  el.totN.textContent=tot;
+  el.progFill.style.width=(tot?Math.round(sent.size/tot*100):0)+'%';
+  el.reset.disabled=sent.size===0;
+}
+function setSent(booth,val,cardEl){
+  if(val)sent.add(booth); else sent.delete(booth);
+  persistSent(); updateProgress();
+  if(cardEl)cardEl.classList.toggle('sent',val);
+}
+
+/* ---------- SIR status ---------- */
+function sirInfo(booth){
+  const row=SIR[booth]; if(!row)return null;
+  const E=+row['Total Elector']||0, D=+row['Total EFs Distributed']||0;
+  const pct=E?Math.round(D/E*100):0;
+  let cls='ok', label=fmt(D)+' / '+fmt(E)+' EF · '+pct+'%';
+  if(D===0){cls='ns';label='⚠ EF not distributed';}
+  else if(pct<10){cls='low';label=fmt(D)+' / '+fmt(E)+' EF · '+pct+'%';}
+  return {cls,label,pct,D,E};
+}
+
+/* ---------- chips / filters ---------- */
+function buildChips(){
+  const mk=(label,val,n)=>{
+    const b=document.createElement('button');
+    b.className='chip';b.type='button';
+    b.setAttribute('aria-pressed',val===activeKendra);
+    b.innerHTML=esc(label)+'<span class="n">'+n+'</span>';
+    b.onclick=()=>{haptic(8);activeKendra=val;buildChips();render(true);window.scrollTo({top:0,behavior:'smooth'});};
+    return b;
+  };
+  el.chips.innerHTML='';
+  el.chips.appendChild(mk('All','',DATA.length));
+  KENDRAS.forEach(k=>el.chips.appendChild(mk(k.replace(/ Maha Shakti Kendra$/,''),k,DATA.filter(d=>d.kendra===k).length)));
+}
+function buildFilters(){
+  const modes=[['all','All'],['unsent','Not messaged']];
+  if(sirOK)modes.push(['ns','EF not distributed']);
+  let h='<div class="seg" role="tablist">'+modes.map(m=>'<button type="button" data-mode="'+m[0]+'" aria-pressed="'+(filterMode===m[0])+'">'+m[1]+'</button>').join('')+'</div>';
+  if(sirOK)h+='<button type="button" class="sortbtn" data-sort aria-pressed="'+sortLeast+'">↕ Least EF distributed first</button>';
+  el.filters.innerHTML=h;
+}
+
+/* ---------- render ---------- */
+function cardHTML(r){
+  const d=digits(r.phone), ok=d.length===10, tel='+91'+d, [c1,c2]=palette(r.name), nm=esc(r.name);
+  const isSent=sent.has(r.booth);
+  const call=ok
+    ?'<a class="fab call" href="tel:'+tel+'" data-haptic aria-label="Call '+nm+'">'+SVG_CALL+'</a>'
+    :'<span class="fab call" aria-disabled="true" title="No number on file">'+SVG_CALL+'</span>';
+  const wa=ok
+    ?'<a class="fab wa" data-wa data-booth="'+r.booth+'" href="https://wa.me/91'+d+'" target="_blank" rel="noopener" aria-label="WhatsApp '+nm+'">'+SVG_WA+'<span class="chk">'+SVG_TICK_W+'</span></a>'
+    :'<span class="fab wa" aria-disabled="true" title="No number on file">'+SVG_WA+'</span>';
+  const phone=ok
+    ?'<button type="button" class="ph" data-copy="'+esc(r.phone)+'" aria-label="Copy '+esc(r.phone)+'">'+esc(r.phone)+SVG_COPY+'</button>'
+    :'<span class="ph nophone">No number on file</span>';
+  const s=sirInfo(r.booth);
+  const sir=s?'<span class="sir '+s.cls+'" title="Latest SIR — EFs distributed vs total electors">'+esc(s.label)+'</span>':'';
+  const done='<button type="button" class="done" data-undo="'+r.booth+'">'+SVG_TICK+'Messaged · undo</button>';
+  return '<div class="card'+(isSent?' sent':'')+'" data-booth="'+r.booth+'">'+
+    '<div class="avatar" style="background:linear-gradient(150deg,'+c1+','+c2+')">'+initials(r.name)+'<span class="bn">#'+r.booth+'</span></div>'+
+    '<div class="meta"><div class="nm">'+nm+'</div>'+phone+
+      '<div class="tags">'+sir+done+'</div></div>'+
+    '<div class="acts">'+call+wa+'</div></div>';
+}
+function render(animate){
+  const q=el.search.value.trim().toLowerCase();
+  el.clear.classList.toggle('show',!!el.search.value);
+  let rows=DATA.filter(d=>{
+    if(activeKendra && d.kendra!==activeKendra)return false;
+    if(filterMode==='unsent' && sent.has(d.booth))return false;
+    if(filterMode==='ns'){const s=sirInfo(d.booth);if(!s||s.D!==0)return false;}
+    if(!q)return true;
+    return d.name.toLowerCase().includes(q)||String(d.booth).includes(q)||d.phone.includes(q);
+  });
+
+  const nSent=rows.filter(d=>sent.has(d.booth)).length;
+  el.count.innerHTML='<b>'+rows.length+'</b> '+(rows.length===1?'booth':'booths')+
+    (activeKendra?' in '+esc(activeKendra.replace(/ Maha Shakti Kendra$/,'')):'')+
+    (rows.length?' · <b>'+nSent+'</b> messaged':'');
+
+  if(!rows.length){
+    el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>No booths match</h3><p>Try a different search or clear the filters.</p></div>';
+    return;
+  }
+
+  const groups={},order=[];
+  rows.forEach(r=>{if(!groups[r.kendra]){groups[r.kendra]=[];order.push(r.kendra);}groups[r.kendra].push(r);});
+  if(sortLeast && sirOK){
+    const rank=r=>{const s=sirInfo(r.booth);return s?s.pct:9999;};
+    order.forEach(k=>groups[k].sort((a,b)=>rank(a)-rank(b)||a.booth-b.booth));
+  }
+
+  const cls=animate?'cards anim':'cards';
+  el.list.innerHTML=order.map(k=>{
+    const short=k.replace(/ Maha Shakti Kendra$/,'');
+    return '<section class="group"><div class="group-head"><span class="dot"></span><h2>'+esc(short)+'</h2>'+
+      '<span class="gc">'+groups[k].length+'</span></div>'+
+      '<div class="'+cls+'">'+groups[k].map(cardHTML).join('')+'</div></section>';
+  }).join('');
+}
+
+/* ---------- toast + copy ---------- */
+let toastTimer=null;
+function showToast(msg){
+  el.toast.innerHTML=SVG_TICK+'<span>'+esc(msg)+'</span>';
+  el.toast.classList.add('show');
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.toast.classList.remove('show'),1900);
+}
+async function copyText(t){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(t);}
+    else{const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
+    return true;
+  }catch(e){return false;}
+}
+
+/* ---------- interactions ---------- */
+el.list.addEventListener('click',e=>{
+  // WhatsApp: set live personalised message, mark sent WITHOUT re-render, let navigation proceed
+  const wa=e.target.closest('[data-wa]');
+  if(wa){
+    const booth=+wa.getAttribute('data-booth'), r=byBooth[booth], d=digits(r.phone), m=buildMsg(r);
+    wa.href='https://wa.me/91'+d+(m.trim()?('?text='+encodeURIComponent(m)):'');
+    setSent(booth,true,wa.closest('.card'));
+    haptic(12);
+    return; // default opens WhatsApp
+  }
+  const undo=e.target.closest('[data-undo]');
+  if(undo){
+    const booth=+undo.getAttribute('data-undo');
+    setSent(booth,false,undo.closest('.card'));
+    haptic(8);
+    return;
+  }
+  const cp=e.target.closest('[data-copy]');
+  if(cp){
+    const num=cp.getAttribute('data-copy');
+    copyText(num).then(ok=>{haptic(ok?12:0);if(ok)showToast('Number copied · '+num);});
+    return;
+  }
+  const fab=e.target.closest('[data-haptic]');
+  if(fab)haptic(12);
+});
+
+el.filters.addEventListener('click',e=>{
+  const m=e.target.closest('[data-mode]');
+  if(m){filterMode=m.getAttribute('data-mode');buildFilters();render(true);return;}
+  const s=e.target.closest('[data-sort]');
+  if(s){sortLeast=!sortLeast;buildFilters();render(true);return;}
+});
+
+el.msg.addEventListener('input',refreshComposer);
+document.querySelectorAll('[data-tok]').forEach(b=>b.addEventListener('click',()=>{haptic(6);insToken(b.getAttribute('data-tok'));}));
+document.getElementById('sampleBtn').addEventListener('click',()=>{
+  if(el.msg.value.trim() && !confirm('Replace the current message with the sample template?'))return;
+  el.msg.value=SAMPLE;el.msg.focus();refreshComposer();
+});
+document.getElementById('clearMsg').addEventListener('click',()=>{el.msg.value='';el.msg.focus();refreshComposer();});
+
+el.search.addEventListener('input',()=>render(false));
+el.clear.addEventListener('click',()=>{el.search.value='';el.search.focus();render(false);});
+
+el.reset.addEventListener('click',()=>{
+  if(!sent.size)return;
+  if(!confirm('Clear the messaged/done marks on all '+sent.size+' booths? Your typed message is kept.'))return;
+  sent.clear();persistSent();updateProgress();render(false);haptic(12);showToast('Progress reset');
+});
+
+window.addEventListener('scroll',()=>{el.totop.classList.toggle('show',window.scrollY>560);},{passive:true});
+el.totop.addEventListener('click',()=>{haptic(8);window.scrollTo({top:0,behavior:'smooth'});});
+
+/* ---------- boot ---------- */
+async function loadContacts(){
+  const html=await (await fetch('maha.html',{cache:'no-store'})).text();
+  const m=html.match(/const\s+DATA\s*=\s*(\[[\s\S]*?\]);/);
+  if(!m)throw new Error('DATA block not found in maha.html');
+  const arr=new Function('return '+m[1])();
+  if(!Array.isArray(arr)||!arr.length)throw new Error('empty contacts');
+  return arr;
+}
+async function loadSIR(){
+  try{
+    const idx=await getJSON('data/sir/index.json');
+    const snap=await getJSON('data/sir/'+idx.latest+'.json');
+    (snap.rows||[]).forEach(r=>{const pn=+r['Part Number'];if(pn)SIR[pn]=r;});
+    sirDate=idx.latest;sirOK=true;
+    el.hsub.textContent='Live SIR status · '+sirDate;
+  }catch(e){sirOK=false;}
+}
+async function boot(){
+  // restore composer + sent
+  try{const sm=localStorage.getItem(K_MSG);if(sm)el.msg.value=sm;}catch(e){}
+  loadSent();
+  refreshComposer();
+
+  try{
+    DATA=await loadContacts();
+  }catch(e){
+    el.list.innerHTML='<div class="empty"><div class="ico">📵</div><h3>Couldn\'t load contacts</h3><p>Open this page over the web (roshanvijay.com/outreach.html) — it reads the booth list from the live site.</p></div>';
+    return;
+  }
+  byBooth={};DATA.forEach(d=>byBooth[d.booth]=d);
+  KENDRAS=[...new Set(DATA.map(d=>d.kendra))];
+  updateProgress();
+  refreshComposer();   // now that DATA[0] exists, show a live personalised preview
+
+  await loadSIR();               // optional; enriches but never blocks
+  buildChips();
+  buildFilters();
+  render(true);
+}
+boot();
+</script>
+</body>
+</html>
