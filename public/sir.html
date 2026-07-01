@@ -143,7 +143,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .conn{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--ink)}
 .conn .cl{font-family:'Sora';font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);padding:2px 6px;border-radius:999px}
 .conn.muted{color:var(--ink-soft);font-weight:500}
-.mfab{width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;color:#fff;text-decoration:none}
+.mfab{width:40px;height:40px;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;color:#fff;text-decoration:none;flex:0 0 auto}
 .mfab:active{transform:scale(.9)}
 .mfab svg{width:15px;height:15px}
 .mfab.call{background:linear-gradient(150deg,#1aa608,var(--green-deep))}
@@ -398,7 +398,7 @@ function partCard(r,opts){
   else if(kind==='rem') flag='<span class="flag rem">Removed</span>';
   else if(dmap){ const n=Object.keys(dmap).length; flag='<span class="flag ch">▲ '+n+' changed</span>'; }
   return '<div class="pcard '+(kind==='add'?'add':kind==='rem'?'rem':(dmap?'ch':''))+'">'+
-    '<div class="ph"><div class="pn"><span class="hash">Part </span>'+esc(String(pn))+'</div><div class="pmeta">AC '+esc(String(ac))+' · '+esc(asm)+'</div>'+flag+'</div>'+
+    '<div class="ph"><div class="pn"><span class="hash">Part </span>'+esc(String(pn))+'</div><div class="pmeta">'+(ac!=null?'AC '+esc(String(ac))+(asm?' · ':''):'')+esc(asm)+'</div>'+flag+'</div>'+
     '<div class="grid">'+headlineCells(r,dmap)+'</div>'+
     '<details class="more"><summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>'+(dmap?'All fields & changes':'All '+STATE.metrics.length+' fields')+'</summary><div class="full">'+fullRows(r,dmap)+'</div></details>'+
     '</div>';
@@ -468,6 +468,7 @@ function refreshControls(){
 async function loadView(){
   try{
     el.list.innerHTML='<div class="loading"><div class="spin"></div>Loading…</div>';
+    if(STATE.from>STATE.to){const t=STATE.from;STATE.from=STATE.to;STATE.to=t;}
     const single=STATE.from===STATE.to;
     const to=await getSnap(STATE.to);
     const from=single?null:await getSnap(STATE.from);
