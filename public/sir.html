@@ -65,6 +65,17 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .count{font-size:12.5px;color:var(--ink-soft);padding:0 2px 10px;font-weight:500}
 .count b{color:var(--ink)}
 
+/* day controls */
+.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px}
+.qbtns{display:flex;gap:6px;flex-wrap:wrap}
+.qbtn{font-family:'Sora';font-size:12px;font-weight:600;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-soft);cursor:pointer;box-shadow:var(--shadow);transition:all .15s}
+.qbtn[aria-pressed="true"]{background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(232,93,4,.3)}
+.range{display:flex;align-items:center;gap:6px;margin-left:auto}
+.range .arrow{color:var(--ink-soft);font-weight:700}
+.range select{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 9px;box-shadow:var(--shadow);outline:none;font-variant-numeric:tabular-nums;cursor:pointer}
+.range select:focus{border-color:var(--saffron);box-shadow:0 0 0 3px var(--ring)}
+@media(max-width:560px){.range{margin-left:0;width:100%}.range select{flex:1;min-width:0}}
+
 /* part cards */
 .cards{display:flex;flex-direction:column;gap:9px}
 @media(min-width:680px){.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
@@ -127,6 +138,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 </header>
 
 <main class="wrap">
+  <div class="ctrl" id="ctrl"></div>
   <div id="note"></div>
   <div class="stats" id="stats"></div>
   <div class="search">
@@ -160,10 +172,10 @@ const SUMMARY=["Total Elector","Total EFs Distributed","Total EFs Digitized","EF
 const fmt=n=>(typeof n==='number')?n.toLocaleString('en-IN'):n;
 const sh=m=>SHORT[m]||m;
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const el={note:'note',stats:'stats',search:'search',clear:'clear',tabs:'tabs',count:'count',list:'list',subt:'subt',hdate:'hdate'};
+const el={note:'note',stats:'stats',search:'search',clear:'clear',tabs:'tabs',count:'count',list:'list',subt:'subt',hdate:'hdate',ctrl:'ctrl'};
 for(const k in el) el[k]=document.getElementById(el[k]);
 
-let STATE={today:null,prev:null,diff:null,metrics:[],key:[],headline:[],summary:[],tab:'all',q:''};
+let STATE={today:null,prev:null,diff:null,metrics:[],key:[],headline:[],summary:[],tab:'all',q:'',dates:[],snaps:{},from:null,to:null};
 
 const keyOf=(r,k)=>k.map(c=>r[c]).join('|');
 const sum=(rows,m)=>rows.reduce((a,r)=>a+(typeof r[m]==='number'?r[m]:0),0);
@@ -259,27 +271,71 @@ function setTab(t){ STATE.tab=t; [...el.tabs.children].forEach(b=>b.setAttribute
 
 async function getJSON(u){ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error(u+' '+r.status); return r.json(); }
 
+async function getSnap(d){ if(!STATE.snaps[d]) STATE.snaps[d]=await getJSON(BASE+d+'.json'); return STATE.snaps[d]; }
+const latestDate=()=>STATE.dates[STATE.dates.length-1];
+const prevDate=()=>STATE.dates.length>1?STATE.dates[STATE.dates.length-2]:latestDate();
+
+function optionsHTML(sel){
+  const L=latestDate();
+  return STATE.dates.slice().reverse().map(d=>'<option value="'+d+'"'+(d===sel?' selected':'')+'>'+esc(d)+(d===L?' (latest)':'')+'</option>').join('');
+}
+function buildControls(){
+  const multi=STATE.dates.length>1;
+  const q = multi ? '<div class="qbtns">'
+      +'<button class="qbtn" type="button" data-q="yesterday">Yesterday</button>'
+      +'<button class="qbtn" type="button" data-q="today">Today</button>'
+      +'<button class="qbtn" type="button" data-q="diff">Yesterday → Today</button></div>' : '';
+  el.ctrl.innerHTML=q+'<div class="range"><select id="fromSel" aria-label="From date"></select><span class="arrow">→</span><select id="toSel" aria-label="To date"></select></div>';
+  el.fromSel=document.getElementById('fromSel'); el.toSel=document.getElementById('toSel');
+  el.fromSel.innerHTML=optionsHTML(STATE.from); el.toSel.innerHTML=optionsHTML(STATE.to);
+  el.fromSel.onchange=()=>{STATE.from=el.fromSel.value; loadView();};
+  el.toSel.onchange=()=>{STATE.to=el.toSel.value; loadView();};
+  el.ctrl.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{
+    const L=latestDate(), P=prevDate();
+    if(b.dataset.q==='today'){STATE.from=L; STATE.to=L;}
+    else if(b.dataset.q==='yesterday'){STATE.from=P; STATE.to=P;}
+    else {STATE.from=P; STATE.to=L;}
+    loadView();
+  });
+}
+function refreshControls(){
+  if(el.fromSel) el.fromSel.value=STATE.from;
+  if(el.toSel) el.toSel.value=STATE.to;
+  const L=latestDate(), P=prevDate();
+  const active=(STATE.from===L&&STATE.to===L)?'today':(STATE.from===P&&STATE.to===P)?'yesterday':(STATE.from===P&&STATE.to===L)?'diff':'';
+  el.ctrl.querySelectorAll('[data-q]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.q===active));
+}
+
+async function loadView(){
+  try{
+    el.list.innerHTML='<div class="loading"><div class="spin"></div>Loading…</div>';
+    const single=STATE.from===STATE.to;
+    const to=await getSnap(STATE.to);
+    const from=single?null:await getSnap(STATE.from);
+    STATE.today=to; STATE.prev=from; STATE.key=to.key; STATE.metrics=to.metrics; STATE.q=el.search.value||'';
+    STATE.headline=HEADLINE.filter(m=>to.metrics.includes(m)); if(!STATE.headline.length) STATE.headline=to.metrics.slice(0,4);
+    STATE.summary=SUMMARY.filter(m=>to.metrics.includes(m)); if(!STATE.summary.length) STATE.summary=to.metrics.slice(0,5);
+    STATE.diff=buildDiff(to,from);
+    el.hdate.innerHTML='<div class="d">'+esc(STATE.to)+'</div><div class="v">'+(single?'single day':'vs '+esc(STATE.from))+'</div>';
+    el.note.innerHTML=single
+      ? '<div class="note">Showing <b>'+esc(STATE.to)+'</b> — snapshot totals'+(STATE.dates.length>1?'. Pick a different “From” day to see the difference.':' (first snapshot; the diff appears once a second day exists).')+'</div>'
+      : '<div class="note"><b>'+esc(STATE.from)+' → '+esc(STATE.to)+':</b> '+STATE.diff.changed.length+' parts changed, '+STATE.diff.added.length+' added, '+STATE.diff.removed.length+' removed. Tap a part for field-level from → to.</div>';
+    refreshControls(); renderStats(); renderTabs(); setTab('all');
+  }catch(e){
+    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
+  }
+}
+
 async function boot(){
   try{
     const idx=await getJSON(BASE+'index.json?t='+Date.now());
-    const dates=(idx.dates||[]).slice().sort();
-    if(!dates.length) throw new Error('no snapshots');
-    const latest=dates[dates.length-1], prevDate=dates.length>1?dates[dates.length-2]:null;
-    const today=await getJSON(BASE+latest+'.json');
-    const prev=prevDate?await getJSON(BASE+prevDate+'.json'):null;
-    STATE.today=today; STATE.prev=prev; STATE.key=today.key; STATE.metrics=today.metrics;
-    STATE.headline=HEADLINE.filter(m=>today.metrics.includes(m)); if(!STATE.headline.length) STATE.headline=today.metrics.slice(0,4);
-    STATE.summary=SUMMARY.filter(m=>today.metrics.includes(m)); if(!STATE.summary.length) STATE.summary=today.metrics.slice(0,5);
-    STATE.diff=buildDiff(today,prev);
-    el.subt.textContent='Enumeration Form tracking';
-    el.hdate.innerHTML='<div class="d">'+esc(latest)+'</div><div class="v">'+(prevDate?'vs '+esc(prevDate):'baseline')+'</div>';
-    el.note.innerHTML=prev
-      ? '<div class="note"><b>Changes since '+esc(prevDate)+':</b> '+STATE.diff.changed.length+' parts changed, '+STATE.diff.added.length+' added, '+STATE.diff.removed.length+' removed. Tap a part for field-level old → new.</div>'
-      : '<div class="note warn">This is the <b>first snapshot (baseline)</b> for '+esc(latest)+'. Day-over-day differences will appear once a second day is added.</div>';
-    renderStats(); renderTabs(); setTab(STATE.prev?'all':'all'); render();
+    STATE.dates=(idx.dates||[]).slice().sort();
+    if(!STATE.dates.length) throw new Error('no snapshots');
+    STATE.from=prevDate(); STATE.to=latestDate();   // default: yesterday → today (or single day if only one)
+    buildControls();
+    await loadView();
   }catch(e){
-    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>';
-    el.stats.innerHTML='';
+    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
   }
 }
 
