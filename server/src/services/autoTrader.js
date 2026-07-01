@@ -59,6 +59,10 @@ const CONFIG = {
     { name: "BANKNIFTY", symbol: "NSE:NIFTYBANK-INDEX", lotSize: 30, marginPerLot: 180000 },
   ],
   CAPITAL: 100000,
+  // Simulated capital used in PAPER mode instead of the (possibly tiny) real broker balance, so paper
+  // trades can size/afford real option lots for validation. Matches the backtest's default capital so
+  // paper and backtest are comparable. LIVE mode still uses the real balance.
+  PAPER_CAPITAL: 1000000,
   RISK_PERCENT: 0.5,
   MAX_RISK_PER_DAY_PERCENT: 2,
   MAX_CONSECUTIVE_LOSSES: 3,
@@ -69,9 +73,10 @@ const CONFIG = {
   ORDER_TYPE: "LIMIT",
   LIMIT_BUFFER_PCT: 0.3,
   SLIPPAGE_BUFFER_PCT: 0.5,
-  // L2 (audited): option BUYING only needs ~1× premium; 2× is a deliberate safety buffer that
-  // ~halves position capacity. Intentional, but tune to 1× if you want full premium deployment.
-  MARGIN_SAFETY_MULTIPLIER: 2,
+  // L2 (audited): option BUYING is a debit — it only needs ~1× the premium. 2× was double-charging
+  // and, with a small account, blocked every trade at the margin gate. 1.1 keeps a 10% buffer for the
+  // limit-buffer overpay + rounding.
+  MARGIN_SAFETY_MULTIPLIER: 1.1,
   MAX_VIX: 25,
   MAX_SPREAD_PCT: 2,
   MIN_OI: 100000,
@@ -128,6 +133,7 @@ const CONFIG_FIELD_MAP = {
   positionSizingMode: "POSITION_SIZING_MODE",
   fixedLots: "FIXED_LOTS",
   paperTrading: "PAPER_TRADING",
+  paperCapital: "PAPER_CAPITAL",
   limitBufferPct: "LIMIT_BUFFER_PCT",
   maxVIX: "MAX_VIX",
   maxSpreadPct: "MAX_SPREAD_PCT",
@@ -378,7 +384,10 @@ async function checkMargin(optionSymbol, qty, underlying, session, entryPremium 
       entryPremium > 0
         ? entryPremium * qty
         : qty * (underlying.marginPerLot / underlying.lotSize);
-    const available = await fetchAvailableFunds(session);
+    // PAPER mode checks affordability against the SIMULATED capital (nothing is actually charged);
+    // the real broker balance can be below one lot and would block every paper trade. LIVE mode uses
+    // the real available funds.
+    const available = CONFIG.PAPER_TRADING ? CONFIG.CAPITAL : await fetchAvailableFunds(session);
     const safeRequired = required * CONFIG.MARGIN_SAFETY_MULTIPLIER;
     logAudit({ type: "MARGIN_CHECK", optionSymbol, qty, required, available, safeRequired, pass: available >= safeRequired });
     return { pass: available >= safeRequired, available, required: safeRequired };
@@ -1329,10 +1338,17 @@ export async function startAutoTrader(sessionId) {
   const session = getSession(sessionId);
   if (!session) throw new Error("Invalid or expired session");
   currentSession = session;
-  const actualCapital = await fetchAvailableFunds(session);
-  if (actualCapital > 0) {
-    CONFIG.CAPITAL = actualCapital;
-    console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+  // PAPER mode sizes against a realistic simulated capital — the real balance can be below one option
+  // lot, which blocks every trade at the margin gate. LIVE mode uses the actual broker balance.
+  if (CONFIG.PAPER_TRADING) {
+    CONFIG.CAPITAL = CONFIG.PAPER_CAPITAL > 0 ? CONFIG.PAPER_CAPITAL : CONFIG.CAPITAL;
+    console.log(`[AUTO-TRADER] Paper capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+  } else {
+    const actualCapital = await fetchAvailableFunds(session);
+    if (actualCapital > 0) {
+      CONFIG.CAPITAL = actualCapital;
+      console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+    }
   }
   try {
     const positions = await fyersApiCall("/positions", session);
