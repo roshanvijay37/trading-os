@@ -326,9 +326,29 @@ export function getWsStatus() {
   };
 }
 
+// Start of the current NSE trading session (09:15 IST) at or before `nowMs`, as epoch ms. India has
+// no DST so a fixed +5:30 offset is exact. Pure/exported for unit tests.
+const IST_OFFSET_MS = 330 * 60000;
+const SESSION_OPEN_MIN = 9 * 60 + 15; // 09:15 IST
+export function currentSessionStartMs(nowMs) {
+  const istMs = nowMs + IST_OFFSET_MS;
+  const istMidnight = Math.floor(istMs / 86400000) * 86400000;
+  let openIst = istMidnight + SESSION_OPEN_MIN * 60000;
+  if (istMs < openIst) openIst -= 86400000; // before today's open → the previous session
+  return openIst - IST_OFFSET_MS;
+}
+
 // ─── OHLC Aggregation Engine ──────────────────────────────────────
 export function aggregateOHLC(symbol, interval, limit = 500) {
-  const ticks = tickStore[symbol] || [];
+  const all = tickStore[symbol] || [];
+  if (all.length === 0) return [];
+
+  // Drop pre-session ticks before aggregating. FYERS streams the frozen last index value overnight,
+  // which otherwise builds flat, stale higher-timeframe candles at the open (the 30m/60m EMA sits at
+  // yesterday's value). Keeping only the CURRENT session's ticks means the engine falls back to clean
+  // REST history until enough fresh live ticks accumulate. Non-destructive: the raw buffer is untouched.
+  const cutoff = currentSessionStartMs(Date.now());
+  const ticks = all.filter((t) => t.timestamp >= cutoff);
   if (ticks.length === 0) return [];
 
   // Parse interval
