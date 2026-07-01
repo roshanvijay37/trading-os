@@ -482,6 +482,8 @@ function runBacktest(candles, config) {
           exitReason,
           barsHeld,
           capitalAfter: Math.round(currentCapital * 100) / 100,
+          sl: position.sl,        // index level — same price scale as the candles, for the chart overlay
+          target: position.target,
           ...(position.mode === "BS" ? { optionType: position.optionType, strike: position.strike, indexEntry: position.indexEntry } : {}),
         });
 
@@ -559,6 +561,8 @@ function runBacktest(candles, config) {
       exitReason: "END_OF_DATA",
       barsHeld: candles.length - position.entryBar,
       capitalAfter: Math.round(currentCapital * 100) / 100,
+      sl: position.sl,
+      target: position.target,
       ...(position.mode === "BS" ? { optionType: position.optionType, strike: position.strike, indexEntry: position.indexEntry } : {}),
     });
   }

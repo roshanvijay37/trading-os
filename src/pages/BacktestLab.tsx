@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { createChart, ColorType, IChartApi, Time } from "lightweight-charts";
+import { createChart, ColorType, IChartApi, Time, LineStyle } from "lightweight-charts";
 import { Play, RotateCcw, TrendingUp, TrendingDown, Shield, BarChart3, Table, LineChart, Eye } from "lucide-react";
 import { backtestApi } from "../services/api";
 
@@ -20,11 +20,24 @@ interface Trade {
   pnlPercent: number;
   exitReason: string;
   barsHeld: number;
+  sl?: number; // index level of the stop-loss (for the candle-chart overlay)
+  target?: number; // index level of the target
+  indexEntry?: number; // BS mode: the index level at entry (entryPrice is the option premium there)
 }
 
 interface EquityPoint {
   date: string;
   equity: number;
+}
+
+interface Candle {
+  timestamp: number; // epoch ms
+  datetime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
 }
 
 interface BacktestResult {
@@ -58,6 +71,7 @@ interface BacktestResult {
   } | null;
   trades: Trade[];
   equityCurve: EquityPoint[];
+  candles?: Candle[];
 }
 
 const strategies = [
@@ -92,10 +106,13 @@ export function BacktestLab() {
   const [ivMultiplier, setIvMultiplier] = useState(1.0);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
-  const [viewMode, setViewMode] = useState<"both" | "table" | "chart">("both");
+  const [viewMode, setViewMode] = useState<"both" | "table" | "chart" | "candles">("both");
+  const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const candleContainerRef = useRef<HTMLDivElement>(null);
+  const candleChartRef = useRef<IChartApi | null>(null);
 
   const runBacktest = async () => {
     if (!fromDate || !toDate) return;
@@ -227,6 +244,108 @@ export function BacktestLab() {
     }
   }, [result, viewMode]);
 
+  // When a new result loads, preselect the first trade so its SL/target show on the candle chart.
+  useEffect(() => {
+    setSelectedTradeId(result?.trades?.[0]?.id ?? null);
+  }, [result]);
+
+  // Candlestick chart: the INDEX price series with per-trade entry/exit markers, plus the SL and
+  // target levels of the SELECTED trade drawn as short segments spanning entry→exit. Candles and
+  // SL/target are both index levels, so they overlay correctly in Index and Black-Scholes modes.
+  useEffect(() => {
+    if (!result || !candleContainerRef.current) return;
+    if (viewMode !== "both" && viewMode !== "candles") return;
+    if (!Array.isArray(result.candles) || result.candles.length === 0) return;
+
+    if (candleChartRef.current) {
+      candleChartRef.current.remove();
+      candleChartRef.current = null;
+    }
+
+    try {
+      const container = candleContainerRef.current;
+      const width = container.clientWidth || container.offsetWidth || Math.min(window.innerWidth - 64, 800);
+      if (!width || width <= 0) return;
+
+      const chart = createChart(container, {
+        layout: { background: { type: ColorType.Solid, color: "#08080a" }, textColor: "#71717a" },
+        grid: { vertLines: { color: "#131318" }, horzLines: { color: "#131318" } },
+        rightPriceScale: { borderColor: "#23232a" },
+        timeScale: { borderColor: "#23232a", timeVisible: true, secondsVisible: false },
+        width,
+        height: 420,
+      });
+
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: "#10b981",
+        downColor: "#ef4444",
+        wickUpColor: "#10b981",
+        wickDownColor: "#ef4444",
+        borderVisible: false,
+      });
+
+      // Candles → dedupe by time + sort ascending (multi-day FYERS fetches can overlap).
+      const cmap = new Map<number, { time: Time; open: number; high: number; low: number; close: number }>();
+      for (const c of result.candles) {
+        const time = Math.floor((c.timestamp ?? 0) / 1000);
+        if (!time || [c.open, c.high, c.low, c.close].some((v) => typeof v !== "number" || isNaN(v))) continue;
+        cmap.set(time, { time: time as Time, open: c.open, high: c.high, low: c.low, close: c.close });
+      }
+      const candleData = Array.from(cmap.values()).sort((a, b) => (a.time as number) - (b.time as number));
+      if (candleData.length === 0) return;
+      candleSeries.setData(candleData);
+
+      // Entry (▲ long / ▼ short) + exit (● green win / red loss) markers for every trade.
+      const markers = (result.trades || [])
+        .filter((t) => t.entryTime && t.exitTime)
+        .flatMap((t) => {
+          const win = (t.pnl ?? 0) >= 0;
+          const et = Math.floor(new Date(t.entryTime).getTime() / 1000);
+          const xt = Math.floor(new Date(t.exitTime).getTime() / 1000);
+          return [
+            { time: et as Time, position: (t.side === "LONG" ? "belowBar" : "aboveBar") as any, color: t.side === "LONG" ? "#10b981" : "#ef4444", shape: (t.side === "LONG" ? "arrowUp" : "arrowDown") as any, text: `${t.side[0]}#${t.id}`, size: 1 },
+            { time: xt as Time, position: (t.side === "LONG" ? "aboveBar" : "belowBar") as any, color: win ? "#10b981" : "#ef4444", shape: "circle" as any, text: `${t.exitReason} ${win ? "+" : ""}${(t.pnl ?? 0).toFixed(0)}`, size: 1 },
+          ];
+        })
+        .sort((a, b) => (a.time as number) - (b.time as number));
+      if (markers.length) candleSeries.setMarkers(markers);
+
+      // SL (red) + target (green) of the selected trade, spanning its entry→exit.
+      const sel = (result.trades || []).find((t) => t.id === selectedTradeId);
+      if (sel && sel.entryTime && sel.exitTime) {
+        const et = Math.floor(new Date(sel.entryTime).getTime() / 1000);
+        const xt = Math.floor(new Date(sel.exitTime).getTime() / 1000);
+        const drawLevel = (level: number | undefined, color: string) => {
+          if (typeof level !== "number" || isNaN(level) || xt <= et) return;
+          const s = chart.addLineSeries({ color, lineWidth: 2, lineStyle: LineStyle.Dashed, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+          s.setData([{ time: et as Time, value: level }, { time: xt as Time, value: level }]);
+        };
+        drawLevel(sel.sl, "#ef4444");
+        drawLevel(sel.target, "#10b981");
+      }
+
+      chart.timeScale().fitContent();
+      candleChartRef.current = chart;
+
+      const handleResize = () => {
+        if (candleContainerRef.current && candleChartRef.current) {
+          const w = candleContainerRef.current.clientWidth || candleContainerRef.current.offsetWidth;
+          if (w > 0) candleChartRef.current.applyOptions({ width: w });
+        }
+      };
+      window.addEventListener("resize", handleResize);
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        if (candleChartRef.current) {
+          candleChartRef.current.remove();
+          candleChartRef.current = null;
+        }
+      };
+    } catch (err) {
+      console.error("[BacktestLab] Candle chart error:", err);
+    }
+  }, [result, viewMode, selectedTradeId]);
+
   const sum = result?.summary;
 
   return (
@@ -341,8 +460,9 @@ export function BacktestLab() {
         <div className="flex gap-1.5">
           {[
             { key: "both", label: "Both", icon: Eye },
+            { key: "candles", label: "Candles", icon: BarChart3 },
             { key: "table", label: "Table", icon: Table },
-            { key: "chart", label: "Chart", icon: LineChart },
+            { key: "chart", label: "Equity", icon: LineChart },
           ].map((v) => (
             <button
               key={v.key}
@@ -385,6 +505,26 @@ export function BacktestLab() {
             <SummaryCard label="Max Drawdown" value={`${sum.maxDrawdown.toFixed(2)}%`} icon={Shield} color="loss" />
           </div>
 
+          {(viewMode === "both" || viewMode === "candles") && result.candles && result.candles.length > 0 && (
+            <div className="rounded-panel border border-border bg-panel p-4">
+              <h3 className="mb-3 flex flex-wrap items-center justify-between gap-2 text-2xs font-semibold uppercase tracking-wider text-zinc-400">
+                <span className="flex items-center gap-2"><BarChart3 size={12} className="text-zinc-600" /> Price &amp; Trades</span>
+                <span className="flex flex-wrap items-center gap-3 text-3xs normal-case tracking-normal text-zinc-500">
+                  <span><span className="text-gain">▲</span> long</span>
+                  <span><span className="text-loss">▼</span> short</span>
+                  <span><span className="text-gain">●</span>/<span className="text-loss">●</span> exit win/loss</span>
+                  <span className="text-loss">- - SL</span>
+                  <span className="text-gain">- - target</span>
+                </span>
+              </h3>
+              <div ref={candleContainerRef} className="w-full" />
+              <p className="mt-2 text-3xs text-zinc-600">
+                Click a trade row below to highlight its stop-loss &amp; target on the chart.
+                {sum?.pricingModel === "BLACK_SCHOLES" ? " Markers sit on the index; the Entry/Exit prices in the table are option premiums." : ""}
+              </p>
+            </div>
+          )}
+
           {(viewMode === "both" || viewMode === "table") && (
             <div className="rounded-panel border border-border bg-panel p-4">
               <h3 className="mb-3 flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-zinc-400">
@@ -406,7 +546,7 @@ export function BacktestLab() {
                   </thead>
                   <tbody>
                     {Array.isArray(result.trades) && result.trades.map((t: Trade) => (
-                      <tr key={t.id} className="border-b border-border-subtle">
+                      <tr key={t.id} onClick={() => setSelectedTradeId(t.id)} className={`cursor-pointer border-b border-border-subtle transition ${selectedTradeId === t.id ? "bg-surface" : "hover:bg-surface/50"}`}>
                         <td className="px-2 py-2 text-zinc-600">{t.id}</td>
                         <td className="px-2 py-2">
                           <span className={`rounded px-1.5 py-0.5 text-2xs font-medium ${t.side === "LONG" ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"}`}>{t.side}</span>
