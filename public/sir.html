@@ -112,6 +112,38 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .frow .fd{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto;padding:1px 6px;border-radius:999px}
 .fd.up{color:var(--up);background:var(--up-bg)}.fd.down{color:var(--down);background:var(--down-bg)}
 
+/* insights */
+.ins{display:flex;flex-direction:column;gap:13px}
+.ifun{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:13px;box-shadow:var(--shadow)}
+.ifr{margin-bottom:9px}
+.ifl{display:flex;justify-content:space-between;font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:4px}
+.ifl span:first-child{color:var(--ink);font-family:'Sora'}
+.ifl span:last-child{font-variant-numeric:tabular-nums}
+.ibar{height:8px;background:var(--paper);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+.ibar i{display:block;height:100%;background:linear-gradient(90deg,var(--saffron),var(--saffron-deep));border-radius:999px;transition:width .3s}
+.ichips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ichip{font-family:'Sora';font-size:10.5px;font-weight:700;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);padding:3px 9px;border-radius:999px;font-variant-numeric:tabular-nums}
+.ichip.warn{color:var(--down);background:var(--down-bg);border-color:rgba(194,65,12,.2)}
+.isec{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:13px;box-shadow:var(--shadow)}
+.isec h3{font-family:'Sora';font-size:14px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:7px}
+.isec h3 .in{font-family:'Inter';font-size:11px;font-weight:700;color:#fff;background:var(--saffron-deep);padding:1px 8px;border-radius:999px}
+.isub{font-size:11.5px;color:var(--ink-soft);margin:4px 0 10px}
+.ilist{display:flex;flex-direction:column;gap:8px}
+.irow{border:1px solid var(--line);border-radius:12px;padding:9px 11px;background:var(--paper)}
+.irhead{font-size:12.5px;color:var(--ink-soft)}
+.irhead b{color:var(--ink);font-family:'Sora'}
+.ik{color:var(--saffron-deep);font-weight:600}
+.irm .hot{color:var(--down)}
+.ircon{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px}
+.conn{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--ink)}
+.conn .cl{font-family:'Sora';font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);background:var(--card);border:1px solid var(--line);padding:2px 6px;border-radius:999px}
+.conn.muted{color:var(--ink-soft);font-weight:500}
+.mfab{width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;color:#fff;text-decoration:none}
+.mfab:active{transform:scale(.9)}
+.mfab svg{width:15px;height:15px}
+.mfab.call{background:linear-gradient(150deg,#1aa608,var(--green-deep))}
+.mfab.wa{background:linear-gradient(150deg,#25D366,#128C7E)}
+
 .empty,.loading{text-align:center;padding:50px 20px;color:var(--ink-soft)}
 .empty .ico{font-size:38px;margin-bottom:10px}
 .empty h3{font-family:'Sora';font-size:16px;color:var(--ink);margin-bottom:5px;font-weight:700}
@@ -180,6 +212,118 @@ let STATE={today:null,prev:null,diff:null,metrics:[],key:[],headline:[],summary:
 const keyOf=(r,k)=>k.map(c=>r[c]).join('|');
 const sum=(rows,m)=>rows.reduce((a,r)=>a+(typeof r[m]==='number'?r[m]:0),0);
 
+/* part number -> Pramukh/Prabhari (from the prabhari-pramukh directory) */
+const SK_CONTACTS=[
+{v:"Omalke",msk:"Shirthady",b:"27,28,29,30,31",pk:["Harshavarma Hegde","9845817539"],pr:["Dixith Panapila","9535588971"]},
+{v:"Kesaragadde",msk:"Shirthady",b:"32,33,34,35",pk:["Vandana Prabhu","7760361341"],pr:["Bola Vishwanath Kamath","7760487725"]},
+{v:"Padumarnadu",msk:"Shirthady",b:"36,37,38",pk:["Santhosh Jain","9980153487"],pr:["Roshan Shetty","7349495469"]},
+{v:"Moodumarnadu",msk:"Shirthady",b:"39,40,41",pk:["Rajeshwara Nayak","8105306077"],pr:["Vandana Prabhu","7760361341"]},
+{v:"Panapila",msk:"Shirthady",b:"42,43,44,45",pk:["Sudhakar D Poojari","9902170299"],pr:["Sachin Panapila","9902354750"]},
+{v:"Mantadi",msk:"Shirthady",b:"46,47,48,49",pk:["Jayaraj","9449913547"],pr:["Muniraj Hegde","9901726467"]},
+{v:"Konaje",msk:"Shirthady",b:"50,51,55,56,57",pk:["Latha Hegde","9741589200"],pr:["Ashwath Panapila","7022129648"]},
+{v:"Aliyooru",msk:"Shirthady",b:"52,53,54",pk:["Lakshan","9632923104"],pr:["Pradeep Walpady","9535617794"]},
+{v:"Alangaru",msk:"Moodbidri Nagara",b:"58,59,60,61",pk:["Karunakara Shetty","9845052331"],pr:["Gautham Rai","8105039396"]},
+{v:"Ontikatte",msk:"Moodbidri Nagara",b:"62,63,64,65,66",pk:["Nagaraja Poojari","9845959863"],pr:["Bahubali Prasad","9845838548"]},
+{v:"Jain Pete",msk:"Moodbidri Nagara",b:"67,68,69,70",pk:["Rajesh Shetty","9448412379"],pr:["Shwetha Jain","9632944623"]},
+{v:"Ladi",msk:"Moodbidri Nagara",b:"71,72,73,74,75",pk:["Satvik Mallya","9743078534"],pr:["Sampath Poojari","9164174331"]},
+{v:"Kallabettu",msk:"Moodbidri Nagara",b:"76,77,209,210",pk:["Shashikiran Kallabettu","9740940991"],pr:["Prasad Bhandari","9663993284"]},
+{v:"Maruru",msk:"Moodbidri Nagara",b:"211,212,213,214",pk:["Dinesh Thirumalabettu","8748093266"],pr:["Dinesh Maruru","9632658242"]},
+{v:"Kallamundkur",msk:"Puttige",b:"17,18,19,20",pk:["Vasanth Naik","9008514363"],pr:["Prashanth Amin","8105484497"]},
+{v:"Niddodi",msk:"Puttige",b:"91,92,93",pk:["Janardhana Gowda","9108124621"],pr:["Surekha","9591590421"]},
+{v:"Kadandale",msk:"Puttige",b:"21,22,23",pk:["Santhosh Bhandari","9535209109"],pr:["Jivandhar Shettigar","8105198531"]},
+{v:"Paladka",msk:"Puttige",b:"24,25,26",pk:["Chandrashekhar Poojari","9004858419"],pr:["Sudarshan Kolakebailu","9663766014"]},
+{v:"Nelligudde",msk:"Puttige",b:"80,81,82,83",pk:["Uday Kumar Shetty","9845590798"],pr:["Prabhakar Kulal","9945998528"]},
+{v:"Sampige",msk:"Puttige",b:"78,79,84,85",pk:["Nagaraj Karkera","9945183522"],pr:["Nagesh Prabhu","8861131880"]},
+{v:"Ashwathpura",msk:"Puttige",b:"89,90,201,202",pk:["Raghavendra Rao","8197136911"],pr:["Shalini Salyan","9901660124"]},
+{v:"Mijaru",msk:"Puttige",b:"86,87,88,203",pk:["Mahesh Gowda","9964684876"],pr:["Shashidhar Nayak","9845290952"]},
+{v:"Thodaru",msk:"Puttige",b:"204,205,206",pk:["Sunil Shetty","9880010358"],pr:["Harish M K","9845240064"]},
+{v:"Puchamogaru",msk:"Puttige",b:"207,208,215,216",pk:["Divakara Shetty","9880869947"],pr:["Sujatha Shyam Kundar","9482644896"]},
+{v:"Iruvailu",msk:"Puttige",b:"217,218,219",pk:["Balachandra Shetty","9945564944"],pr:["Sundar Niddodi","9164314149"]},
+{v:"Kondemoola",msk:"Kinnigoli",b:"96,97,132,133,141",pk:["Arun Kumar","9964212980"],pr:["Dhanush Shettigar","9741676023"]},
+{v:"Mennabettu",msk:"Kinnigoli",b:"98,99,100,101,102",pk:["Damodar Shetty","9964277884"],pr:["Shailesh Anchan","9964218369"]},
+{v:"Thalipadi",msk:"Kinnigoli",b:"103,104,105,106",pk:["Divakara Karkera","9845459263"],pr:["Pranik","8861115538"]},
+{v:"Punaruru",msk:"Kinnigoli",b:"107,108,109",pk:["Hemalatha Punaruru","9901971741"],pr:["Gopala Krishna","8971651298"]},
+{v:"Bappanadu",msk:"Mulki Nagara",b:"1,2,3,4,5",pk:["Satyendra","8861276777"],pr:["Subhash Shetty","9008147217"]},
+{v:"Karnad",msk:"Mulki Nagara",b:"115,116,117,122",pk:["Ashok Kumar","9964141989"],pr:["Satish Anchan","9535204350"]},
+{v:"K.S. Rao Nagar",msk:"Mulki Nagara",b:"118,119,120,121",pk:["Harishchandra Kotyan","9844615498"],pr:["Naveen Raj","9844813751"]},
+{v:"Shimanthooru",msk:"Haleyangadi",b:"6,7,110,111",pk:["Praveen","9902181665"],pr:["Vikas Shetty","9448627568"]},
+{v:"Karnire Kavathar",msk:"Haleyangadi",b:"08,09,10",pk:["Dhanraj Kundar","8861249253"],pr:["Naveenchandra Shetty","9742251991"]},
+{v:"Balkunje Kolluru",msk:"Haleyangadi",b:"11,12,13",pk:["Hariprasad Shetty","9632508345"],pr:["Jayalakshmi K","8105543211"]},
+{v:"Elinje",msk:"Haleyangadi",b:"14,15,16,94,95",pk:["Bhaskar Shetty","9945308798"],pr:["Purushottam Shettigar","9743111451"]},
+{v:"Kilpady",msk:"Haleyangadi",b:"112,113,114",pk:["Harikrishna Das","9945948477"],pr:["Jayananda Mulki","9880585187"]},
+{v:"Bellayaru",msk:"Haleyangadi",b:"123,124,125",pk:["Dinesh Shetty","9110258458"],pr:["Shobhendra Sasihithlu","9945619138"]},
+{v:"10th Thokuru",msk:"Haleyangadi",b:"126,127,128",pk:["Lohith","7760303081"],pr:["Jeevan Prakash","9945935679"]},
+{v:"Sasihithlu",msk:"Haleyangadi",b:"129,130,131,142",pk:["Sachin Shetty","9845577162"],pr:["Vinod Bolluru","9448039431"]},
+{v:"Kemral",msk:"Haleyangadi",b:"143,144,145",pk:["Hariprasad Shetty","8296763357"],pr:["Mohan Das","9980753865"]},
+{v:"Haleyangadi",msk:"Haleyangadi",b:"146,147,148,149",pk:["Nagaraj","9480355876"],pr:["Hemanath Amin","8105008609"]},
+{v:"Sasihithlu",msk:"Haleyangadi",b:"150,151,152,153",pk:["Anil Kundar","9743082089"],pr:["Shashikumar Mulki","9036543472"]},
+{v:"Ekkaru",msk:"62nd Thokuru / Permude",b:"134,135,136,137,138",pk:["Satish Shetty","9880933364"],pr:["Praveen Acharya","9980810164"]},
+{v:"Delanthabettu",msk:"62nd Thokuru / Permude",b:"139,140,159,160,161",pk:["Dinesh","9134253217"],pr:["Manohar Shetty","9980018907"]},
+{v:"Madhya Chelyaru",msk:"62nd Thokuru / Permude",b:"154,155,156,157,158",pk:["Balakrishna","9964582917"],pr:["Jayananda Chelyaru","9964590138"]},
+{v:"Kuthethoor",msk:"62nd Thokuru / Permude",b:"162,163,164,165",pk:["Prasad Anchan","9481761894"],pr:["Durgaprasad Kuthethoor","8971409230"]},
+{v:"Kalavaru",msk:"62nd Thokuru / Permude",b:"174,175,176",pk:["Kiran Rai","7829133882"],pr:["Shankar Jogi","8197102092"]},
+{v:"Jokatte",msk:"62nd Thokuru / Permude",b:"177,178,179,180,181,182",pk:["Jayanth Salyan","9448480368"],pr:["Jayanth Salyan","9448480368"]},
+{v:"Jara",msk:"62nd Thokuru / Permude",b:"192,193,194,195,196",pk:["Mukesh","9916246942"],pr:["Prakhyath Shetty","8123096729"]},
+{v:"Jara",msk:"62nd Thokuru / Permude",b:"197,198,199,200",pk:["Anil Moodushedde","9845372080"],pr:["Anil Moodushedde","9845372080"]},
+{v:"Bajpe Nagar",msk:"Bajpe",b:"166,167,168,169",pk:["Chitresh Shetty","9880723921"],pr:["Rajesh Amin","8123721329"]},
+{v:"Bajpe Rural",msk:"Bajpe",b:"170,171,172,173",pk:["Leelavathi","9449283928"],pr:["Sudhakar Kamath","9448887764"]},
+{v:"Kenjaru",msk:"Bajpe",b:"183,184,185,186,187",pk:["Sharath C Babu","9964107734"],pr:["Geethalakshmi","7760645515"]},
+{v:"Karambaru",msk:"Bajpe",b:"188,189,190,191",pk:["Satish Devadiga","9845910567"],pr:["Lokesh Bajpe","9945690178"]}
+];
+const PART_CONTACT={};
+SK_CONTACTS.forEach(k=>k.b.split(',').forEach(n=>{const p=parseInt(n,10);if(p)PART_CONTACT[p]={v:k.v,msk:k.msk,pk:k.pk,pr:k.pr};}));
+const DEADLINE='2026-07-29';
+const WA_GREETING='ನಮಸ್ಕಾರ 🙏';
+const SVG_CALL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
+const SVG_WA='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.82 11.82 0 0 1 8.413 3.488 11.82 11.82 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.82 9.82 0 0 0 1.523 5.26l-.999 3.648 3.736-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>';
+const haptic=ms=>{try{if(navigator.vibrate)navigator.vibrate(ms);}catch(e){}};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);};
+const daysBetween=(a,b)=>Math.max(1,Math.round((new Date(b)-new Date(a))/864e5));
+
+function contactMini(person,label){
+  const d=((person&&person[1])||'').replace(/\D/g,''),ok=d.length>=10,nm=esc((person&&person[0])||'—');
+  const call=ok?'<a class="mfab call" href="tel:+91'+d+'" data-haptic aria-label="Call '+nm+'">'+SVG_CALL+'</a>':'';
+  const wa=ok?'<a class="mfab wa" href="https://wa.me/91'+d+'?text='+encodeURIComponent(WA_GREETING)+'" target="_blank" rel="noopener" data-haptic aria-label="WhatsApp '+nm+'">'+SVG_WA+'</a>':'';
+  return '<span class="conn"><span class="cl">'+label+'</span>'+nm+call+wa+'</span>';
+}
+function partContacts(pn){const c=PART_CONTACT[pn];if(!c)return '<span class="conn muted">no contact on file</span>';return contactMini(c.pk,'Pramukh')+contactMini(c.pr,'Prabhari');}
+function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>Part '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(kendra)+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
+
+function renderInsights(){
+  const t=STATE.today,prev=STATE.prev;
+  const T=m=>sum(t.rows,m),pct=(a,b)=>b?Math.round(a/b*100):0;
+  const E='Total Elector',D='Total EFs Distributed',V='EFs Verified by BLO',G='Total EFs Digitized',S='EFs Submitted by Elector ( Not verified by BLO)',NM='No Mapping';
+  const elect=T(E),dist=T(D),ver=T(V),dig=T(G),nomap=T(NM),uef=T('Total UEF'),self=T('Mapped as Self'),prog=T('Mapped as Progeny');
+  let h='<div class="ins"><div class="ifun">';
+  [['Distributed EF',dist],['Verified EF',ver],['Digitized EF',dig]].forEach(x=>{h+='<div class="ifr"><div class="ifl"><span>'+x[0]+'</span><span>'+fmt(x[1])+' / '+fmt(elect)+' · '+pct(x[1],elect)+'%</span></div><div class="ibar"><i style="width:'+pct(x[1],elect)+'%"></i></div></div>';});
+  h+='<div class="ichips"><span class="ichip warn">No-mapping '+fmt(nomap)+'</span><span class="ichip">Self '+fmt(self)+'</span><span class="ichip">Progeny '+fmt(prog)+'</span><span class="ichip">UEF '+fmt(uef)+'</span></div></div>';
+  const dmap=prev?new Map(STATE.diff.changed.map(c=>[keyOf(c.row,STATE.key),c.dmap])):null;
+  const pd=(r,m)=>{if(!dmap)return 0;const d=dmap.get(keyOf(r,STATE.key));return d&&d[m]?d[m].delta:0;};
+  const kv=pn=>{const c=PART_CONTACT[pn];return c&&c.v;};
+  // 1) needs a nudge
+  h+='<section class="isec">';
+  if(!prev){h+='<h3>⚠️ Needs a nudge</h3><p class="isub">Pick two days (From → To) to see which booths didn\'t move.</p>';}
+  else{
+    const L=t.rows.filter(r=>((r[D]||0)<(r[E]||0))&&(Math.abs(pd(r,D))+Math.abs(pd(r,V))+Math.abs(pd(r,G))+Math.abs(pd(r,S)))===0).sort((a,b)=>(b[E]||0)-(a[E]||0));
+    h+='<h3>⚠️ Needs a nudge <span class="in">'+L.length+'</span></h3><p class="isub">No movement '+esc(STATE.from)+' → '+esc(STATE.to)+', not yet complete — biggest booths first.</p><div class="ilist">'+L.slice(0,20).map(r=>{const pn=r["Part Number"];const m=(r[D]||0)>0?('stalled · '+fmt(r[D])+' / '+fmt(r[E])+' distributed'):'<b class="hot">not started</b>';return insRow(pn,kv(pn),m);}).join('')+'</div>'+(L.length>20?'<p class="isub">…and '+(L.length-20)+' more.</p>':'');
+  }
+  h+='</section>';
+  // 2) no-mapping hotspots
+  const NL=t.rows.filter(r=>(r[NM]||0)>0).sort((a,b)=>(b[NM]||0)-(a[NM]||0));
+  h+='<section class="isec"><h3>📄 No-mapping hotspots'+(NL.length?' <span class="in">'+NL.length+'</span>':'')+'</h3><p class="isub">Voters who are neither Self nor Progeny → they\'ll need documents. Most first.</p>'+(NL.length?'<div class="ilist">'+NL.slice(0,20).map(r=>{const pn=r["Part Number"];return insRow(pn,kv(pn),'<b class="hot">'+fmt(r[NM])+'</b> no-mapping');}).join('')+'</div>'+(NL.length>20?'<p class="isub">…and '+(NL.length-20)+' more.</p>':''):'<p class="isub">None yet.</p>')+'</section>';
+  // 3) pace vs deadline
+  h+='<section class="isec">';
+  if(!prev){h+='<h3>⏱️ Pace vs '+DEADLINE+'</h3><p class="isub">Pick two days to project the finish date from the daily rate.</p>';}
+  else{
+    const days=daysBetween(STATE.from,STATE.to),dl=Math.max(0,Math.round((new Date(DEADLINE)-new Date(STATE.to))/864e5));
+    const M=[];t.rows.forEach(r=>{const rem=(r[E]||0)-(r[D]||0);if(rem<=0)return;const vel=pd(r,D)/days,eta=vel>0?rem/vel:Infinity;if(eta===Infinity||eta>dl)M.push({r,rem,eta});});
+    M.sort((a,b)=>(b.eta===Infinity?1e9:b.eta)-(a.eta===Infinity?1e9:a.eta));
+    h+='<h3>⏱️ Won\'t finish by '+DEADLINE+(M.length?' <span class="in">'+M.length+'</span>':'')+'</h3><p class="isub">'+dl+' days left · projected at the '+esc(STATE.from)+' → '+esc(STATE.to)+' distribution rate.</p>'+(M.length?'<div class="ilist">'+M.slice(0,20).map(o=>{const pn=o.r["Part Number"];const late=o.eta===Infinity?'no movement — stalled':('ETA '+addDays(STATE.to,Math.ceil(o.eta))+' · '+Math.ceil(o.eta-dl)+'d late');return insRow(pn,kv(pn),'<b class="hot">'+esc(late)+'</b> · '+fmt(o.rem)+' left');}).join('')+'</div>'+(M.length>20?'<p class="isub">…and '+(M.length-20)+' more.</p>':''):'<p class="isub">On track. 🎉</p>');
+  }
+  h+='</section></div>';
+  el.list.innerHTML=h;
+}
+
 function buildDiff(today,prev){
   const k=today.key, M=today.metrics;
   const tMap=new Map(today.rows.map(r=>[keyOf(r,k),r]));
@@ -213,9 +357,9 @@ function renderStats(){
 
 function renderTabs(){
   const df=STATE.diff, hasPrev=!!STATE.prev;
-  const defs=[['all','All parts',STATE.today.rows.length]];
+  const defs=[['insights','⚡ Insights',null],['all','All parts',STATE.today.rows.length]];
   if(hasPrev){ defs.push(['changed','Changed',df.changed.length],['added','Added',df.added.length],['removed','Removed',df.removed.length]); }
-  el.tabs.innerHTML=defs.map(([id,lab,n])=>'<button class="tab" type="button" data-tab="'+id+'" aria-pressed="'+(STATE.tab===id)+'">'+lab+'<span class="n">'+n+'</span></button>').join('');
+  el.tabs.innerHTML=defs.map(([id,lab,n])=>'<button class="tab" type="button" data-tab="'+id+'" aria-pressed="'+(STATE.tab===id)+'">'+lab+(n!=null?'<span class="n">'+n+'</span>':'')+'</button>').join('');
 }
 
 function headlineCells(r,dmap){
@@ -260,6 +404,7 @@ function currentList(){
   return items;
 }
 function render(){
+  if(STATE.tab==='insights'){ el.count.innerHTML=''; renderInsights(); return; }
   const items=currentList();
   const lbl=STATE.tab==='all'?'parts':STATE.tab;
   el.count.innerHTML='<b>'+items.length+'</b> '+(STATE.tab==='all'?(items.length===1?'part':'parts'):lbl);
@@ -340,6 +485,7 @@ async function boot(){
 }
 
 el.tabs.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab);});
+el.list.addEventListener('click',e=>{if(e.target.closest('[data-haptic]'))haptic(12);});
 el.search.addEventListener('input',()=>{STATE.q=el.search.value;el.clear.classList.toggle('show',!!el.search.value);render();});
 el.clear.addEventListener('click',()=>{el.search.value='';STATE.q='';el.clear.classList.remove('show');render();el.search.focus();});
 boot();
