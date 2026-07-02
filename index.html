@@ -14,21 +14,26 @@
     />
     <title>TradingOS</title>
     <script>
-      // Redirect direct paths to hash-based routing for SPA
+      // Redirect direct paths to hash-based routing for SPA.
+      // Base-aware: %BASE_URL% is replaced by Vite at build time ('/' in production,
+      // '/dev/' for subpath dev deploys) so the shim never bounces a subpath deploy
+      // back to the site root.
       (function() {
+        var base = '%BASE_URL%';
         var path = window.location.pathname;
         var hash = window.location.hash;
         var search = window.location.search;
-        
+
         // If we have an auth_code in the URL but no hash, redirect to hash
         if (search.includes('auth_code=') && !hash) {
-          window.location.replace('/#' + search);
+          window.location.replace(base + '#' + search);
           return;
         }
-        
-        // Handle direct paths like /live-trade
-        if (path !== '/' && path !== '' && !hash) {
-          window.location.replace('/#' + path + search);
+
+        // Handle direct paths like /live-trade (relative to the deploy base)
+        var rel = path.indexOf(base) === 0 ? path.slice(base.length - 1) : path;
+        if (rel !== '/' && rel !== '' && !hash) {
+          window.location.replace(base + '#' + rel + search);
         }
       })();
     </script>
