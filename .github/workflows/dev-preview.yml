@@ -30,14 +30,16 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies (root + server — vitest runs the server tests too)
+        run: |
+          npm install
+          cd server && npm install
 
       - name: Typecheck + production build (gate)
         run: npm run build
 
-      - name: Frontend tests
-        run: npx vitest run src
+      - name: Full test suite
+        run: npm test
 
       - name: Build /dev/-based bundle
         run: npx vite build --base=/dev/ --outDir dist-dev
