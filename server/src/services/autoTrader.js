@@ -315,6 +315,27 @@ const FYERS_APP_ID = process.env.FYERS_APP_ID;
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 const FYERS_DATA_BASE = "https://api-t1.fyers.in/data";
 
+// Surface a dead/expired token mid-session instead of silently looping errors. Refresh is SEBI-
+// disabled, so once the token dies every call fails until a manual reconnect — during which open
+// positions are protected ONLY by their resting exchange stop (no target/square-off can fire). Track
+// consecutive auth failures and raise a distinct audit event + health flag the operator can watch.
+let consecutiveAuthFailures = 0;
+function noteAuthFailure() {
+  consecutiveAuthFailures++;
+  if (consecutiveAuthFailures === 3 || consecutiveAuthFailures % 20 === 0) {
+    logAudit({ type: "AUTH_FAILURE_STREAK", count: consecutiveAuthFailures });
+    console.error(
+      `[AUTO-TRADER] ⚠️ FYERS AUTH FAILING (${consecutiveAuthFailures}×) — token likely expired. New orders/exits will fail; open positions are protected only by the resting exchange stop. Reconnect FYERS.`
+    );
+  }
+}
+function noteAuthSuccess() {
+  if (consecutiveAuthFailures > 0) {
+    logAudit({ type: "AUTH_RECOVERED", after: consecutiveAuthFailures });
+    consecutiveAuthFailures = 0;
+  }
+}
+
 // Account/order API call (api/v3). Reads the token from the session each attempt and refreshes
 // once on an auth failure, so a token that dies mid-session doesn't blind the engine.
 async function fyersApiCall(endpoint, session, body = null, method = "GET", _retried = false) {
@@ -333,6 +354,7 @@ async function fyersApiCall(endpoint, session, body = null, method = "GET", _ret
     if (response.status === 401 && !_retried && (await refreshAccessToken(session))) {
       return fyersApiCall(endpoint, session, body, method, true);
     }
+    if (response.status === 401) noteAuthFailure();
     throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
   }
   const data = await response.json();
@@ -340,8 +362,10 @@ async function fyersApiCall(endpoint, session, body = null, method = "GET", _ret
     if (!_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
       return fyersApiCall(endpoint, session, body, method, true);
     }
+    if (isTokenErrorData(data)) noteAuthFailure();
     throw new Error(data.message || "FYERS API error");
   }
+  noteAuthSuccess();
   return data;
 }
 
@@ -360,6 +384,8 @@ async function fyersDataFetch(url, session, _retried = false) {
   if (data.s !== "ok" && !_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
     return fyersDataFetch(url, session, true);
   }
+  if (response.status === 401 || isTokenErrorData(data)) noteAuthFailure();
+  else if (data.s === "ok") noteAuthSuccess();
   return data;
 }
 
@@ -505,10 +531,25 @@ async function fetchOptionQuote(optionSymbol, session) {
 }
 
 // ─── OPTION PRICE DERIVATION ──────────────────────────────────────────
+// NSE option premiums move in ₹0.05 ticks; FYERS rejects an order whose price is not a multiple of
+// the tick — and a rejected stop-loss leaves a naked position. Snap every computed order price onto
+// the tick grid. dir: "up" for a marketable BUY limit (stays >= ask), "down" for a protective stop we
+// never want looser, "near" for everything else. The 1e-9 epsilon stops FP dust from bumping an
+// already-on-grid price to the next tick.
+export const OPTION_TICK = 0.05;
+export function roundToTick(price, dir = "near") {
+  const p = Number(price) || 0;
+  if (p <= 0) return 0;
+  const steps = p / OPTION_TICK;
+  const n = dir === "up" ? Math.ceil(steps - 1e-9) : dir === "down" ? Math.floor(steps + 1e-9) : Math.round(steps);
+  return Math.round(n * OPTION_TICK * 100) / 100;
+}
+
 function computeEntryLimitPrice(quote) {
   const base = quote.ask || quote.lp || 0;
   if (base <= 0) return 0;
-  return Math.ceil(base * (1 + CONFIG.LIMIT_BUFFER_PCT / 100) * 100) / 100;
+  // Round the buffered price UP to the tick grid so the limit stays marketable AND is a valid tick.
+  return roundToTick(base * (1 + CONFIG.LIMIT_BUFFER_PCT / 100), "up");
 }
 
 function computeOptionSLAndTarget(avgFillPrice, signal) {
@@ -531,12 +572,45 @@ function computeOptionSLAndTarget(avgFillPrice, signal) {
   const optionSL = Math.max(0.05, avgFillPrice - optionRiskPts);
   const optionTarget = avgFillPrice + optionTargetPts;
   return {
-    optionSL: Math.round(optionSL * 100) / 100,
-    optionTarget: Math.round(optionTarget * 100) / 100,
+    // Snap to the ₹0.05 tick grid or FYERS rejects the SL/target order. SL rounds DOWN (valid and
+    // never tighter than intended, floored at the ₹0.05 minimum), target rounds to nearest.
+    optionSL: Math.max(0.05, roundToTick(optionSL, "down")),
+    optionTarget: roundToTick(optionTarget, "near"),
   };
 }
 
 // ─── ORDER EXECUTION ──────────────────────────────────────────────────
+/**
+ * C-LIVE-1: after the entry fill poll, make sure NO working entry order is left resting at the
+ * broker, and return the TRUE final fill. On a TIMEOUT/PARTIAL the DAY limit may still be live —
+ * cancel it, then re-read the order so a fill that landed between the last poll and the cancel is
+ * never abandoned (which would leave an untracked, unprotected position). Terminal states pass
+ * through unchanged.
+ */
+async function reconcileEntryOrder(orderId, fill, session) {
+  if (fill.status === "FILLED" || ["REJECTED", "CANCELLED", "EXPIRED"].includes(fill.status)) {
+    return fill;
+  }
+  try {
+    await cancelOrder(orderId, session, logAudit);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Entry cancel failed for ${orderId} (will re-read status):`, err.message);
+  }
+  try {
+    const finalState = await getOrderDetails(orderId, session);
+    return {
+      ...fill,
+      status: finalState.status,
+      filledQty: finalState.filledQty,
+      pendingQty: finalState.pendingQty,
+      avgFillPrice: finalState.avgFillPrice || fill.avgFillPrice,
+    };
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Entry re-read failed for ${orderId}:`, err.message);
+    return fill;
+  }
+}
+
 async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote) {
   const entryLimitPrice = computeEntryLimitPrice(entryQuote);
   if (entryLimitPrice <= 0) {
@@ -562,7 +636,7 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
     auditLogger: logAudit,
   });
 
-  const fill = await waitForFill(entryOrder.orderId, session, {
+  let fill = await waitForFill(entryOrder.orderId, session, {
     timeoutMs: CONFIG.ORDER_FILL_TIMEOUT_MS,
     pollMs: CONFIG.ORDER_POLL_INTERVAL_MS,
     paperTrading: CONFIG.PAPER_TRADING,
@@ -570,42 +644,30 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
     auditLogger: logAudit,
   });
 
-  const filledQty = CONFIG.PAPER_TRADING ? qty : fill.filledQty;
-  if (fill.status === "REJECTED" || fill.status === "CANCELLED" || fill.status === "EXPIRED" || filledQty <= 0) {
-    logAudit({ type: "ENTRY_FAILED", orderId: entryOrder.orderId, status: fill.status, symbol: optionSymbol });
-    return null;
+  // C-LIVE-1: never abandon a working entry order. On any non-FILLED result cancel the resting
+  // remainder and re-read the true fill, so a TIMEOUT (0 filled, order still live) or a partial can't
+  // fill later as an untracked, unprotected position. After this, filledQty is the real held qty and
+  // any remainder has been cancelled — so we gate purely on filledQty, not the raw status.
+  if (!CONFIG.PAPER_TRADING) {
+    fill = await reconcileEntryOrder(entryOrder.orderId, fill, session);
   }
 
-  // If partially filled then timed out, accept the filled quantity and let the
-  // remaining pending qty expire on its own.
-  if (fill.status === "PARTIAL") {
-    try {
-      await cancelOrder(entryOrder.orderId, session, logAudit);
-    } catch (err) {
-      console.error(`[AUTO-TRADER] Could not cancel remaining entry order ${entryOrder.orderId}:`, err.message);
-    }
+  const filledQty = CONFIG.PAPER_TRADING ? qty : Number(fill.filledQty) || 0;
+  if (filledQty <= 0) {
+    logAudit({ type: "ENTRY_FAILED", orderId: entryOrder.orderId, status: fill.status, symbol: optionSymbol });
+    return null;
   }
 
   const avgFillPrice = fill.avgFillPrice || entryLimitPrice;
   const { optionSL, optionTarget } = computeOptionSLAndTarget(avgFillPrice, tradeSignal);
 
-  let slOrderId = null;
-  if (!CONFIG.PAPER_TRADING) {
-    const slOrder = await placeStopLossOrder({
-      symbol: optionSymbol,
-      qty: filledQty,
-      stopPrice: optionSL,
-      session,
-      paperTrading: false,
-      auditLogger: logAudit,
-    });
-    slOrderId = slOrder.orderId;
-  }
-
+  // C-LIVE-2: record the position BEFORE placing the stop-loss so a filled entry is ALWAYS tracked,
+  // even if SL placement throws. An untracked filled position is invisible to reconciliation and
+  // would sit naked; a tracked one is caught by the monitor backstop and the SL re-arm below.
   const position = {
     id: entryOrder.orderId,
     entryOrderId: entryOrder.orderId,
-    slOrderId,
+    slOrderId: null,
     optionSymbol,
     quantity: filledQty, // currently-held qty (reduced as legs exit)
     entryQty: filledQty, // qty going into the current close (synced to quantity across legs)
@@ -633,7 +695,6 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
     type: "POSITION_OPENED",
     strategy: tradeSignal.strategy,
     orderId: entryOrder.orderId,
-    slOrderId,
     optionSymbol,
     qty: filledQty,
     avgFillPrice,
@@ -646,6 +707,35 @@ async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote)
   console.log(
     `[AUTO-TRADER] POSITION [${tradeSignal.strategy}]: ${optionSymbol} Qty:${filledQty} AvgFill:₹${avgFillPrice.toFixed(2)} SL:₹${optionSL.toFixed(2)} T:₹${optionTarget.toFixed(2)}`
   );
+
+  // Attach the protective broker stop-loss. If it can't be placed, flatten immediately rather than
+  // hold a naked long; if the flatten also fails, the position stays TRACKED and monitorPositions
+  // re-arms the SL / retries the exit every cycle.
+  if (!CONFIG.PAPER_TRADING) {
+    try {
+      const slOrder = await placeStopLossOrder({
+        symbol: optionSymbol,
+        qty: filledQty,
+        stopPrice: optionSL,
+        session,
+        paperTrading: false,
+        auditLogger: logAudit,
+      });
+      position.slOrderId = slOrder.orderId;
+      logAudit({ type: "SL_PLACED", optionSymbol, slOrderId: position.slOrderId, stopPrice: optionSL });
+      saveState();
+    } catch (err) {
+      console.error(`[AUTO-TRADER] SL placement FAILED for ${optionSymbol} — flattening to avoid a naked position:`, err.message);
+      logAudit({ type: "SL_PLACEMENT_FAILED", optionSymbol, error: err.message });
+      try {
+        await closePosition(position, session, "SL_PLACEMENT_FAILED");
+      } catch (flatErr) {
+        console.error(`[AUTO-TRADER] Flatten after SL failure ALSO failed for ${optionSymbol} — monitor will re-arm/retry:`, flatErr.message);
+        logAudit({ type: "FLATTEN_FAILED", optionSymbol, error: flatErr.message });
+      }
+      return null;
+    }
+  }
 
   return position;
 }
@@ -1049,6 +1139,12 @@ async function monitorPositions(session) {
   for (const position of openPositions) {
     if (position.status !== "OPEN") continue;
     try {
+      // A live position must always have a resting broker stop. If it lost its SL (initial placement
+      // failed, or the SL order was cancelled/expired), re-arm before anything else — self-heals the
+      // rare naked window from a failed SL placement in openPosition.
+      if (!CONFIG.PAPER_TRADING && !position.slOrderId) {
+        await ensureStopLoss(position, session);
+      }
       const quote = await fetchOptionQuoteWithTickFallback(position.optionSymbol, session);
       const ltp = quote?.lp || 0;
       if (ltp <= 0) continue;
@@ -1082,7 +1178,11 @@ async function monitorPositions(session) {
   if (stillOpen.length > 0 && !checkDailyLossLimit()) {
     console.error(`[AUTO-TRADER] DAILY LOSS LIMIT breached — flattening ${stillOpen.length} open position(s)`);
     for (const pos of stillOpen) {
-      await closePosition(pos, session, "DAILY_LOSS_LIMIT");
+      try {
+        await closePosition(pos, session, "DAILY_LOSS_LIMIT");
+      } catch (err) {
+        console.error(`[AUTO-TRADER] Daily-loss flatten failed for ${pos.optionSymbol}:`, err.message);
+      }
     }
   }
 }
@@ -1279,55 +1379,72 @@ async function tradingLoop(session) {
     clearTimeout(pollInterval);
     pollInterval = null;
   }
-  const today = new Date().toDateString();
-  if (lastTradeDate !== today) {
-    todayTrades = 0;
-    lastTradeDate = today;
-    dailyPnL = 0;
-    dailyRealizedPnL = 0;
-    consecutiveLosses = 0;
-    activeAlerts.clear();
-    openPositions = openPositions.filter((p) => p.status !== "CLOSED");
-    processedSignals.clear();
-    console.log(`[AUTO-TRADER] New day - all counters reset`);
-    saveState();
-  }
-  await fetchIndiaVIX(session);
-  const { hours, minutes } = getISTTime();
-  const timeStr = `${hours}:${minutes.toString().padStart(2, "0")}`;
-  if (hours === 9 && minutes < 15) {
-    marketStatus = "PRE_OPEN";
-    console.log(`[AUTO-TRADER] Pre-market IST (${timeStr})`);
-  } else if (hours < 9 || hours > 15 || (hours === 15 && minutes >= 30)) {
-    marketStatus = "CLOSED";
-    console.log(`[AUTO-TRADER] Market closed IST (${timeStr})`);
-    for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
-      await closePosition(pos, session, "MARKET_CLOSE");
+  // Default cadence; the market-closed branch slows it to 60s. The reschedule lives in `finally` so a
+  // throw ANYWHERE below can never stop the loop from re-arming — otherwise one bad quote/order error
+  // would silently freeze the bot while it still reports isRunning=true and pm2 sees a live process.
+  let rescheduleMs = CONFIG.POLL_INTERVAL_MS;
+  try {
+    const today = new Date().toDateString();
+    if (lastTradeDate !== today) {
+      todayTrades = 0;
+      lastTradeDate = today;
+      dailyPnL = 0;
+      dailyRealizedPnL = 0;
+      consecutiveLosses = 0;
+      activeAlerts.clear();
+      openPositions = openPositions.filter((p) => p.status !== "CLOSED");
+      processedSignals.clear();
+      console.log(`[AUTO-TRADER] New day - all counters reset`);
+      saveState();
     }
-    pollInterval = setTimeout(() => tradingLoop(session), 60000);
-    return;
-  } else if (!isNseMarketOpen()) {
-    // Within market hours by the clock, but the exchange is closed (weekend or holiday).
-    // The time-of-day branches above only know the clock, not the NSE calendar.
-    marketStatus = "CLOSED";
-    console.log(`[AUTO-TRADER] Exchange holiday/weekend - no trading IST (${timeStr})`);
-    for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
-      await closePosition(pos, session, "MARKET_CLOSE");
+    await fetchIndiaVIX(session);
+    const { hours, minutes } = getISTTime();
+    const timeStr = `${hours}:${minutes.toString().padStart(2, "0")}`;
+    if (hours === 9 && minutes < 15) {
+      marketStatus = "PRE_OPEN";
+      console.log(`[AUTO-TRADER] Pre-market IST (${timeStr})`);
+    } else if (hours < 9 || hours > 15 || (hours === 15 && minutes >= 30)) {
+      marketStatus = "CLOSED";
+      console.log(`[AUTO-TRADER] Market closed IST (${timeStr})`);
+      for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
+        try {
+          await closePosition(pos, session, "MARKET_CLOSE");
+        } catch (err) {
+          console.error(`[AUTO-TRADER] Market-close exit failed for ${pos.optionSymbol}:`, err.message);
+        }
+      }
+      rescheduleMs = 60000;
+    } else if (!isNseMarketOpen()) {
+      // Within market hours by the clock, but the exchange is closed (weekend or holiday).
+      // The time-of-day branches above only know the clock, not the NSE calendar.
+      marketStatus = "CLOSED";
+      console.log(`[AUTO-TRADER] Exchange holiday/weekend - no trading IST (${timeStr})`);
+      for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
+        try {
+          await closePosition(pos, session, "MARKET_CLOSE");
+        } catch (err) {
+          console.error(`[AUTO-TRADER] Holiday-close exit failed for ${pos.optionSymbol}:`, err.message);
+        }
+      }
+    } else {
+      marketStatus = "OPEN";
+      // If startup reconciliation couldn't complete (e.g. a transient positions-fetch failure),
+      // retry it here so the engine self-heals and can resume taking trades without a restart.
+      if (!reconcileOk) {
+        await reconcilePositionsWithBroker(session);
+      }
+      for (const underlying of getActiveUnderlyings()) {
+        await processCandles(underlying, session);
+      }
+      await monitorPositions(session);
     }
-  } else {
-    marketStatus = "OPEN";
-    // If startup reconciliation couldn't complete (e.g. a transient positions-fetch failure),
-    // retry it here so the engine self-heals and can resume taking trades without a restart.
-    if (!reconcileOk) {
-      await reconcilePositionsWithBroker(session);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Trading loop cycle error:`, err.message);
+    logAudit({ type: "LOOP_ERROR", error: err.message });
+  } finally {
+    if (isRunning) {
+      pollInterval = setTimeout(() => tradingLoop(session), rescheduleMs);
     }
-    for (const underlying of getActiveUnderlyings()) {
-      await processCandles(underlying, session);
-    }
-    await monitorPositions(session);
-  }
-  if (isRunning) {
-    pollInterval = setTimeout(() => tradingLoop(session), CONFIG.POLL_INTERVAL_MS);
   }
 }
 
@@ -1344,11 +1461,18 @@ export async function startAutoTrader(sessionId) {
     CONFIG.CAPITAL = CONFIG.PAPER_CAPITAL > 0 ? CONFIG.PAPER_CAPITAL : CONFIG.CAPITAL;
     console.log(`[AUTO-TRADER] Paper capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
   } else {
+    // LIVE: size and risk-limit against the REAL balance. If it can't be fetched (429 / expired token
+    // / genuinely 0), REFUSE to start rather than run with a stale CONFIG.CAPITAL — which could be the
+    // ₹10L paper value from a prior paper session. Both position sizing and the daily-loss breaker key
+    // off CONFIG.CAPITAL, so a wrong value silently mis-scales real-money risk.
     const actualCapital = await fetchAvailableFunds(session);
-    if (actualCapital > 0) {
-      CONFIG.CAPITAL = actualCapital;
-      console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+    if (!(actualCapital > 0)) {
+      throw new Error(
+        "Cannot start LIVE trading: broker funds unavailable (0 or fetch failed — often a rate-limit). Reconnect FYERS and retry."
+      );
     }
+    CONFIG.CAPITAL = actualCapital;
+    console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
   }
   try {
     const positions = await fyersApiCall("/positions", session);
@@ -1501,6 +1625,9 @@ export function getAutoTraderStatus() {
     riskPercent: CONFIG.RISK_PERCENT,
     paperTrading: CONFIG.PAPER_TRADING,
     emergencyStop: CONFIG.EMERGENCY_STOP,
+    // Token health so the UI can warn when the broker session has died mid-run (see noteAuthFailure).
+    authHealthy: consecutiveAuthFailures < 3,
+    consecutiveAuthFailures,
     positionSizingMode: CONFIG.POSITION_SIZING_MODE,
     fixedLots: CONFIG.FIXED_LOTS,
     selectedStrategies: CONFIG.SELECTED_STRATEGIES,
@@ -1539,6 +1666,13 @@ export function getPerformanceSummary() {
 }
 
 export function setPaperTrading(enabled) {
+  // A money-mode switch must happen only while STOPPED. Start re-fetches capital, reconciles broker
+  // positions, and (via reconcile) clears phantom paper positions. Flipping mid-run would leave the
+  // other mode's CONFIG.CAPITAL and any open paper positions in place — stale risk limits, or a REAL
+  // market exit fired on a position that was never actually opened.
+  if (isRunning && enabled !== CONFIG.PAPER_TRADING) {
+    throw new Error("Stop the bot before switching between paper and live mode.");
+  }
   CONFIG.PAPER_TRADING = enabled;
   saveState();
   return { paperTrading: CONFIG.PAPER_TRADING };
@@ -1548,8 +1682,15 @@ export function updateConfig(updates) {
   // L3 (audited): the /config route writes PAPER_TRADING via CONFIG_FIELD_MAP just like /paper-trading,
   // so it must apply the SAME guard — never let a non-boolean (0/""/null) silently flip the bot to
   // LIVE money. Drop a malformed paperTrading so the current mode is preserved.
-  if (updates.paperTrading !== undefined && typeof updates.paperTrading !== "boolean") {
-    delete updates.paperTrading;
+  if (updates.paperTrading !== undefined) {
+    if (typeof updates.paperTrading !== "boolean") {
+      delete updates.paperTrading;
+    } else if (isRunning && updates.paperTrading !== CONFIG.PAPER_TRADING) {
+      // Same guard as setPaperTrading: never flip paper/live while the bot is running.
+      console.error("[AUTO-TRADER] Ignoring paper/live mode change via /config while running — stop the bot first.");
+      logAudit({ type: "MODE_CHANGE_BLOCKED", requested: updates.paperTrading });
+      delete updates.paperTrading;
+    }
   }
   // Sanitize the timeframes up front — accept an array (or single value) of supported candle
   // intervals only: coerce to numbers, keep allowed ones, dedupe. Also accept a legacy single
