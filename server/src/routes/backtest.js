@@ -155,7 +155,9 @@ export function liveEntryGate({ decimal, hour, dayTrades, dayPnL, consecutiveLos
 }
 
 // ─── Backtest Engine ──────────────────────────────────────────────
-function runBacktest(candles, config) {
+// Exported for unit tests (it takes candles + config directly, no network). The route handlers below
+// fetch candles then call it.
+export function runBacktest(candles, config) {
   const {
     symbol = "NSE:NIFTYBANK-INDEX",
     strategy = "EMA5",
@@ -390,7 +392,12 @@ function runBacktest(candles, config) {
     const prevCandle = candles[i - 1];
     const ema = i >= emaOffset ? emaValues[i - emaOffset] : null;
     const clk = istClock(candle.timestamp);
-    if (clk.dayKey !== curDay) { curDay = clk.dayKey; dayTrades = 0; dayPnL = 0; }
+    // New IST day: reset the per-day live-gate counters. currentConsecutiveLosses MUST reset here too
+    // to match the live bot (autoTrader tradingLoop zeroes consecutiveLosses each new day) — the
+    // consecutive-loss breaker is an INTRADAY stop, not a lifetime kill switch. Without this reset a
+    // strategy that hit 3 straight losses stayed permanently blocked (blocked ⇒ no wins ⇒ counter never
+    // cleared), silently freezing it for the rest of the run and diverging from live.
+    if (clk.dayKey !== curDay) { curDay = clk.dayKey; dayTrades = 0; dayPnL = 0; currentConsecutiveLosses = 0; }
 
     if (currentCapital > peakEquity) peakEquity = currentCapital;
     const drawdown = ((peakEquity - currentCapital) / peakEquity) * 100;
