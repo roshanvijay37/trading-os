@@ -13,6 +13,7 @@ import { LineChart, Activity } from "lucide-react";
 import { useStrategy } from "../state/StrategyProvider";
 import { ChainGate } from "../components/ChainGate";
 import { Panel, ProvenanceBadge, Stat, Row, Empty, Segmented } from "../components/ui";
+import { ChartTooltip, SvgHoverLayer, useMeasuredWidth } from "../../components/charts/svgHover";
 import { computePayoff, type PayoffOpts } from "../lib/payoff";
 import { lognormalWeights } from "../lib/probability";
 import { money, dec, signed } from "../lib/format";
@@ -191,6 +192,11 @@ function PayoffChart({
   showToday: boolean;
   showDist: boolean;
 }) {
+  // Measured width: viewBox == rendered CSS px, so no preserveAspectRatio="none"
+  // stretching at narrow widths, and hover math is 1:1.
+  const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
+  const width = measuredW || W;
+  const [hover, setHover] = useState<number | null>(null);
   const geom = useMemo(() => {
     const pts = result.points;
     if (pts.length < 2) return null;
@@ -216,7 +222,7 @@ function PayoffChart({
     minY -= padY;
     maxY += padY;
 
-    const plotW = W - PAD_L - PAD_R;
+    const plotW = width - PAD_L - PAD_R;
     const plotH = H - PAD_T - PAD_B;
     const sx = (s: number) => PAD_L + ((s - minX) / (maxX - minX)) * plotW;
     const sy = (v: number) => PAD_T + (1 - (v - minY) / (maxY - minY)) * plotH;
@@ -279,8 +285,9 @@ function PayoffChart({
       ticks,
       minX,
       maxX,
+      hoverXs: pts.map((p) => sx(p.spot)),
     };
-  }, [result.points, result.breakevens, chain, atmIv, showToday, showDist]);
+  }, [result.points, result.breakevens, chain, atmIv, showToday, showDist, width]);
 
   if (!geom) {
     return (
@@ -291,10 +298,12 @@ function PayoffChart({
   }
 
   const zeroInView = geom.zeroY >= PAD_T && geom.zeroY <= H - PAD_B;
+  const hp = hover != null ? result.points[hover] : null;
 
   return (
     <div className="rounded-panel border border-border bg-panel p-3">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
+      <div ref={wrapRef} className="relative">
+      <svg viewBox={`0 0 ${width} ${H}`} className="w-full">
         {/* Profit / loss shaded regions */}
         {geom.profitArea && <path d={geom.profitArea} fill="rgba(34,197,94,0.14)" />}
         {geom.lossArea && <path d={geom.lossArea} fill="rgba(244,63,94,0.14)" />}
@@ -304,7 +313,7 @@ function PayoffChart({
 
         {/* Zero line */}
         {zeroInView && (
-          <line x1={PAD_L} y1={geom.zeroY} x2={W - PAD_R} y2={geom.zeroY} stroke="#52525b" strokeWidth={1} />
+          <line x1={PAD_L} y1={geom.zeroY} x2={width - PAD_R} y2={geom.zeroY} stroke="#52525b" strokeWidth={1} />
         )}
 
         {/* X ticks */}
@@ -340,7 +349,42 @@ function PayoffChart({
         <text x={geom.spotX} y={H - PAD_B - 3} textAnchor="middle" className="fill-zinc-200 font-mono" fontSize={9}>
           {dec(chain.spot, 0)}
         </text>
+
+        <SvgHoverLayer
+          width={width}
+          height={H}
+          padL={PAD_L}
+          padR={PAD_R}
+          padT={PAD_T}
+          padB={PAD_B}
+          count={result.points.length}
+          xOf={(i) => geom.hoverXs[i]}
+          yOf={(i) => geom.sy(result.points[i].expiryPnl)}
+          xs={geom.hoverXs}
+          hoverIndex={hover}
+          onHover={setHover}
+        />
       </svg>
+      {hp && hover != null && (
+        <ChartTooltip
+          x={geom.hoverXs[hover]}
+          y={geom.sy(hp.expiryPnl)}
+          containerWidth={width}
+          title={`Spot ${dec(hp.spot, 0)}`}
+          rows={[
+            {
+              label: "Expiry P/L",
+              value: money(hp.expiryPnl),
+              color: hp.expiryPnl >= 0 ? "#10b981" : "#ef4444",
+            },
+            ...(showToday && Number.isFinite(hp.todayPnl)
+              ? [{ label: "Today P/L", value: money(hp.todayPnl), color: hp.todayPnl >= 0 ? "#10b981" : "#ef4444" }]
+              : []),
+            { label: "vs spot", value: `${signed(((hp.spot - chain.spot) / chain.spot) * 100, 2)}%` },
+          ]}
+        />
+      )}
+      </div>
 
       {/* Legend */}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px]">

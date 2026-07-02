@@ -1,4 +1,5 @@
 import { BookOpen, Bot } from "lucide-react";
+import { Badge, Panel } from "../components/ui";
 import { useTradingStore } from "../store/useTradingStore";
 import { formatDate } from "../utils/date";
 import { formatCurrency } from "../utils/format";
@@ -24,30 +25,19 @@ export function Journal() {
       ) : (
         <div className="space-y-2">
           {trades.map((trade) => (
-            <article
-              key={trade.id}
-              className="rounded-panel border border-border bg-panel p-4"
-            >
+            <Panel key={trade.id}>
               <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-2xs font-semibold text-zinc-200">{trade.symbol}</h2>
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-2xs font-semibold ${
-                        trade.side === "LONG"
-                          ? "border border-gain/20 bg-gain-dim text-gain"
-                          : "border border-loss/20 bg-loss-dim text-loss"
-                      }`}
-                    >
-                      {trade.side}
-                    </span>
-                    <span className="rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-2xs text-zinc-500">
+                    <Badge tone={trade.side === "LONG" ? "green" : "rose"}>{trade.side}</Badge>
+                    <Badge tone={trade.outcome === "WIN" ? "green" : trade.outcome === "LOSS" ? "rose" : "zinc"}>
                       {trade.outcome}
-                    </span>
-                    <span className="flex items-center gap-1 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-2xs text-zinc-600">
+                    </Badge>
+                    <Badge tone="zinc">
                       <Bot size={8} />
                       AUTO
-                    </span>
+                    </Badge>
                   </div>
                   <p className="mt-1 text-2xs text-zinc-600">
                     {formatDate(trade.date)} · Entry {trade.entryPrice} · Stop{" "}
@@ -71,7 +61,7 @@ export function Journal() {
                   </span>
                 </div>
               </div>
-            </article>
+            </Panel>
           ))}
         </div>
       )}

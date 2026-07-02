@@ -17,6 +17,7 @@ import { useMemo, useState } from "react";
 import { Percent, Target, BarChart3 } from "lucide-react";
 import { ChainGate } from "../components/ChainGate";
 import { Panel, ProvenanceBadge, Select, Row, Banner } from "../components/ui";
+import { useMeasuredWidth } from "../../components/charts/svgHover";
 import { dec, pct, volPct } from "../lib/format";
 import {
   probItm,
@@ -289,6 +290,10 @@ function DistributionChart({
   range: ExpectedRange;
   curve: DistributionPoint[];
 }) {
+  // Measured width so the viewBox matches the rendered CSS px — kills the
+  // preserveAspectRatio="none" stretching at narrow widths.
+  const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
+  const width = measuredW || CHART_W;
   const geom = useMemo(() => {
     if (curve.length < 2) return null;
     const xs = curve.map((p) => p.spot);
@@ -297,7 +302,7 @@ function DistributionChart({
     const maxD = curve.reduce((m, p) => Math.max(m, p.density), 0);
     if (!(maxX > minX) || !(maxD > 0)) return null;
 
-    const plotW = CHART_W - 2 * PAD_X;
+    const plotW = width - 2 * PAD_X;
     const plotH = CHART_H - PAD_TOP - PAD_BOTTOM;
     const sx = (s: number) => PAD_X + ((s - minX) / (maxX - minX)) * plotW;
     const sy = (d: number) => PAD_TOP + (1 - d / maxD) * plotH;
@@ -318,7 +323,7 @@ function DistributionChart({
       hi1X: sx(clampX(range.upper1)),
       inRangeAtm: atmStrike >= minX && atmStrike <= maxX,
     };
-  }, [curve, spot, atmStrike, range]);
+  }, [curve, spot, atmStrike, range, width]);
 
   return (
     <div className="rounded-panel border border-border bg-panel p-3">
@@ -333,7 +338,8 @@ function DistributionChart({
         <Banner tone="warn">Not enough resolution to draw the distribution at this IV/expiry.</Banner>
       ) : (
         <>
-          <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full" preserveAspectRatio="none">
+          <div ref={wrapRef}>
+          <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full">
             {/* 1σ shaded band */}
             <rect
               x={geom.lo1X}
@@ -346,7 +352,7 @@ function DistributionChart({
             <polygon points={geom.areaPts} fill="rgba(59,130,246,0.16)" />
             <polyline points={geom.linePts} fill="none" stroke="#3b82f6" strokeWidth={1.5} />
             {/* baseline */}
-            <line x1={PAD_X} y1={geom.baseY} x2={CHART_W - PAD_X} y2={geom.baseY} stroke="#23232a" strokeWidth={1} />
+            <line x1={PAD_X} y1={geom.baseY} x2={width - PAD_X} y2={geom.baseY} stroke="#23232a" strokeWidth={1} />
             {/* ±1σ markers */}
             <VLine x={geom.lo1X} color="#3b82f6" dash />
             <VLine x={geom.hi1X} color="#3b82f6" dash />
@@ -355,6 +361,7 @@ function DistributionChart({
             {/* spot marker */}
             <VLine x={geom.spotX} color="#e4e4e7" />
           </svg>
+          </div>
 
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[9px]">
             <LegendDot color="#e4e4e7" label={`Spot ${dec(spot, 0)}`} />

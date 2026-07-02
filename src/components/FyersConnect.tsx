@@ -1,6 +1,7 @@
 import { Link2, LogOut, Shield } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { authApi } from "../services/api";
+import { toast } from "./ui/toast";
 
 export function FyersConnect() {
   const [connected, setConnected] = useState(false);
@@ -59,9 +60,10 @@ export function FyersConnect() {
           setConnected(true);
           setUser(result.user);
           window.history.replaceState({}, "", window.location.pathname);
+          toast.success(`Connected to FYERS as ${result.user?.userName ?? "trader"}`, { id: "fyers-auth" });
         })
         .catch((err) => {
-          alert("FYERS login failed: " + err.message);
+          toast.error("FYERS login failed: " + err.message, { id: "fyers-auth" });
           window.location.hash = "";
         })
         .finally(() => setLoading(false));
@@ -75,7 +77,7 @@ export function FyersConnect() {
       const { loginUrl } = await authApi.getLoginUrl();
       window.location.href = loginUrl;
     } catch (err: any) {
-      alert("Failed to get login URL: " + err.message);
+      toast.error("Failed to get login URL: " + err.message, { id: "fyers-auth" });
       setLoading(false);
     }
   };

@@ -1,42 +1,16 @@
-import {
-  BarChart3,
-  BookOpen,
-  Bot,
-  CandlestickChart,
-  LayoutDashboard,
-  LineChart,
-  Radar,
-  Settings,
-  ShieldCheck,
-  Swords,
-  TestTube,
-  X,
-  ChevronRight,
-  Activity,
-  Menu,
-} from "lucide-react";
+import { X, ChevronRight, Activity, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useMatch } from "react-router-dom";
 import { FyersConnect } from "./FyersConnect";
+import { Toaster } from "./ui/toast";
+import { CommandPalette } from "./commandPalette/CommandPalette";
+import { togglePalette } from "./commandPalette/registry";
+import { navigation } from "./navigation";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import { useLiveDataSync } from "../store/useLiveDataSync";
 import { pingApi, isFyersConnected } from "../services/api";
 import { getAIStatus } from "../services/aiCio";
 import type { DashboardState } from "../types/institutional";
-
-const navigation = [
-  { to: "/", label: "Command Center", icon: LayoutDashboard, group: "Operations" },
-  { to: "/trading-bot", label: "Trading Bot", icon: Bot, group: "Operations" },
-  { to: "/strategy-manager", label: "Strategies", icon: Swords, group: "Operations" },
-  { to: "/chart", label: "Live Chart", icon: LineChart, group: "Operations" },
-  { to: "/options", label: "Options", icon: CandlestickChart, group: "Trading Desk" },
-  { to: "/backtest", label: "Backtest Lab", icon: TestTube, group: "Research" },
-  { to: "/market-intelligence", label: "Market Intel", icon: Radar, group: "Research" },
-  { to: "/risk-dashboard", label: "Risk Engine", icon: ShieldCheck, group: "Risk" },
-  { to: "/journal", label: "Journal", icon: BookOpen, group: "Records" },
-  { to: "/reports", label: "Reports", icon: BarChart3, group: "Records" },
-  { to: "/settings", label: "Settings", icon: Settings, group: "System" },
-];
 
 function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
   const match = useMatch(to === "/" ? "/" : `${to}/*`);
@@ -188,6 +162,19 @@ export function Layout() {
   const [open, setOpen] = useState(false);
   useLiveDataSync(); // poll backend status -> institutional store (Command Center, Risk Dashboard)
 
+  // Global Ctrl/Cmd-K — the single palette binding for the whole app (the Options
+  // Workspace's local handler was removed in the same change; its other shortcuts stay).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        togglePalette();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const grouped = navigation.reduce<Record<string, typeof navigation>>((acc, item) => {
     if (!acc[item.group]) acc[item.group] = [];
     acc[item.group].push(item);
@@ -287,6 +274,9 @@ export function Layout() {
           <Outlet />
         </main>
       </div>
+
+      <Toaster />
+      <CommandPalette />
     </div>
   );
 }

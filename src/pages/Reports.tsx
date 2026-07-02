@@ -1,4 +1,4 @@
-import { Card } from "../components/Card";
+import { Panel } from "../components/ui";
 import { calculateDiscipline } from "../rules/discipline";
 import { useTradingStore } from "../store/useTradingStore";
 import { formatCurrency } from "../utils/format";
@@ -21,12 +21,12 @@ export function Reports() {
           ["Win rate", `${winRate}%`],
           ["Realized P&L", formatCurrency(pnl)],
         ].map(([label, value]) => (
-          <Card key={label} title={label}>
+          <Panel key={label} title={label}>
             <p className="font-mono text-2xl font-semibold text-zinc-100">{value}</p>
-          </Card>
+          </Panel>
         ))}
       </div>
-      <Card className="mt-5" title="Monthly Insight">
+      <Panel className="mt-5" title="Monthly Insight">
         <p className="text-2xs leading-relaxed text-zinc-500">
           {trades.length === 0
             ? "No sample yet. The report becomes meaningful after several documented trades."
@@ -34,7 +34,7 @@ export function Reports() {
               ? "Every recorded trade followed the rules. Protect this standard; do not optimize for activity."
               : "Your largest opportunity is execution consistency. Review rule breaks before changing strategy."}
         </p>
-      </Card>
+      </Panel>
     </div>
   );
 }

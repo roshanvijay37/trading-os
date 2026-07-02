@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { LineChart, Activity, Clock, Calendar } from "lucide-react";
+import { CandlesChart } from "../components/charts/CandlesChart";
+import { Flash } from "../components/ui/Flash";
+import { Skeleton } from "../components/ui/Skeleton";
 import { backtestApi } from "../services/api";
 
 interface Candle {
@@ -70,16 +73,6 @@ function isMarketOpen(holidays: { date: string; name: string }[]): boolean {
   if (h === 9 && m < 15) return false;
   if (h === 15 && m > 30) return false;
   return true;
-}
-
-function formatTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
-}
-
-function formatDateShort(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 }
 
 export function Chart() {
@@ -157,6 +150,14 @@ export function Chart() {
     }
   };
 
+  // Drop the old series the moment instrument/timeframe changes: the chart unmounts
+  // (skeleton shows) and CandlesChart's fitKey is then consumed against the NEW data.
+  // Without this, the fitKey change fires while stale candles are still mounted, the
+  // fit is burned on the old data, and the new bars render at the old zoom level.
+  useEffect(() => {
+    setCandles([]);
+  }, [symbol, resolution]);
+
   useEffect(() => {
     setLoading(true);
     fetchData().finally(() => setLoading(false));
@@ -183,93 +184,16 @@ export function Chart() {
     };
   }, [marketOpen, symbol, resolution]);
 
-  const renderCandlestickChart = () => {
-    if (candles.length < 2) return null;
-
-    const width = 900;
-    const height = 400;
-    const padding = { top: 16, right: 60, bottom: 36, left: 10 };
-    const chartW = width - padding.left - padding.right;
-    const chartH = height - padding.top - padding.bottom;
-
-    const visibleCandles = candles.slice(-120);
-    const highs = visibleCandles.map((c) => c.high);
-    const lows = visibleCandles.map((c) => c.low);
-    const maxH = Math.max(...highs);
-    const minL = Math.min(...lows);
-    const range = maxH - minL || 1;
-
-    // Index instruments (the default symbol) often report volume 0 for every candle, which
-    // would make maxVol 0 and yVol produce NaN (0/0) SVG coordinates. Floor at 1.
-    const maxVol = Math.max(1, ...visibleCandles.map((c) => c.volume || 0));
-    const volH = chartH * 0.12;
-
-    const xScale = (i: number) => padding.left + (i / (visibleCandles.length - 1)) * chartW;
-    const yScale = (p: number) => padding.top + chartH - ((p - minL) / range) * chartH;
-    const yVol = (v: number) => padding.top + chartH - (v / maxVol) * volH;
-
-    const candleWidth = Math.max(2, (chartW / visibleCandles.length) * 0.55);
-
-    return (
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ maxHeight: 460 }}>
-        {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-          const y = padding.top + t * chartH;
-          const price = maxH - t * range;
-          return (
-            <g key={t}>
-              <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#1a1a20" strokeWidth={1} />
-              <text x={width - padding.right + 5} y={y + 4} fill="#3f3f46" fontSize={9}>
-                {price.toFixed(1)}
-              </text>
-            </g>
-          );
-        })}
-
-        {visibleCandles.map((c, i) => {
-          const x = xScale(i);
-          const isGreen = c.close >= c.open;
-          return (
-            <rect
-              key={`vol-${i}`}
-              x={x - candleWidth / 2}
-              y={yVol(c.volume)}
-              width={candleWidth}
-              height={padding.top + chartH - yVol(c.volume)}
-              fill={isGreen ? "#064e3b" : "#450a0a"}
-              opacity={0.4}
-            />
-          );
-        })}
-
-        {visibleCandles.map((c, i) => {
-          const x = xScale(i);
-          const isGreen = c.close >= c.open;
-          const color = isGreen ? "#10b981" : "#ef4444";
-          const bodyTop = yScale(Math.max(c.open, c.close));
-          const bodyBottom = yScale(Math.min(c.open, c.close));
-          const bodyH = Math.max(1, bodyBottom - bodyTop);
-
-          return (
-            <g key={`candle-${i}`}>
-              <line x1={x} y1={yScale(c.high)} x2={x} y2={yScale(c.low)} stroke={color} strokeWidth={1} />
-              <rect x={x - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyH} fill={color} rx={0.5} />
-            </g>
-          );
-        })}
-
-        {visibleCandles.map((c, i) => {
-          if (i % Math.ceil(visibleCandles.length / 6) !== 0) return null;
-          const x = xScale(i);
-          const label = resolution === "D" ? formatDateShort(c.datetime) : formatTime(c.datetime);
-          return (
-            <text key={`time-${i}`} x={x} y={height - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
-              {label}
-            </text>
-          );
-        })}
-      </svg>
-    );
-  };
+  // Map to lightweight-charts shape: epoch seconds (CandlesChart dedupes/sorts/guards).
+  const chartCandles = candles.map((c) => ({
+    time: Math.floor((c.timestamp ?? 0) / 1000),
+    open: c.open,
+    high: c.high,
+    low: c.low,
+    close: c.close,
+    volume: c.volume,
+  }));
+  const hasVolume = candles.some((c) => (c.volume || 0) > 0);
 
   return (
     <div>
@@ -325,9 +249,9 @@ export function Chart() {
       </div>
 
       {loading && candles.length === 0 && (
-        <div className="mt-6 flex items-center justify-center text-zinc-600">
-          <Activity size={16} className="mr-2 animate-spin" />
-          Loading chart data...
+        <div className="mt-5 rounded-panel border border-border bg-panel p-4">
+          <Skeleton className="mb-3 h-4 w-40" />
+          <Skeleton className="h-[420px] w-full" />
         </div>
       )}
 
@@ -353,14 +277,20 @@ export function Chart() {
               <span className="font-mono">H: {candles[candles.length - 1].high.toFixed(2)}</span>
               <span className="font-mono">L: {candles[candles.length - 1].low.toFixed(2)}</span>
               <span className={`font-mono ${candles[candles.length - 1].close >= candles[candles.length - 1].open ? "text-gain" : "text-loss"}`}>
-                C: {candles[candles.length - 1].close.toFixed(2)}
+                C: <Flash value={candles[candles.length - 1].close}>{candles[candles.length - 1].close.toFixed(2)}</Flash>
               </span>
             </div>
           </div>
-          {renderCandlestickChart()}
+          <CandlesChart
+            candles={chartCandles}
+            height={420}
+            showVolume={hasVolume}
+            timeVisible={resolution !== "D"}
+            fitKey={`${symbol}:${resolution}`}
+          />
 
           <div className="mt-3 flex items-center justify-between text-2xs text-zinc-700">
-            <span>Showing last {Math.min(120, candles.length)} candles</span>
+            <span>{candles.length} candles · scroll to zoom, drag to pan, hover for OHLC</span>
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1">
                 <span className="inline-block h-1.5 w-1.5 rounded-sm bg-gain" /> Bullish

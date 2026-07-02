@@ -23,6 +23,7 @@ import {
   Pill,
 } from "../components/ui";
 import { computePayoff, type PayoffOpts } from "../lib/payoff";
+import { useMeasuredWidth } from "../../components/charts/svgHover";
 import { money, dec, volPct, signed } from "../lib/format";
 import { onAddLeg } from "../lib/events";
 import type {
@@ -445,6 +446,10 @@ const PV_PAD_X = 8;
 const PV_PAD_Y = 8;
 
 function PayoffPreview({ result, chain }: { result: PayoffResult; chain: EnrichedChain }) {
+  // Measured width so the viewBox matches the rendered CSS px — no more
+  // preserveAspectRatio="none" stretching at narrow widths.
+  const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
+  const width = measuredW || PV_W;
   const geom = useMemo(() => {
     const pts = result.points;
     if (pts.length < 2) return null;
@@ -459,7 +464,7 @@ function PayoffPreview({ result, chain }: { result: PayoffResult; chain: Enriche
       minY -= 1;
       maxY += 1;
     }
-    const plotW = PV_W - 2 * PV_PAD_X;
+    const plotW = width - 2 * PV_PAD_X;
     const plotH = PV_H - 2 * PV_PAD_Y;
     const sx = (s: number) => PV_PAD_X + ((s - minX) / (maxX - minX)) * plotW;
     const sy = (v: number) => PV_PAD_Y + (1 - (v - minY) / (maxY - minY)) * plotH;
@@ -468,23 +473,25 @@ function PayoffPreview({ result, chain }: { result: PayoffResult; chain: Enriche
     const spotX = sx(Math.min(maxX, Math.max(minX, chain.spot)));
     const bes = result.breakevens.filter((b) => b >= minX && b <= maxX).map(sx);
     return { sx, sy, zeroY, line, spotX, bes };
-  }, [result.points, result.breakevens, chain.spot]);
+  }, [result.points, result.breakevens, chain.spot, width]);
 
   if (!geom) return <p className="text-[9px] text-zinc-700">Not enough resolution to draw the payoff preview.</p>;
 
   const zeroInView = geom.zeroY >= PV_PAD_Y && geom.zeroY <= PV_H - PV_PAD_Y;
 
   return (
-    <svg viewBox={`0 0 ${PV_W} ${PV_H}`} className="w-full" preserveAspectRatio="none">
-      {zeroInView && (
-        <line x1={PV_PAD_X} y1={geom.zeroY} x2={PV_W - PV_PAD_X} y2={geom.zeroY} stroke="#3f3f46" strokeWidth={1} strokeDasharray="3 3" />
-      )}
-      <polyline points={geom.line} fill="none" stroke="#3b82f6" strokeWidth={1.5} />
-      {geom.bes.map((x, i) => (
-        <line key={i} x1={x} y1={PV_PAD_Y} x2={x} y2={PV_H - PV_PAD_Y} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2 2" />
-      ))}
-      <line x1={geom.spotX} y1={PV_PAD_Y} x2={geom.spotX} y2={PV_H - PV_PAD_Y} stroke="#e4e4e7" strokeWidth={1} />
-    </svg>
+    <div ref={wrapRef}>
+      <svg viewBox={`0 0 ${width} ${PV_H}`} className="w-full">
+        {zeroInView && (
+          <line x1={PV_PAD_X} y1={geom.zeroY} x2={width - PV_PAD_X} y2={geom.zeroY} stroke="#3f3f46" strokeWidth={1} strokeDasharray="3 3" />
+        )}
+        <polyline points={geom.line} fill="none" stroke="#3b82f6" strokeWidth={1.5} />
+        {geom.bes.map((x, i) => (
+          <line key={i} x1={x} y1={PV_PAD_Y} x2={x} y2={PV_H - PV_PAD_Y} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2 2" />
+        ))}
+        <line x1={geom.spotX} y1={PV_PAD_Y} x2={geom.spotX} y2={PV_H - PV_PAD_Y} stroke="#e4e4e7" strokeWidth={1} />
+      </svg>
+    </div>
   );
 }
 

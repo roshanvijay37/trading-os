@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
+import { SkeletonStat } from "../components/ui/Skeleton";
 import { accountApi, marketApi, isFyersConnected } from "../services/api";
 import {
   normalizeOptionChain, extractSpot, extractIndiaVix,
@@ -218,6 +219,27 @@ export function MarketIntelligencePage() {
   }, []);
 
   const meta = STATUS_META[status];
+
+  // Initial load only: skeleton tiles instead of a page of dashes. Once data has
+  // arrived, later polls keep the last snapshot on screen (no skeleton flash).
+  if (status === "loading" && !hasData) {
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-2xs text-zinc-600">Real-time NIFTY option-chain &amp; breadth analytics from FYERS. FII/DII is NSE end-of-day data.</p>
+          <span className={`inline-flex items-center gap-1.5 rounded-panel border px-2 py-1 text-2xs font-medium ${meta.cls}`}>
+            <meta.Icon size={11} className="animate-spin" />
+            {meta.label}
+          </span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <SkeletonStat key={i} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

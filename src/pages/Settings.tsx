@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Card } from "../components/Card";
+import { Panel, toast } from "../components/ui";
 import { useTradingStore } from "../store/useTradingStore";
 import type { Settings as SettingsType } from "../types";
 import { Shield, Bot } from "lucide-react";
@@ -30,6 +30,7 @@ export function Settings() {
       maxTradesPerDay: Math.max(current.maxTradesPerDay, 1),
     }));
     setSaved(true);
+    toast.success("Settings saved", { id: "settings-save" });
   };
 
   const fieldClass =
@@ -39,7 +40,7 @@ export function Settings() {
     <div>
       <p className="text-2xs text-zinc-600 mb-5">Configure bot risk parameters and capital allocation.</p>
 
-      <Card className="max-w-2xl" title="Bot Configuration" icon={Bot}>
+      <Panel className="max-w-2xl" title="Bot Configuration" icon={Bot}>
         <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
           <label className="text-2xs text-zinc-500">
             Trading capital (₹)
@@ -98,16 +99,16 @@ export function Settings() {
             {saved && <span className="ml-3 text-2xs text-gain">Saved.</span>}
           </div>
         </form>
-      </Card>
+      </Panel>
 
-      <Card className="mt-5 max-w-2xl border-border" title="Risk Philosophy" icon={Shield}>
+      <Panel className="mt-5 max-w-2xl border-border" title="Risk Philosophy" icon={Shield}>
         <p className="text-2xs text-zinc-500 leading-relaxed">
           The bot manages position sizing, stop-losses, and daily limits automatically.
           These settings define the outer guardrails. The bot will never exceed the
           configured risk per trade or daily loss limit. Paper trading is available
           for strategy validation before live deployment.
         </p>
-      </Card>
+      </Panel>
     </div>
   );
 }

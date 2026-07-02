@@ -10,6 +10,7 @@ import { ListTree, Star, Search } from "lucide-react";
 import { useOptionsData } from "../state/OptionsDataProvider";
 import { ChainGate } from "../components/ChainGate";
 import { Panel, ProvenanceBadge, Segmented, Bar } from "../components/ui";
+import { Flash } from "../../components/ui/Flash";
 import { dec, compact, signed, volPct } from "../lib/format";
 import { emitSelectContract } from "../lib/events";
 import type { EnrichedChain, OptionQuote, OptionType, StrikeRow } from "../types";
@@ -288,7 +289,7 @@ function Ltp({ q, bg }: { q: OptionQuote; bg: string }) {
         className="inline-flex items-center gap-1 font-mono font-semibold text-zinc-100 hover:text-info"
         title={q.symbol || "No symbol"}
       >
-        {q.ltp > 0 ? dec(q.ltp, 1) : "—"}
+        <Flash value={q.ltp}>{q.ltp > 0 ? dec(q.ltp, 1) : "—"}</Flash>
         <span className={`text-[9px] ${q.ltpChangePct >= 0 ? "text-gain" : "text-loss"}`}>
           {q.ltpChangePct ? signed(q.ltpChangePct, 1) + "%" : ""}
         </span>

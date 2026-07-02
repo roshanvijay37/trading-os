@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BellRing, Plus, Trash2, Pause, Play, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useOptionsData } from "../state/OptionsDataProvider";
 import { Panel, ProvenanceBadge, Segmented, Select, NumberField, Button, Banner, Empty, Pill } from "../components/ui";
+import { toast } from "../../components/ui/toast";
 import { alertStore } from "../lib/storage";
 import { dec, volPct, compact, fmtTime } from "../lib/format";
 import type { AlertMetric, AlertOp, EnrichedChain, OptionAlert, OptionQuote } from "../types";
@@ -133,6 +134,11 @@ export function AlertsPanel() {
       if (cur == null) continue;
       if (holds(cur, a.op, a.threshold)) {
         alertStore.update(a.id, { triggeredAt: Date.now() });
+        // Edge transition (untriggered → triggered) — the one place alerts may toast.
+        toast.warn(
+          `Alert fired: ${symbolShort(a.symbol) || a.metric} ${a.metric} ${a.op} ${fmtThreshold(a.metric, a.threshold)} (now ${fmtMetric(a.metric, cur)})`,
+          { id: a.id, title: "Options alert" },
+        );
         changed = true;
       }
     }

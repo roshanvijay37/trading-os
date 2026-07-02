@@ -52,6 +52,36 @@ export default {
       spacing: {
         18: "4.5rem",
       },
+      keyframes: {
+        "flash-up": {
+          from: { backgroundColor: "rgba(16,185,129,0.22)" },
+          to: { backgroundColor: "transparent" },
+        },
+        "flash-down": {
+          from: { backgroundColor: "rgba(239,68,68,0.22)" },
+          to: { backgroundColor: "transparent" },
+        },
+        "flash-neutral": {
+          from: { backgroundColor: "rgba(59,130,246,0.18)" },
+          to: { backgroundColor: "transparent" },
+        },
+        "toast-in": {
+          from: { opacity: "0", transform: "translateY(8px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        shimmer: {
+          from: { opacity: "0.5" },
+          "50%": { opacity: "1" },
+          to: { opacity: "0.5" },
+        },
+      },
+      animation: {
+        "flash-up": "flash-up 0.6s ease-out",
+        "flash-down": "flash-down 0.6s ease-out",
+        "flash-neutral": "flash-neutral 0.6s ease-out",
+        "toast-in": "toast-in 0.15s ease-out",
+        shimmer: "shimmer 1.6s ease-in-out infinite",
+      },
     },
   },
   plugins: [],

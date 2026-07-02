@@ -3,7 +3,8 @@
  * Merged Dashboard + AI CIO
  */
 
-import { useEffect, useState, type ElementType } from "react";
+import { useEffect, useState } from "react";
+import { Flash, Stat, Tabs } from "../components/ui";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import {
   Brain,
@@ -116,33 +117,47 @@ export function CommandCenter() {
   return (
     <div className="space-y-5">
       {/* Tab Switcher */}
-      <div className="flex items-center gap-1 rounded-panel border border-border bg-panel p-1 w-fit">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-2xs font-medium transition ${
-            activeTab === "overview" ? "bg-surface text-zinc-200" : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          <LayoutDashboard size={12} /> Overview
-        </button>
-        <button
-          onClick={() => setActiveTab("ai-cio")}
-          className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-2xs font-medium transition ${
-            activeTab === "ai-cio" ? "bg-surface text-zinc-200" : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          <Brain size={12} /> AI CIO
-        </button>
-      </div>
+      <Tabs
+        tabs={[
+          { id: "overview", label: "Overview", icon: LayoutDashboard },
+          { id: "ai-cio", label: "AI CIO", icon: Brain },
+        ]}
+        value={activeTab}
+        onChange={(id) => setActiveTab(id as "overview" | "ai-cio")}
+      />
 
       {activeTab === "overview" ? (
         <div className="space-y-5">
           {/* Metric Row */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard label="Bot Status" value={dashboard.botStatus} icon={Bot} tone={dashboard.botStatus === "RUNNING" ? "green" : "amber"} />
-            <MetricCard label="Portfolio P&L" value={`${dashboard.portfolioPnL >= 0 ? "+" : ""}${dashboard.portfolioPnL.toFixed(2)}%`} icon={dashboard.portfolioPnL >= 0 ? TrendingUp : TrendingDown} tone={dashboard.portfolioPnL >= 0 ? "green" : "rose"} />
-            <MetricCard label="Today's Trades" value={dashboard.todaysTrades} icon={Activity} tone="blue" />
-            <MetricCard label="Risk Status" value={dashboard.riskStatus} icon={Shield} tone={dashboard.riskStatus === "HEALTHY" ? "green" : dashboard.riskStatus === "WARNING" ? "amber" : "rose"} />
+            <Stat
+              label="Bot Status"
+              value={<Flash value={dashboard.botStatus}>{dashboard.botStatus}</Flash>}
+              icon={Bot}
+              tone={dashboard.botStatus === "RUNNING" ? "green" : "amber"}
+            />
+            <Stat
+              label="Portfolio P&L"
+              value={
+                <Flash value={dashboard.portfolioPnL}>
+                  {`${dashboard.portfolioPnL >= 0 ? "+" : ""}${dashboard.portfolioPnL.toFixed(2)}%`}
+                </Flash>
+              }
+              icon={dashboard.portfolioPnL >= 0 ? TrendingUp : TrendingDown}
+              tone={dashboard.portfolioPnL >= 0 ? "green" : "rose"}
+            />
+            <Stat
+              label="Today's Trades"
+              value={<Flash value={dashboard.todaysTrades}>{dashboard.todaysTrades}</Flash>}
+              icon={Activity}
+              tone="blue"
+            />
+            <Stat
+              label="Risk Status"
+              value={<Flash value={dashboard.riskStatus}>{dashboard.riskStatus}</Flash>}
+              icon={Shield}
+              tone={dashboard.riskStatus === "HEALTHY" ? "green" : dashboard.riskStatus === "WARNING" ? "amber" : "rose"}
+            />
           </div>
 
           {/* Regime + Capital + Risk */}
@@ -230,9 +245,9 @@ export function CommandCenter() {
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <MiniCard label="Expected Return" value={`${(cioState.performanceForecast.expectedReturn * 100).toFixed(2)}%`} />
-              <MiniCard label="Expected Volatility" value={`${(cioState.performanceForecast.expectedVolatility * 100).toFixed(2)}%`} />
-              <MiniCard label="Win Probability" value={`${(cioState.performanceForecast.winProbability * 100).toFixed(0)}%`} />
+              <Stat label="Expected Return" value={`${(cioState.performanceForecast.expectedReturn * 100).toFixed(2)}%`} />
+              <Stat label="Expected Volatility" value={`${(cioState.performanceForecast.expectedVolatility * 100).toFixed(2)}%`} />
+              <Stat label="Win Probability" value={`${(cioState.performanceForecast.winProbability * 100).toFixed(0)}%`} />
             </div>
           </div>
 
@@ -290,24 +305,3 @@ export function CommandCenter() {
   );
 }
 
-function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string | number; icon: ElementType; tone?: string }) {
-  const tones: Record<string, string> = { green: "text-gain", rose: "text-loss", amber: "text-warn", blue: "text-info" };
-  return (
-    <div className="rounded-panel border border-border bg-panel p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon size={14} className="text-zinc-600" strokeWidth={1.5} />
-        <span className="text-2xs font-medium uppercase tracking-wider text-zinc-600">{label}</span>
-      </div>
-      <p className={`font-mono text-xl font-semibold ${tones[tone || ""] || "text-zinc-100"}`}>{value}</p>
-    </div>
-  );
-}
-
-function MiniCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-panel border border-border-subtle bg-surface p-3">
-      <p className="text-2xs text-zinc-600">{label}</p>
-      <p className="mt-1 font-mono text-sm font-semibold text-zinc-200">{value}</p>
-    </div>
-  );
-}

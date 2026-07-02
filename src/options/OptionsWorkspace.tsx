@@ -1,53 +1,55 @@
 /**
  * The Options Terminal shell. Desktop: a dense, keyboard-driven workspace with a left panel
  * rail. Mobile: a stacked, touch-first layout — a compact two-row toolbar, a horizontally
- * scrollable panel chip-strip, and the active panel filling the rest of the screen. A Ctrl-K
- * command palette ("search everywhere") works on both.
+ * scrollable panel chip-strip, and the active panel filling the rest of the screen. The
+ * Ctrl-K command palette is global (Layout); the active panel is URL-driven via ?panel=<id>
+ * so palette picks and bookmarks deep-link straight to a panel.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { RefreshCw, Search, Command, ChevronDown } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useOptionsData } from "./state/OptionsDataProvider";
 import { PANELS, PANEL_GROUPS, type PanelDef } from "./panels/registry";
 import { StatusPill, Button } from "./components/ui";
+import { Flash } from "../components/ui/Flash";
+import { openCommandPalette } from "../components/commandPalette/registry";
 import { dec, fmtTime } from "./lib/format";
 import type { InstrumentId } from "./types";
 
 export function OptionsWorkspace() {
   const data = useOptionsData();
-  const [activeId, setActiveId] = useState<string>("summary");
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const panelParam = searchParams.get("panel");
+  const activeId = panelParam && PANELS.some((p) => p.id === panelParam) ? panelParam : PANELS[0].id;
+  const setActiveId = (id: string) => setSearchParams({ panel: id }, { replace: true });
 
   const active = PANELS.find((p) => p.id === activeId) ?? PANELS[0];
 
-  // Global keyboard shortcuts (desktop).
+  // Workspace-local keyboard shortcuts (desktop). Ctrl-K lives in Layout now.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable;
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-        return;
-      }
       if (typing) return;
       if (e.key === "[") data.setInstrumentId("NIFTY");
       else if (e.key === "]") data.setInstrumentId("BANKNIFTY");
       else if (e.key.toLowerCase() === "r") data.refresh();
       else if (e.altKey && /^[1-9]$/.test(e.key)) {
         const idx = parseInt(e.key, 10) - 1;
-        if (PANELS[idx]) setActiveId(PANELS[idx].id);
+        if (PANELS[idx]) setSearchParams({ panel: PANELS[idx].id }, { replace: true });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [data]);
+  }, [data, setSearchParams]);
 
   const ActiveComponent = active.Component;
 
   return (
     <div className="flex h-[calc(100dvh-5rem)] min-h-[440px] flex-col gap-2 lg:h-[calc(100vh-7.5rem)] lg:min-h-[560px]">
-      <Toolbar onOpenPalette={() => setPaletteOpen(true)} />
+      <Toolbar onOpenPalette={openCommandPalette} />
 
       {/* Mobile: panel chip-strip (above content). Desktop: hidden (left rail used instead). */}
       <MobilePanelNav activeId={activeId} onChange={setActiveId} />
@@ -72,16 +74,6 @@ export function OptionsWorkspace() {
           <ActiveComponent />
         </main>
       </div>
-
-      {paletteOpen && (
-        <CommandPalette
-          onClose={() => setPaletteOpen(false)}
-          onPick={(id) => {
-            setActiveId(id);
-            setPaletteOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -168,10 +160,10 @@ function Toolbar({ onOpenPalette }: { onOpenPalette: () => void }) {
 
           {/* Live metric strip — scrolls horizontally on small screens */}
           <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-3 overflow-x-auto lg:flex-none lg:gap-3 lg:border-l lg:border-border-subtle lg:pl-3">
-            <Metric label="Spot" value={chain?.spot ? dec(chain.spot, 2) : "—"} big />
-            <Metric label="ATM" value={chain?.atmStrike ? String(chain.atmStrike) : "—"} />
-            <Metric label="VIX" value={chain?.vix ? dec(chain.vix.value, 2) : "—"} />
-            <Metric label="PCR" value={chain?.pcr ? dec(chain.pcr, 2) : "—"} />
+            <Metric label="Spot" value={chain?.spot ? dec(chain.spot, 2) : "—"} flash={chain?.spot ?? null} big />
+            <Metric label="ATM" value={chain?.atmStrike ? String(chain.atmStrike) : "—"} flash={chain?.atmStrike ?? null} />
+            <Metric label="VIX" value={chain?.vix ? dec(chain.vix.value, 2) : "—"} flash={chain?.vix?.value ?? null} />
+            <Metric label="PCR" value={chain?.pcr ? dec(chain.pcr, 2) : "—"} flash={chain?.pcr ?? null} />
           </div>
 
           {/* Status + refresh — pinned right on mobile only (desktop shows them at the end) */}
@@ -237,78 +229,14 @@ function Toolbar({ onOpenPalette }: { onOpenPalette: () => void }) {
   );
 }
 
-function Metric({ label, value, big }: { label: string; value: string; big?: boolean }) {
+function Metric({ label, value, big, flash }: { label: string; value: string; big?: boolean; flash?: number | null }) {
   return (
     <div className="flex shrink-0 items-baseline gap-1.5">
       <span className="text-[9px] uppercase tracking-wider text-zinc-600">{label}</span>
-      <span className={`font-mono ${big ? "text-sm font-semibold text-zinc-100" : "text-2xs text-zinc-300"}`}>{value}</span>
+      <span className={`font-mono ${big ? "text-sm font-semibold text-zinc-100" : "text-2xs text-zinc-300"}`}>
+        <Flash value={flash ?? value}>{value}</Flash>
+      </span>
     </div>
   );
 }
 
-function CommandPalette({ onClose, onPick }: { onClose: () => void; onPick: (id: string) => void }) {
-  const [q, setQ] = useState("");
-  const [idx, setIdx] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const results = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    if (!term) return PANELS;
-    return PANELS.filter((p) => `${p.label} ${p.group} ${p.keywords ?? ""}`.toLowerCase().includes(term));
-  }, [q]);
-
-  useEffect(() => {
-    setIdx(0);
-  }, [q]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-3 pt-[10vh]" onClick={onClose}>
-      <div
-        className="w-full max-w-md overflow-hidden rounded-panel border border-border bg-panel shadow-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2.5">
-          <Search size={14} className="text-zinc-600" />
-          <input
-            ref={inputRef}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search panels, tools, analytics…"
-            className="flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-700"
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown") setIdx((i) => Math.min(i + 1, results.length - 1));
-              else if (e.key === "ArrowUp") setIdx((i) => Math.max(i - 1, 0));
-              else if (e.key === "Enter" && results[idx]) onPick(results[idx].id);
-              else if (e.key === "Escape") onClose();
-            }}
-          />
-          <span className="rounded bg-surface px-1 text-[9px] text-zinc-600">esc</span>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto p-1">
-          {results.length === 0 && <p className="px-3 py-4 text-center text-2xs text-zinc-600">No matches</p>}
-          {results.map((p, i) => {
-            const Icon = p.icon;
-            return (
-              <button
-                key={p.id}
-                onMouseEnter={() => setIdx(i)}
-                onClick={() => onPick(p.id)}
-                className={`flex w-full items-center gap-2.5 rounded px-2.5 py-2.5 text-left text-2xs transition lg:py-1.5 ${
-                  i === idx ? "bg-surface text-zinc-100" : "text-zinc-400"
-                }`}
-              >
-                <Icon size={14} className="text-zinc-500" />
-                <span>{p.label}</span>
-                <span className="ml-auto text-[9px] uppercase tracking-wider text-zinc-700">{p.group}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}

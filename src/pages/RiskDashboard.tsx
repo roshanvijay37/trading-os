@@ -4,6 +4,7 @@
  */
 
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
+import { Badge, Panel, Row } from "../components/ui";
 import { AlertTriangle, Shield, TrendingDown, Activity, DollarSign, BarChart3, Lock } from "lucide-react";
 
 export function RiskDashboard() {
@@ -50,17 +51,18 @@ export function RiskDashboard() {
       </div>
 
       {/* Risk Limits */}
-      <div className="rounded-panel border border-border bg-panel p-4">
-        <h3 className="mb-4 text-2xs font-semibold uppercase tracking-wider text-zinc-400">Risk Limits</h3>
-        <div className="space-y-2">
+      <Panel title="Risk Limits" icon={Shield}>
+        <div className="space-y-1">
           {Object.entries(portfolioRisk.limits).map(([key, value]) => (
-            <div key={key} className="flex items-center justify-between">
-              <span className="text-2xs text-zinc-600">{key.replace(/([A-Z])/g, " $1").trim()}</span>
-              <span className="font-mono text-2xs text-zinc-300">{typeof value === "number" ? value.toLocaleString() : value}</span>
-            </div>
+            <Row
+              key={key}
+              label={key.replace(/([A-Z])/g, " $1").trim()}
+              value={typeof value === "number" ? value.toLocaleString() : value}
+              valueClass="text-zinc-300"
+            />
           ))}
         </div>
-      </div>
+      </Panel>
 
       {/* Risk Breaches */}
       {portfolioRisk.breaches.length > 0 && (
@@ -75,7 +77,7 @@ export function RiskDashboard() {
                   <p className="text-2xs font-medium text-loss">{breach.type}</p>
                   <p className="text-2xs text-zinc-600">{breach.description}</p>
                 </div>
-                <span className="rounded border border-loss/20 bg-loss-dim px-2 py-0.5 text-2xs font-medium text-loss">{breach.severity}</span>
+                <Badge tone="rose">{breach.severity}</Badge>
               </div>
             ))}
           </div>
@@ -83,8 +85,7 @@ export function RiskDashboard() {
       )}
 
       {/* Stress Test Results */}
-      <div className="rounded-panel border border-border bg-panel p-4">
-        <h3 className="mb-4 text-2xs font-semibold uppercase tracking-wider text-zinc-400">Stress Test Results</h3>
+      <Panel title="Stress Test Results" icon={Activity}>
         {portfolioRisk.stressTestResults.length === 0 ? (
           <p className="text-2xs text-zinc-700">No stress tests run. Use Simulation Lab to run scenarios.</p>
         ) : (
@@ -95,14 +96,12 @@ export function RiskDashboard() {
                   <p className="text-2xs font-medium text-zinc-200">{result.scenario}</p>
                   <p className="text-2xs text-zinc-600">{result.description}</p>
                 </div>
-                <span className={`rounded border px-2 py-0.5 text-2xs font-medium ${result.pass ? "border-gain/20 bg-gain-dim text-gain" : "border-loss/20 bg-loss-dim text-loss"}`}>
-                  {result.pass ? "PASS" : "FAIL"}
-                </span>
+                <Badge tone={result.pass ? "green" : "rose"}>{result.pass ? "PASS" : "FAIL"}</Badge>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </Panel>
     </div>
   );
 }

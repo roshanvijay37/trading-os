@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LineChart, CandlestickChart, Activity, Layers, Gauge, Percent, BarChart3, Info } from "lucide-react";
 import { ChainGate } from "../components/ChainGate";
 import { Panel, ProvenanceBadge, Select, Segmented, Spinner, Empty, Banner } from "../components/ui";
+import { ChartTooltip, SvgHoverLayer, useMeasuredWidth } from "../../components/charts/svgHover";
 import { optionsApi } from "../../services/api";
 import { dec, compact, fmtTime } from "../lib/format";
 import type { EnrichedChain } from "../types";
@@ -244,6 +245,7 @@ function PremiumChart({ chain }: { chain: EnrichedChain }) {
             color="#3b82f6"
             valueFmt={(v) => dec(v, 1)}
             timeAxis
+            name="Premium"
           />
           <FootNote>Broker historical traded premium via getHistory · {candles.length} candles</FootNote>
         </>
@@ -385,6 +387,7 @@ function MetricChart({
           valueFmt={(v) => dec(v, 2)}
           baseline={1}
           timeAxis
+          name="PCR"
         />
       );
     case "iv":
@@ -394,6 +397,7 @@ function MetricChart({
           color="#3b82f6"
           valueFmt={(v) => `${dec(v, 1)}%`}
           timeAxis
+          name="ATM IV"
         />
       );
     case "oi":
@@ -437,8 +441,13 @@ function MetricChart({
 
 function Candlestick({ candles, resolution }: { candles: Candle[]; resolution: string }) {
   const visible = candles.slice(-150);
+  // Measured width: the viewBox matches the rendered CSS width, so nothing distorts
+  // and hover coordinates map 1:1.
+  const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
+  const width = measuredW || SVG_W;
+  const [hover, setHover] = useState<number | null>(null);
   const geom = useMemo(() => {
-    const chartW = SVG_W - PAD.left - PAD.right;
+    const chartW = width - PAD.left - PAD.right;
     const chartH = SVG_H - PAD.top - PAD.bottom;
     const highs = visible.map((c) => c.high);
     const lows = visible.map((c) => c.low);
@@ -449,47 +458,79 @@ function Candlestick({ candles, resolution }: { candles: Candle[]; resolution: s
     const yScale = (p: number) => PAD.top + chartH - ((p - minL) / range) * chartH;
     const cw = Math.max(1.5, (chartW / visible.length) * 0.6);
     return { chartW, chartH, maxH, minL, range, xScale, yScale, cw };
-  }, [visible]);
+  }, [visible, width]);
+
+  const hc = hover != null ? visible[hover] : null;
 
   return (
-    <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full" style={{ maxHeight: 360 }}>
-      {[0, 0.25, 0.5, 0.75, 1].map((tk) => {
-        const y = PAD.top + tk * geom.chartH;
-        const price = geom.maxH - tk * geom.range;
-        return (
-          <g key={tk}>
-            <line x1={PAD.left} y1={y} x2={SVG_W - PAD.right} y2={y} stroke="#1a1a20" strokeWidth={1} />
-            <text x={SVG_W - PAD.right + 4} y={y + 3} fill="#3f3f46" fontSize={8}>
-              {dec(price, 1)}
+    <div ref={wrapRef} className="relative">
+      <svg viewBox={`0 0 ${width} ${SVG_H}`} className="w-full" style={{ maxHeight: 360 }}>
+        {[0, 0.25, 0.5, 0.75, 1].map((tk) => {
+          const y = PAD.top + tk * geom.chartH;
+          const price = geom.maxH - tk * geom.range;
+          return (
+            <g key={tk}>
+              <line x1={PAD.left} y1={y} x2={width - PAD.right} y2={y} stroke="#1a1a20" strokeWidth={1} />
+              <text x={width - PAD.right + 4} y={y + 3} fill="#3f3f46" fontSize={8}>
+                {dec(price, 1)}
+              </text>
+            </g>
+          );
+        })}
+        {visible.map((c, i) => {
+          const x = geom.xScale(i);
+          const green = c.close >= c.open;
+          const color = green ? "#10b981" : "#ef4444";
+          const bodyTop = geom.yScale(Math.max(c.open, c.close));
+          const bodyBottom = geom.yScale(Math.min(c.open, c.close));
+          const bodyH = Math.max(1, bodyBottom - bodyTop);
+          return (
+            <g key={i}>
+              <line x1={x} y1={geom.yScale(c.high)} x2={x} y2={geom.yScale(c.low)} stroke={color} strokeWidth={1} />
+              <rect x={x - geom.cw / 2} y={bodyTop} width={geom.cw} height={bodyH} fill={color} rx={0.5} />
+            </g>
+          );
+        })}
+        {visible.map((c, i) => {
+          const step = Math.ceil(visible.length / 6);
+          if (i % step !== 0) return null;
+          const x = geom.xScale(i);
+          return (
+            <text key={`t-${i}`} x={x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
+              {axisLabel(c.t, resolution)}
             </text>
-          </g>
-        );
-      })}
-      {visible.map((c, i) => {
-        const x = geom.xScale(i);
-        const green = c.close >= c.open;
-        const color = green ? "#10b981" : "#ef4444";
-        const bodyTop = geom.yScale(Math.max(c.open, c.close));
-        const bodyBottom = geom.yScale(Math.min(c.open, c.close));
-        const bodyH = Math.max(1, bodyBottom - bodyTop);
-        return (
-          <g key={i}>
-            <line x1={x} y1={geom.yScale(c.high)} x2={x} y2={geom.yScale(c.low)} stroke={color} strokeWidth={1} />
-            <rect x={x - geom.cw / 2} y={bodyTop} width={geom.cw} height={bodyH} fill={color} rx={0.5} />
-          </g>
-        );
-      })}
-      {visible.map((c, i) => {
-        const step = Math.ceil(visible.length / 6);
-        if (i % step !== 0) return null;
-        const x = geom.xScale(i);
-        return (
-          <text key={`t-${i}`} x={x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
-            {axisLabel(c.t, resolution)}
-          </text>
-        );
-      })}
-    </svg>
+          );
+        })}
+        <SvgHoverLayer
+          width={width}
+          height={SVG_H}
+          padL={PAD.left}
+          padR={PAD.right}
+          padT={PAD.top}
+          padB={PAD.bottom}
+          count={visible.length}
+          xOf={geom.xScale}
+          yOf={(i) => geom.yScale(visible[i].close)}
+          hoverIndex={hover}
+          onHover={setHover}
+        />
+      </svg>
+      {hc && hover != null && (
+        <ChartTooltip
+          x={geom.xScale(hover)}
+          y={geom.yScale(hc.close)}
+          containerWidth={width}
+          title={axisLabel(hc.t, resolution)}
+          rows={[
+            { label: "O", value: dec(hc.open, 1) },
+            { label: "H", value: dec(hc.high, 1) },
+            { label: "L", value: dec(hc.low, 1) },
+            { label: "C", value: dec(hc.close, 1), color: hc.close >= hc.open ? "#10b981" : "#ef4444" },
+            ...(hc.volume > 0 ? [{ label: "V", value: compact(hc.volume) }] : []),
+          ]}
+        />
+      )}
+    </div>
   );
 }
 
@@ -504,47 +545,81 @@ function LineSeries({
   valueFmt,
   baseline,
   timeAxis,
+  name = "Value",
 }: {
   points: Pt[];
   color: string;
   valueFmt: (v: number) => string;
   baseline?: number;
   timeAxis?: boolean;
+  name?: string;
 }) {
-  const geom = useMemo(() => buildLineGeom(points, baseline), [points, baseline]);
+  const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
+  const width = measuredW || SVG_W;
+  const [hover, setHover] = useState<number | null>(null);
+  const geom = useMemo(() => buildLineGeom(points, baseline, width), [points, baseline, width]);
   if (!geom) return <Empty message="Not enough points to draw yet." />;
 
+  const hp = hover != null ? points[hover] : null;
+
   return (
-    <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full" style={{ maxHeight: 300 }}>
-      {geom.gridYs.map((g, i) => (
-        <g key={i}>
-          <line x1={PAD.left} y1={g.y} x2={SVG_W - PAD.right} y2={g.y} stroke="#1a1a20" strokeWidth={1} />
-          <text x={SVG_W - PAD.right + 4} y={g.y + 3} fill="#3f3f46" fontSize={8}>
-            {valueFmt(g.value)}
-          </text>
-        </g>
-      ))}
-      {baseline != null && geom.baselineY != null && (
-        <line
-          x1={PAD.left}
-          y1={geom.baselineY}
-          x2={SVG_W - PAD.right}
-          y2={geom.baselineY}
-          stroke="#52525b"
-          strokeWidth={1}
-          strokeDasharray="4 3"
+    <div ref={wrapRef} className="relative">
+      {/* No maxHeight below SVG_H: viewBox width == CSS width makes the intrinsic height
+          exactly SVG_H, and any clamp would rescale + letterbox, misaligning hover/tooltip. */}
+      <svg viewBox={`0 0 ${width} ${SVG_H}`} className="w-full">
+        {geom.gridYs.map((g, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={g.y} x2={width - PAD.right} y2={g.y} stroke="#1a1a20" strokeWidth={1} />
+            <text x={width - PAD.right + 4} y={g.y + 3} fill="#3f3f46" fontSize={8}>
+              {valueFmt(g.value)}
+            </text>
+          </g>
+        ))}
+        {baseline != null && geom.baselineY != null && (
+          <line
+            x1={PAD.left}
+            y1={geom.baselineY}
+            x2={width - PAD.right}
+            y2={geom.baselineY}
+            stroke="#52525b"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+          />
+        )}
+        <polygon points={geom.areaPts} fill={color} fillOpacity={0.1} />
+        <polyline points={geom.linePts} fill="none" stroke={color} strokeWidth={1.5} />
+        <circle cx={geom.lastX} cy={geom.lastY} r={2.5} fill={color} />
+        {timeAxis &&
+          geom.timeTicks.map((tk, i) => (
+            <text key={i} x={tk.x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
+              {fmtTime(tk.t)}
+            </text>
+          ))}
+        <SvgHoverLayer
+          width={width}
+          height={SVG_H}
+          padL={PAD.left}
+          padR={PAD.right}
+          padT={PAD.top}
+          padB={PAD.bottom}
+          count={points.length}
+          xOf={(i) => geom.xs[i]}
+          yOf={(i) => geom.ys[i]}
+          xs={geom.xs}
+          hoverIndex={hover}
+          onHover={setHover}
+        />
+      </svg>
+      {hp && hover != null && (
+        <ChartTooltip
+          x={geom.xs[hover]}
+          y={geom.ys[hover]}
+          containerWidth={width}
+          title={fmtTime(hp.t)}
+          rows={[{ label: name, value: valueFmt(hp.v), color }]}
         />
       )}
-      <polygon points={geom.areaPts} fill={color} fillOpacity={0.1} />
-      <polyline points={geom.linePts} fill="none" stroke={color} strokeWidth={1.5} />
-      <circle cx={geom.lastX} cy={geom.lastY} r={2.5} fill={color} />
-      {timeAxis &&
-        geom.timeTicks.map((tk, i) => (
-          <text key={i} x={tk.x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
-            {fmtTime(tk.t)}
-          </text>
-        ))}
-    </svg>
+    </div>
   );
 }
 
@@ -568,10 +643,13 @@ function MultiLine({
   valueFmt: (v: number) => string;
   independentScale?: boolean;
 }) {
+  const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
+  const width = measuredW || SVG_W;
+  const [hover, setHover] = useState<number | null>(null);
   const len = series[0]?.points.length ?? 0;
   const geom = useMemo(() => {
     if (len < 2) return null;
-    const chartW = SVG_W - PAD.left - PAD.right;
+    const chartW = width - PAD.left - PAD.right;
     const chartH = SVG_H - PAD.top - PAD.bottom;
     const tMin = series[0].points[0].t;
     const tMax = series[0].points[len - 1].t;
@@ -615,34 +693,67 @@ function MultiLine({
       return { x: xScale(p.t), t: p.t };
     });
 
-    return { lines, gridYs, timeTicks };
-  }, [series, len, independentScale]);
+    const xs = series[0].points.map((p) => xScale(p.t));
+
+    return { lines, gridYs, timeTicks, xs };
+  }, [series, len, independentScale, width]);
 
   if (!geom) return <Empty message="Not enough points to draw yet." />;
 
+  const ht = hover != null ? series[0].points[hover]?.t : null;
+
   return (
     <>
-      <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="w-full" style={{ maxHeight: 300 }}>
-        {geom.gridYs.map((g, i) => (
-          <g key={i}>
-            <line x1={PAD.left} y1={g.y} x2={SVG_W - PAD.right} y2={g.y} stroke="#1a1a20" strokeWidth={1} />
-            <text x={SVG_W - PAD.right + 4} y={g.y + 3} fill="#3f3f46" fontSize={8}>
-              {valueFmt(g.value)}
+      <div ref={wrapRef} className="relative">
+        {/* No maxHeight below SVG_H — see LineSeries note (hover/tooltip 1:1 contract). */}
+        <svg viewBox={`0 0 ${width} ${SVG_H}`} className="w-full">
+          {geom.gridYs.map((g, i) => (
+            <g key={i}>
+              <line x1={PAD.left} y1={g.y} x2={width - PAD.right} y2={g.y} stroke="#1a1a20" strokeWidth={1} />
+              <text x={width - PAD.right + 4} y={g.y + 3} fill="#3f3f46" fontSize={8}>
+                {valueFmt(g.value)}
+              </text>
+            </g>
+          ))}
+          {geom.lines.map((l, i) => (
+            <g key={i}>
+              <polyline points={l.pts} fill="none" stroke={l.color} strokeWidth={1.5} />
+              <circle cx={l.lastX} cy={l.lastY} r={2.5} fill={l.color} />
+            </g>
+          ))}
+          {geom.timeTicks.map((tk, i) => (
+            <text key={`tt-${i}`} x={tk.x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
+              {fmtTime(tk.t)}
             </text>
-          </g>
-        ))}
-        {geom.lines.map((l, i) => (
-          <g key={i}>
-            <polyline points={l.pts} fill="none" stroke={l.color} strokeWidth={1.5} />
-            <circle cx={l.lastX} cy={l.lastY} r={2.5} fill={l.color} />
-          </g>
-        ))}
-        {geom.timeTicks.map((tk, i) => (
-          <text key={`tt-${i}`} x={tk.x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
-            {fmtTime(tk.t)}
-          </text>
-        ))}
-      </svg>
+          ))}
+          <SvgHoverLayer
+            width={width}
+            height={SVG_H}
+            padL={PAD.left}
+            padR={PAD.right}
+            padT={PAD.top}
+            padB={PAD.bottom}
+            count={len}
+            xOf={(i) => geom.xs[i]}
+            xs={geom.xs}
+            hoverIndex={hover}
+            onHover={setHover}
+          />
+        </svg>
+        {hover != null && ht != null && (
+          <ChartTooltip
+            x={geom.xs[hover]}
+            y={30}
+            containerWidth={width}
+            title={fmtTime(ht)}
+            rows={series.map((s) => ({
+              label: s.label,
+              value: s.points[hover] ? valueFmt(s.points[hover].v) : "—",
+              color: s.color,
+            }))}
+          />
+        )}
+      </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px]">
         {series.map((s) => {
           const last = s.points[s.points.length - 1];
@@ -660,9 +771,9 @@ function MultiLine({
   );
 }
 
-function buildLineGeom(points: Pt[], baseline?: number) {
+function buildLineGeom(points: Pt[], baseline: number | undefined, width: number) {
   if (points.length < 2) return null;
-  const chartW = SVG_W - PAD.left - PAD.right;
+  const chartW = width - PAD.left - PAD.right;
   const chartH = SVG_H - PAD.top - PAD.bottom;
   const tMin = points[0].t;
   const tMax = points[points.length - 1].t;
@@ -686,7 +797,7 @@ function buildLineGeom(points: Pt[], baseline?: number) {
 
   const linePts = points.map((p) => `${xScale(p.t).toFixed(1)},${yScale(p.v).toFixed(1)}`).join(" ");
   const baseY = PAD.top + chartH;
-  const areaPts = `${PAD.left},${baseY} ${linePts} ${(SVG_W - PAD.right).toFixed(1)},${baseY}`;
+  const areaPts = `${PAD.left},${baseY} ${linePts} ${(width - PAD.right).toFixed(1)},${baseY}`;
   const last = points[points.length - 1];
 
   const gridYs = [0, 0.5, 1].map((tk) => ({
@@ -707,6 +818,8 @@ function buildLineGeom(points: Pt[], baseline?: number) {
     lastX: xScale(last.t),
     lastY: yScale(last.v),
     baselineY: baseline != null ? yScale(baseline) : null,
+    xs: points.map((p) => xScale(p.t)),
+    ys: points.map((p) => yScale(p.v)),
   };
 }
 

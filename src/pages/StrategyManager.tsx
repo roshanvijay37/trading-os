@@ -6,6 +6,7 @@
  */
 
 import { useState, type ElementType } from "react";
+import { Badge, type Tone } from "../components/ui";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import { STRATEGY_DEFINITIONS, STRATEGY_CATEGORIES, getStrategyById } from "../lib/strategies/registry";
 import type { StrategyId, StrategyConfig } from "../types/institutional";
@@ -128,9 +129,7 @@ export function StrategyManager() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-2xs font-medium text-zinc-200">{def.name}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-2xs font-medium ${getCategoryColor(def.category)}`}>
-                      {def.category.replace("_", " ")}
-                    </span>
+                    <Badge tone={getCategoryTone(def.category)}>{def.category.replace("_", " ")}</Badge>
                     {def.author && (
                       <span className="text-2xs text-zinc-700">by {def.author}</span>
                     )}
@@ -145,9 +144,7 @@ export function StrategyManager() {
                         <p className="text-2xs text-zinc-600">Allocation</p>
                         <p className="font-mono text-2xs text-zinc-200">{config.capitalAllocationPercent}%</p>
                       </div>
-                      <div className={`rounded-panel border px-2 py-0.5 text-2xs font-medium ${getStatusColor(stratState.status)}`}>
-                        {stratState.status}
-                      </div>
+                      <Badge tone={getStatusTone(stratState.status)}>{stratState.status}</Badge>
                     </>
                   )}
                   <button
@@ -387,25 +384,25 @@ function ConfigField({
   );
 }
 
-function getCategoryColor(category: string): string {
-  const colors: Record<string, string> = {
-    TREND_FOLLOWING: "border-info/20 bg-info-dim text-info",
-    MEAN_REVERSION: "border-info/20 bg-info-dim text-info",
-    MOMENTUM: "border-warn/20 bg-warn-dim text-warn",
-    BREAKOUT: "border-warn/20 bg-warn-dim text-warn",
-    OPTION: "border-info/20 bg-info-dim text-info",
-    CUSTOM: "border-border-subtle bg-panel text-zinc-500",
+function getCategoryTone(category: string): Tone {
+  const tones: Record<string, Tone> = {
+    TREND_FOLLOWING: "blue",
+    MEAN_REVERSION: "blue",
+    MOMENTUM: "amber",
+    BREAKOUT: "amber",
+    OPTION: "blue",
+    CUSTOM: "zinc",
   };
-  return colors[category] || "border-border-subtle bg-panel text-zinc-500";
+  return tones[category] || "zinc";
 }
 
-function getStatusColor(status: string): string {
-  const colors: Record<string, string> = {
-    ACTIVE: "border-gain/20 bg-gain-dim text-gain",
-    PAUSED: "border-warn/20 bg-warn-dim text-warn",
-    COOLDOWN: "border-warn/20 bg-warn-dim text-warn",
-    HALTED: "border-loss/20 bg-loss-dim text-loss",
-    DISABLED: "border-border-subtle bg-panel text-zinc-600",
+function getStatusTone(status: string): Tone {
+  const tones: Record<string, Tone> = {
+    ACTIVE: "green",
+    PAUSED: "amber",
+    COOLDOWN: "amber",
+    HALTED: "rose",
+    DISABLED: "zinc",
   };
-  return colors[status] || "border-border-subtle bg-panel text-zinc-600";
+  return tones[status] || "zinc";
 }

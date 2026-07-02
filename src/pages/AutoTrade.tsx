@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Card } from "../components/Card";
-import { MetricCard } from "../components/MetricCard";
+import { ConfirmDialog, Flash, Panel, SkeletonStat, Stat, toast } from "../components/ui";
 import { autoTradeApi } from "../services/api";
 import {
   Play,
@@ -39,6 +38,7 @@ export function AutoTrade() {
   });
   const [logs, setLogs] = useState<string[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [confirmAction, setConfirmAction] = useState<"estop" | "reset" | null>(null);
 
   const fetchStatus = async () => {
     try {
@@ -105,8 +105,10 @@ export function AutoTrade() {
       await autoTradeApi.start();
       await fetchStatus();
       setLogs((prev) => [`${new Date().toLocaleTimeString()} — Bot STARTED`, ...prev].slice(0, 20));
+      toast.success("Trading bot started", { id: "bot-action" });
     } catch (err: any) {
       setError(err.message || "Failed to start");
+      toast.error(err.message || "Failed to start the bot", { id: "bot-action" });
     } finally {
       setLoading(false);
     }
@@ -119,36 +121,42 @@ export function AutoTrade() {
       await autoTradeApi.stop();
       await fetchStatus();
       setLogs((prev) => [`${new Date().toLocaleTimeString()} — Bot STOPPED`, ...prev].slice(0, 20));
+      toast.info("Trading bot stopped", { id: "bot-action" });
     } catch (err: any) {
       setError(err.message || "Failed to stop");
+      toast.error(err.message || "Failed to stop the bot", { id: "bot-action" });
     } finally {
       setLoading(false);
     }
   };
 
   const handleEmergencyStop = async () => {
-    if (!window.confirm("EMERGENCY STOP: This will immediately halt all trading activity. Confirm?")) return;
+    setConfirmAction(null);
     setLoading(true);
     try {
       await autoTradeApi.emergencyStop();
       await fetchStatus();
       setLogs((prev) => [`${new Date().toLocaleTimeString()} — 🚨 EMERGENCY STOP ACTIVATED`, ...prev].slice(0, 20));
+      toast.warn("Emergency stop activated — all trading halted", { id: "bot-action" });
     } catch (err: any) {
       setError(err.message || "Emergency stop failed");
+      toast.error(err.message || "Emergency stop failed", { id: "bot-action" });
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetEmergency = async () => {
-    if (!window.confirm("Reset emergency stop? This will allow the bot to trade again.")) return;
+    setConfirmAction(null);
     setLoading(true);
     try {
       await autoTradeApi.resetEmergency();
       await fetchStatus();
       setLogs((prev) => [`${new Date().toLocaleTimeString()} — Emergency stop CLEARED`, ...prev].slice(0, 20));
+      toast.success("Emergency stop cleared — bot may trade again", { id: "bot-action" });
     } catch (err: any) {
       setError(err.message || "Failed to reset emergency");
+      toast.error(err.message || "Failed to reset emergency stop", { id: "bot-action" });
     } finally {
       setLoading(false);
     }
@@ -161,8 +169,10 @@ export function AutoTrade() {
       await fetchStatus();
       setShowConfig(false);
       setLogs((prev) => [`${new Date().toLocaleTimeString()} — Configuration updated`, ...prev].slice(0, 20));
+      toast.success("Bot configuration saved", { id: "bot-action" });
     } catch (err: any) {
       setError(err.message || "Failed to update config");
+      toast.error(err.message || "Failed to update config", { id: "bot-action" });
     } finally {
       setLoading(false);
     }
@@ -189,7 +199,7 @@ export function AutoTrade() {
       </div>
 
       {/* Control Panel */}
-      <Card>
+      <Panel>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className={`flex h-10 w-10 items-center justify-center rounded-panel ${
@@ -241,7 +251,7 @@ export function AutoTrade() {
             )}
             {isEmergency ? (
               <button
-                onClick={handleResetEmergency}
+                onClick={() => setConfirmAction("reset")}
                 disabled={loading}
                 className="flex items-center gap-1.5 rounded-panel border border-gain/20 bg-gain-dim px-3 py-2 text-2xs font-semibold text-gain transition hover:bg-gain/20 disabled:opacity-50"
               >
@@ -250,7 +260,7 @@ export function AutoTrade() {
               </button>
             ) : (
               <button
-                onClick={handleEmergencyStop}
+                onClick={() => setConfirmAction("estop")}
                 disabled={loading}
                 className="flex items-center gap-1.5 rounded-panel border border-loss/20 bg-loss-dim px-3 py-2 text-2xs font-semibold text-loss transition hover:bg-loss/20 disabled:opacity-50"
               >
@@ -265,11 +275,11 @@ export function AutoTrade() {
             {error}
           </p>
         )}
-      </Card>
+      </Panel>
 
       {/* Configuration Panel */}
       {showConfig && (
-        <Card className="mt-3 border-warn/20">
+        <Panel className="mt-3 border-warn/20">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-warn">
               <Settings size={13} />
@@ -425,45 +435,55 @@ export function AutoTrade() {
               ))}
             </div>
           </div>
-        </Card>
+        </Panel>
+      )}
+
+      {/* Initial load — skeleton tiles until the first status fetch lands */}
+      {!status && !error && (
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SkeletonStat />
+          <SkeletonStat />
+          <SkeletonStat />
+          <SkeletonStat />
+        </div>
       )}
 
       {/* Status Metrics */}
       {status && (
         <>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
+            <Stat
               label="Market Status"
               value={status.marketStatus}
-              detail="Exchange connectivity"
+              sub="Exchange connectivity"
               icon={BarChart3}
               tone="green"
             />
-            <MetricCard
+            <Stat
               label="Trades Today"
               value={`${status.todayTrades} / ${status.maxTrades}`}
-              detail="Execution count"
+              sub="Execution count"
               icon={Zap}
               tone="green"
             />
-            <MetricCard
+            <Stat
               label="Open Positions"
               value={String(status.openPositions?.length || 0)}
-              detail="Active exposure"
+              sub="Active exposure"
               icon={Target}
               tone="green"
             />
-            <MetricCard
+            <Stat
               label="Capital"
               value={`₹${(status.capital || 0).toLocaleString()}`}
-              detail="Deployed base"
+              sub="Deployed base"
               icon={Shield}
               tone="green"
             />
           </div>
 
           {/* Active Positions */}
-          <Card className="mt-5" title="Active Positions" icon={Target} action={<span className="text-2xs text-zinc-600">{status.openPositions?.length || 0} open</span>}>
+          <Panel className="mt-5" title="Active Positions" icon={Target} actions={<span className="text-2xs text-zinc-600">{status.openPositions?.length || 0} open</span>}>
             {status.openPositions && status.openPositions.length > 0 ? (
               <div className="space-y-1.5">
                 {status.openPositions.map((pos: BotPosition) => (
@@ -493,11 +513,11 @@ export function AutoTrade() {
             ) : (
               <p className="text-2xs text-zinc-600">No active positions.</p>
             )}
-          </Card>
+          </Panel>
 
           {/* Risk & Performance */}
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            <Panel>
               <div className="flex items-center gap-3">
                 <div className={`rounded-panel p-2 ${parseFloat(status.dailyPnL || "0") >= 0 ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"}`}>
                   {parseFloat(status.dailyPnL || "0") >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
@@ -505,12 +525,12 @@ export function AutoTrade() {
                 <div>
                   <p className="text-2xs text-zinc-600">Daily P&L</p>
                   <p className={`font-mono text-base font-semibold ${parseFloat(status.dailyPnL || "0") >= 0 ? "text-gain" : "text-loss"}`}>
-                    ₹{parseFloat(status.dailyPnL || "0").toFixed(2)}
+                    <Flash value={parseFloat(status.dailyPnL || "0")}>₹{parseFloat(status.dailyPnL || "0").toFixed(2)}</Flash>
                   </p>
                 </div>
               </div>
-            </Card>
-            <Card>
+            </Panel>
+            <Panel>
               <div className="flex items-center gap-3">
                 <div className={`rounded-panel p-2 ${status.emergencyStop ? "bg-loss-dim text-loss" : "bg-gain-dim text-gain"}`}>
                   <Shield size={18} />
@@ -522,8 +542,8 @@ export function AutoTrade() {
                   </p>
                 </div>
               </div>
-            </Card>
-            <Card>
+            </Panel>
+            <Panel>
               <div className="flex items-center gap-3">
                 <div className={`rounded-panel p-2 ${status.paperTrading ? "bg-warn-dim text-warn" : "bg-gain-dim text-gain"}`}>
                   <Lock size={18} />
@@ -535,8 +555,8 @@ export function AutoTrade() {
                   </p>
                 </div>
               </div>
-            </Card>
-            <Card>
+            </Panel>
+            <Panel>
               <div className="flex items-center gap-3">
                 <div className={`rounded-panel p-2 ${status.tickStatus?.isConnected ? "bg-gain-dim text-gain" : "bg-warn-dim text-warn"}`}>
                   <Radio size={18} />
@@ -553,14 +573,11 @@ export function AutoTrade() {
                   )}
                 </div>
               </div>
-            </Card>
-
-
-
+            </Panel>
           </div>
 
           {/* Data Source Visibility */}
-          <Card className="mt-5" title="Data Sources" icon={Radio}>
+          <Panel className="mt-5" title="Data Sources" icon={Radio}>
             {auditLogs.filter((log) => log.type === "DATA_SOURCE").length > 0 ? (
               <div className="space-y-1.5">
                 {auditLogs
@@ -590,11 +607,11 @@ export function AutoTrade() {
             ) : (
               <p className="text-2xs text-zinc-600">No data source events yet.</p>
             )}
-          </Card>
+          </Panel>
 
           {/* Recent Signals */}
           {status.recentSignals && status.recentSignals.length > 0 && (
-            <Card className="mt-5" title="Recent Signals" icon={Zap}>
+            <Panel className="mt-5" title="Recent Signals" icon={Zap}>
               <div className="space-y-1.5">
                 {status.recentSignals.slice(0, 5).map((sig: BotSignal, i: number) => (
                   <div
@@ -622,11 +639,11 @@ export function AutoTrade() {
                   </div>
                 ))}
               </div>
-            </Card>
+            </Panel>
           )}
 
           {/* System Logs */}
-          <Card className="mt-5" title="Execution Logs" icon={FileText} action={<span className="flex items-center gap-1 text-2xs text-zinc-600"><Clock size={10} /> Real-time</span>}>
+          <Panel className="mt-5" title="Execution Logs" icon={FileText} actions={<span className="flex items-center gap-1 text-2xs text-zinc-600"><Clock size={10} /> Real-time</span>}>
             <div className="max-h-52 overflow-y-auto space-y-0.5 font-mono text-2xs">
               {logs.length > 0 ? (
                 logs.map((log, i) => (
@@ -638,9 +655,28 @@ export function AutoTrade() {
                 <p className="text-zinc-700">No activity recorded.</p>
               )}
             </div>
-          </Card>
+          </Panel>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmAction === "estop"}
+        tone="rose"
+        title="Emergency stop"
+        body="This will immediately halt all trading activity and block new entries until the emergency stop is reset."
+        confirmLabel="Halt all trading"
+        onConfirm={handleEmergencyStop}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === "reset"}
+        tone="green"
+        title="Reset emergency stop"
+        body="This clears the emergency stop and allows the bot to trade again."
+        confirmLabel="Allow trading"
+        onConfirm={handleResetEmergency}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }
