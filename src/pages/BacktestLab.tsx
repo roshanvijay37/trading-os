@@ -127,7 +127,9 @@ export function BacktestLab() {
         capital,
         riskPercent,
         targetMultiplier: targetMult,
-        slippage,
+        // "Slippage %" → the decimal fraction the engine expects (e.g. 0.02% → 0.0002). Only used in
+        // INDEX pricing mode; Black-Scholes mode models cost via the option bid/ask spread instead.
+        slippage: slippage / 100,
         capitalMode,
         pricingModel,
         ...(pricingModel === "BLACK_SCHOLES"
@@ -401,10 +403,14 @@ export function BacktestLab() {
             <label className="mb-1 block text-2xs text-zinc-600">Target R:R</label>
             <input type="number" step="0.1" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
-          <div>
-            <label className="mb-1 block text-2xs text-zinc-600">Slippage %</label>
-            <input type="number" step="0.01" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
-          </div>
+          {/* Slippage only affects INDEX pricing (fill = price × (1 ± slippage)). Black-Scholes mode
+              ignores it and models cost via the option spread, so hide it there to avoid a no-op knob. */}
+          {pricingModel === "INDEX" && (
+            <div>
+              <label className="mb-1 block text-2xs text-zinc-600">Slippage %</label>
+              <input type="number" step="0.01" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Capital Mode</label>
             <select value={capitalMode} onChange={(e) => setCapitalMode(e.target.value as "COMPOUND" | "FIXED")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
