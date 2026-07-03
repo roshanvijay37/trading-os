@@ -91,6 +91,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .flag.ch{color:var(--saffron-deep);background:rgba(255,106,0,.1);border:1px solid rgba(255,106,0,.2)}
 .flag.add{color:var(--up);background:var(--up-bg);border:1px solid rgba(11,138,62,.2)}
 .flag.rem{color:var(--down);background:var(--down-bg);border:1px solid rgba(194,65,12,.2)}
+.pconn{padding:10px 13px 0}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)}
 .cell{background:var(--card);padding:8px 13px}
 .cell .cl{font-size:10px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -299,7 +300,24 @@ function contactMini(person,label){
   const wa=ok?'<a class="mfab wa" href="https://wa.me/91'+d+'?text='+encodeURIComponent(WA_GREETING)+'" target="_blank" rel="noopener" data-haptic aria-label="WhatsApp '+nm+'">'+SVG_WA+'</a>':'';
   return '<span class="conn"><span class="cl">'+label+'</span>'+nm+call+wa+'</span>';
 }
-function partContacts(pn){const c=PART_CONTACT[pn];if(!c)return '<span class="conn muted">no contact on file</span>';return contactMini(c.pk,'Pramukh')+contactMini(c.pr,'Prabhari');}
+let BLA2_CONTACT={};
+async function loadBLA2(){
+  try{
+    const html=await (await fetch('maha.html',{cache:'no-store'})).text();
+    const m=html.match(/const\s+DATA\s*=\s*(\[[\s\S]*?\]);/);
+    if(!m)return;
+    const arr=new Function('return '+m[1])();
+    if(!Array.isArray(arr))return;
+    arr.forEach(d=>{BLA2_CONTACT[d.booth]=[d.name,d.phone];});
+  }catch(e){}
+}
+function partContacts(pn){
+  const c=PART_CONTACT[pn],b2=BLA2_CONTACT[pn];
+  let out='';
+  if(c)out+=contactMini(c.pk,'Pramukh')+contactMini(c.pr,'Prabhari');
+  if(b2)out+=contactMini(b2,'BLA2');
+  return out||'<span class="conn muted">no contact on file</span>';
+}
 function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>Part '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(kendra)+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
 
 function insList(rows,cap){cap=cap||20;if(rows.length<=cap)return '<div class="ilist">'+rows.join('')+'</div>';const closed='Show all '+rows.length+'  ·  +'+(rows.length-cap)+' more';return '<div class="ilist">'+rows.slice(0,cap).join('')+'<div class="imore" hidden>'+rows.slice(cap).join('')+'</div><button type="button" class="morebtn" data-more data-closed="'+closed+'" data-open="▴ Show fewer" aria-expanded="false">▾ '+closed+'</button></div>';}
@@ -400,6 +418,7 @@ function partCard(r,opts){
   return '<div class="pcard '+(kind==='add'?'add':kind==='rem'?'rem':(dmap?'ch':''))+'">'+
     '<div class="ph"><div class="pn"><span class="hash">Part </span>'+esc(String(pn))+'</div><div class="pmeta">'+(ac!=null?'AC '+esc(String(ac))+(asm?' · ':''):'')+esc(asm)+'</div>'+flag+'</div>'+
     '<div class="grid">'+headlineCells(r,dmap)+'</div>'+
+    '<div class="ircon pconn">'+partContacts(pn)+'</div>'+
     '<details class="more"><summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>'+(dmap?'All fields & changes':'All '+STATE.metrics.length+' fields')+'</summary><div class="full">'+fullRows(r,dmap)+'</div></details>'+
     '</div>';
 }
@@ -494,6 +513,7 @@ async function boot(){
     STATE.from=prevDate(); STATE.to=latestDate();   // default: yesterday → today (or single day if only one)
     buildControls();
     await loadView();
+    loadBLA2().then(()=>{ if(STATE.today) render(); });   // enrich contacts once maha.html resolves; never blocks initial paint
   }catch(e){
     el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
   }
