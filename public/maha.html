@@ -61,10 +61,12 @@ body{
 .badge{flex:0 0 auto;font-family:'Sora';font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--green-deep);background:rgba(19,136,8,.1);border:1px solid rgba(19,136,8,.2);padding:5px 9px;border-radius:999px}
 
 /* back link */
-.backbar{max-width:760px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.backbar{max-width:760px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right));display:flex;align-items:center;justify-content:space-between;gap:10px}
 .back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--saffron-deep);text-decoration:none;font-family:'Sora';min-height:40px;padding:4px 2px;margin:-4px -2px;touch-action:manipulation}
 .back svg{width:15px;height:15px}
 .back:active{opacity:.6}
+.langtog{flex:0 0 auto;font-family:'Sora';font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--saffron-deep);cursor:pointer;box-shadow:var(--shadow);white-space:nowrap}
+.langtog:active{opacity:.7}
 
 .leaders{display:flex;justify-content:center;gap:14px;max-width:760px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
 .leaders img{width:58px;height:58px;border-radius:50%;object-fit:cover;object-position:center 15%;border:2px solid #fff;box-shadow:0 2px 8px rgba(24,20,16,.12),0 0 0 2px var(--line)}
@@ -209,16 +211,17 @@ body{
   <div class="hdr-in">
     <div class="lotus"><img src="bjplogo.jpg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
     <div class="hdr-txt">
-      <h1>Booth Contacts</h1>
+      <h1 data-en="Booth Contacts" data-kn="ಬೂತ್ ಸಂಪರ್ಕಗಳು">Booth Contacts</h1>
       <div class="kn">ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ</div>
-      <div class="sub">Maha Shakti Kendra Directory</div>
+      <div class="sub" data-en="Maha Shakti Kendra Directory" data-kn="ಮಹಾ ಶಕ್ತಿ ಕೇಂದ್ರ ಡೈರೆಕ್ಟರಿ">Maha Shakti Kendra Directory</div>
     </div>
     <span class="badge">BLA 2</span>
   </div>
 </header>
 
 <div class="backbar">
-  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>Mandal Directory</a>
+  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg><span data-en="Mandal Directory" data-kn="ಮಂಡಲ ಡೈರೆಕ್ಟರಿ">Mandal Directory</span></a>
+  <button class="langtog" id="langtog" type="button">ಕನ್ನಡ</button>
 </div>
 
 <div class="leaders">
@@ -230,7 +233,7 @@ body{
   <div class="stats" id="stats"></div>
   <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-    <input id="search" type="search" inputmode="search" placeholder="Search name, booth or phone" autocomplete="off">
+    <input id="search" type="search" inputmode="search" placeholder="Search name, booth or phone" data-en-ph="Search name, booth or phone" data-kn-ph="ಹೆಸರು, ಬೂತ್ ಅಥವಾ ಫೋನ್ ಹುಡುಕಿ" autocomplete="off">
     <button class="clear" id="clear" aria-label="Clear search">&times;</button>
   </div>
   <div class="chips" id="chips"></div>
@@ -241,13 +244,13 @@ body{
 <footer class="foot">
   <div class="div"></div>
   <div class="lotus-sm"><img src="bjplogo.jpg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
-  <div class="love">Developed with <span class="heart">&hearts;</span> by</div>
-  <div class="by">Roshan Belvai</div>
-  <div class="org">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>
+  <div class="love" data-en="Developed with ♥ by" data-kn="♥ ಪ್ರೀತಿಯಿಂದ ಅಭಿವೃದ್ಧಿಪಡಿಸಿದವರು">Developed with <span class="heart">&hearts;</span> by</div>
+  <div class="by" data-en="Roshan Belvai" data-kn="ರೋಶನ್ ಬೆಳ್ವೈ">Roshan Belvai</div>
+  <div class="org" data-en="Bharatiya Janata Party · Mulki–Moodbidri Mandal" data-kn="ಭಾರತೀಯ ಜನತಾ ಪಕ್ಷ · ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>
   <div class="contact">
-    <div class="cname">Roshan V</div>
+    <div class="cname" data-en="Roshan V" data-kn="ರೋಶನ್ ವಿ">Roshan V</div>
     <a class="cphone" href="tel:+917349495469">7349495469</a>
-    <div class="ctitle">Secretary BJP Yuvamorcha Mulki Moodbidri Mandala</div>
+    <div class="ctitle" data-en="Secretary BJP Yuvamorcha Mulki Moodbidri Mandala" data-kn="ಕಾರ್ಯದರ್ಶಿ, ಬಿಜೆಪಿ ಯುವಮೋರ್ಚಾ ಮುಲ್ಕಿ ಮೂಡುಬಿದಿರೆ ಮಂಡಲ">Secretary BJP Yuvamorcha Mulki Moodbidri Mandala</div>
   </div>
   <div class="me"><img src="me.jpg" alt="" loading="lazy"></div>
 </footer>
@@ -257,6 +260,7 @@ body{
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>
 </button>
 
+<script src="i18n.js"></script>
 <script>
 const DATA = [
   {kendra:"Mulki Maha Shakti Kendra", booth:1, name:"Sunil Alva", phone:"8951426774"},
@@ -522,7 +526,9 @@ const KENDRAS=[...new Set(DATA.map(d=>d.kendra))];
 let activeKendra='';
 
 // header stat strip
-statsEl.innerHTML='<b>'+DATA.length+'</b> contacts<span class="sep"></span><b>'+KENDRAS.length+'</b> Maha Shakti Kendras';
+function renderStats(){
+  statsEl.innerHTML='<b>'+DATA.length+'</b> '+I18N.L('contacts','ಸಂಪರ್ಕಗಳು')+'<span class="sep"></span><b>'+KENDRAS.length+'</b> '+I18N.L('Maha Shakti Kendras','ಮಹಾ ಶಕ್ತಿ ಕೇಂದ್ರಗಳು');
+}
 
 // build chips
 function buildChips(){
@@ -535,7 +541,7 @@ function buildChips(){
     return b;
   };
   chipsEl.innerHTML='';
-  chipsEl.appendChild(mk('All','',DATA.length));
+  chipsEl.appendChild(mk(I18N.L('All','ಎಲ್ಲಾ'),'',DATA.length));
   KENDRAS.forEach(k=>{
     const short=k.replace(/ Maha Shakti Kendra$/,'');
     chipsEl.appendChild(mk(short,k,DATA.filter(d=>d.kendra===k).length));
@@ -556,7 +562,7 @@ function cardHTML(r){
     :'<span class="fab wa" aria-disabled="true" title="No number on file">'+SVG_WA+'</span>';
   const phone=ok
     ?'<button type="button" class="ph" data-copy="'+esc(r.phone)+'" aria-label="Copy '+esc(r.phone)+'">'+esc(r.phone)+SVG_COPY+'</button>'
-    :'<span class="ph nophone">No number on file</span>';
+    :'<span class="ph nophone">'+I18N.L('No number on file','ಸಂಖ್ಯೆ ಲಭ್ಯವಿಲ್ಲ')+'</span>';
   return '<div class="card">'+
     '<div class="avatar" style="background:linear-gradient(150deg,'+c1+','+c2+')">'+initials(r.name)+
       '<span class="bn">#'+r.booth+'</span></div>'+
@@ -573,10 +579,13 @@ function render(animate){
     return d.name.toLowerCase().includes(q)||String(d.booth).includes(q)||d.phone.includes(q)||d.kendra.toLowerCase().includes(q);
   });
 
-  countEl.innerHTML='<b>'+rows.length+'</b> '+(rows.length===1?'contact':'contacts')+(activeKendra?' in '+esc(activeKendra.replace(/ Maha Shakti Kendra$/,'')):'');
+  const kendraShort=activeKendra?esc(activeKendra.replace(/ Maha Shakti Kendra$/,'')):'';
+  const countWord=I18N.L(rows.length===1?'contact':'contacts','ಸಂಪರ್ಕಗಳು');
+  const countTail=activeKendra?I18N.L(' in '+kendraShort,' — '+kendraShort):'';
+  countEl.innerHTML='<b>'+rows.length+'</b> '+countWord+countTail;
 
   if(!rows.length){
-    listEl.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>No contacts found</h3><p>Try a different name, booth number, or clear the filter.</p></div>';
+    listEl.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>'+I18N.L('No contacts found','ಯಾವುದೇ ಸಂಪರ್ಕಗಳು ಸಿಗಲಿಲ್ಲ')+'</h3><p>'+I18N.L('Try a different name, booth number, or clear the filter.','ಬೇರೆ ಹೆಸರು, ಬೂತ್ ಸಂಖ್ಯೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ ಫಿಲ್ಟರ್ ತೆರವುಗೊಳಿಸಿ.')+'</p></div>';
     return;
   }
 
@@ -614,7 +623,7 @@ listEl.addEventListener('click',e=>{
   const cp=e.target.closest('[data-copy]');
   if(cp){
     const num=cp.getAttribute('data-copy');
-    copyText(num).then(ok=>{haptic(ok?12:0);if(ok)showToast('Number copied · '+num);});
+    copyText(num).then(ok=>{haptic(ok?12:0);if(ok)showToast(I18N.L('Number copied','ಸಂಖ್ಯೆ ನಕಲಿಸಲಾಗಿದೆ')+' · '+num);});
     return;
   }
   const fab=e.target.closest('[data-haptic]');
@@ -631,6 +640,9 @@ window.addEventListener('scroll',()=>{
 },{passive:true});
 totopEl.addEventListener('click',()=>{haptic(8);window.scrollTo({top:0,behavior:'smooth'});});
 
+I18N.applyStatic();
+I18N.mountToggle('langtog',()=>{renderStats();buildChips();render(false);});
+renderStats();
 buildChips();
 render(true);
 </script>

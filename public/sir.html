@@ -177,10 +177,12 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .foot .me{margin-top:16px}
 .foot .me img{width:56px;height:56px;border-radius:50%;object-fit:cover;object-position:center 20%;border:2px solid #fff;box-shadow:0 2px 8px rgba(24,20,16,.12),0 0 0 2px var(--line)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:.001ms!important}}
-.backbar{max-width:900px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.backbar{max-width:900px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right));display:flex;align-items:center;justify-content:space-between;gap:10px}
 .back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--saffron-deep);text-decoration:none;font-family:'Sora';min-height:40px;padding:4px 2px;margin:-4px -2px;touch-action:manipulation}
 .back svg{width:15px;height:15px}
 .back:active{opacity:.6}
+.langtog{flex:0 0 auto;font-family:'Sora';font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--saffron-deep);cursor:pointer;box-shadow:var(--shadow);white-space:nowrap}
+.langtog:active{opacity:.7}
 .leaders{display:flex;justify-content:center;gap:14px;max-width:900px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
 .leaders img{width:58px;height:58px;border-radius:50%;object-fit:cover;object-position:center 15%;border:2px solid #fff;box-shadow:0 2px 8px rgba(24,20,16,.12),0 0 0 2px var(--line)}
 </style>
@@ -192,14 +194,15 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
     <div class="lotus"><img src="bjplogo.jpg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
     <div class="hdr-txt">
       <h1>SIR-201 Moodabidre</h1>
-      <div class="sub" id="subt">Enumeration Form tracking</div>
+      <div class="sub" id="subt" data-en="Enumeration Form tracking" data-kn="ಎನ್ಯೂಮರೇಶನ್ ಫಾರ್ಮ್ ಟ್ರ್ಯಾಕಿಂಗ್">Enumeration Form tracking</div>
     </div>
     <div class="hdr-date" id="hdate"></div>
   </div>
 </header>
 
 <div class="backbar">
-  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>Mandal Directory</a>
+  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg><span data-en="Mandal Directory" data-kn="ಮಂಡಲ ಡೈರೆಕ್ಟರಿ">Mandal Directory</span></a>
+  <button class="langtog" id="langtog" type="button">ಕನ್ನಡ</button>
 </div>
 
 <div class="leaders">
@@ -213,26 +216,27 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
   <div class="stats" id="stats"></div>
   <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-    <input id="search" type="search" inputmode="numeric" placeholder="Search part number or value" autocomplete="off">
+    <input id="search" type="search" inputmode="numeric" placeholder="Search part number or value" data-en-ph="Search part number or value" data-kn-ph="ಭಾಗ ಸಂಖ್ಯೆ ಅಥವಾ ಮೌಲ್ಯ ಹುಡುಕಿ" autocomplete="off">
     <button class="clear" id="clear" aria-label="Clear">&times;</button>
   </div>
   <div class="tabs" id="tabs"></div>
   <div class="count" id="count"></div>
-  <div id="list"><div class="loading"><div class="spin"></div>Loading latest snapshot…</div></div>
+  <div id="list"><div class="loading"><div class="spin"></div><span data-en="Loading latest snapshot…" data-kn="ಇತ್ತೀಚಿನ ಸ್ನ್ಯಾಪ್‌ಶಾಟ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ…">Loading latest snapshot…</span></div></div>
 </main>
 
 <footer class="foot">
   <div class="div"></div>
-  <div class="org">ECI SIR Enumeration-Form tracking · AC 201 Moodabidri · Dakshina Kannada</div>
+  <div class="org" data-en="ECI SIR Enumeration-Form tracking · AC 201 Moodabidri · Dakshina Kannada" data-kn="ECI SIR ಎನ್ಯೂಮರೇಶನ್ ಫಾರ್ಮ್ ಟ್ರ್ಯಾಕಿಂಗ್ · AC 201 ಮೂಡುಬಿದಿರೆ · ದಕ್ಷಿಣ ಕನ್ನಡ">ECI SIR Enumeration-Form tracking · AC 201 Moodabidri · Dakshina Kannada</div>
   <div class="by">roshanvijay.com</div>
   <div class="contact">
-    <div class="cname">Roshan V</div>
+    <div class="cname" data-en="Roshan V" data-kn="ರೋಶನ್ ವಿ">Roshan V</div>
     <a class="cphone" href="tel:+917349495469">7349495469</a>
-    <div class="ctitle">Secretary BJP Yuvamorcha Mulki Moodbidri Mandala</div>
+    <div class="ctitle" data-en="Secretary BJP Yuvamorcha Mulki Moodbidri Mandala" data-kn="ಕಾರ್ಯದರ್ಶಿ, ಬಿಜೆಪಿ ಯುವಮೋರ್ಚಾ ಮುಲ್ಕಿ ಮೂಡುಬಿದಿರೆ ಮಂಡಲ">Secretary BJP Yuvamorcha Mulki Moodbidri Mandala</div>
   </div>
   <div class="me"><img src="me.jpg" alt="" loading="lazy"></div>
 </footer>
 
+<script src="i18n.js"></script>
 <script>
 const BASE='data/sir/';
 const SHORT={
@@ -243,10 +247,18 @@ const SHORT={
   "UEF Death":"UEF Death","UEF Permanent Shifting":"UEF Shifted","UEF Already Enrolled":"UEF Enrolled",
   "UEF Absent":"UEF Absent","UEF Others":"UEF Others","Total UEF":"Total UEF","EF Parts Downloaded":"Parts Downloaded"
 };
+const SHORT_KN={
+  "Total Elector":"ಮತದಾರರು","Total EFs Printed":"ಮುದ್ರಿತ","Total EFs Distributed":"ವಿತರಿಸಿದ EF",
+  "Total EFs Digitized":"ಡಿಜಿಟಲೀಕರಿಸಿದ EF","Trained Blo Count":"ತರಬೇತಿ ಪಡೆದ BLO","Total Blo Count":"ಒಟ್ಟು BLO",
+  "EFs Submitted by Elector ( Not verified by BLO)":"ಸಲ್ಲಿಸಲಾಗಿದೆ (ಪರಿಶೀಲಿಸದ)","EFs Verified by BLO":"ಪರಿಶೀಲಿಸಿದ EF",
+  "Mapped as Progeny":"ಮ್ಯಾಪ್: ಸಂತತಿ","Mapped as Self":"ಮ್ಯಾಪ್: ಸ್ವಂತ","No Mapping":"ಮ್ಯಾಪಿಂಗ್ ಇಲ್ಲ",
+  "UEF Death":"UEF ಮರಣ","UEF Permanent Shifting":"UEF ಸ್ಥಳಾಂತರ","UEF Already Enrolled":"UEF ನೋಂದಣಿ",
+  "UEF Absent":"UEF ಗೈರು","UEF Others":"UEF ಇತರೆ","Total UEF":"ಒಟ್ಟು UEF","EF Parts Downloaded":"ಡೌನ್‌ಲೋಡ್ ಆದ ಭಾಗಗಳು"
+};
 const HEADLINE=["Total Elector","Total EFs Distributed","Total EFs Digitized","EFs Verified by BLO"];
 const SUMMARY=["Total Elector","Total EFs Distributed","Total EFs Digitized","EFs Verified by BLO","Total UEF","EF Parts Downloaded"];
 const fmt=n=>(typeof n==='number')?n.toLocaleString('en-IN'):n;
-const sh=m=>SHORT[m]||m;
+const sh=m=>I18N.L(SHORT[m]||m,SHORT_KN[m]||SHORT[m]||m);
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const el={note:'note',stats:'stats',search:'search',clear:'clear',tabs:'tabs',count:'count',list:'list',subt:'subt',hdate:'hdate',ctrl:'ctrl'};
 for(const k in el) el[k]=document.getElementById(el[k]);
@@ -347,42 +359,42 @@ function partContacts(pn){
   const c=PART_CONTACT[pn],b2=BLA2_CONTACT[pn];
   let out='';
   if(b2)out+=contactMini(b2,'BLA2');
-  if(c)out+=contactMini(c.pk,'Pramukh')+contactMini(c.pr,'Prabhari');
-  return out||'<span class="conn muted">no contact on file</span>';
+  if(c)out+=contactMini(c.pk,I18N.L('Pramukh','ಪ್ರಮುಖ್'))+contactMini(c.pr,I18N.L('Prabhari','ಪ್ರಭಾರಿ'));
+  return out||'<span class="conn muted">'+I18N.L('no contact on file','ಸಂಪರ್ಕ ಲಭ್ಯವಿಲ್ಲ')+'</span>';
 }
-function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>Part '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(kendra)+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
+function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>'+I18N.L('Part','ಭಾಗ')+' '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(kendra)+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
 
-function insList(rows,cap){cap=cap||20;if(rows.length<=cap)return '<div class="ilist">'+rows.join('')+'</div>';const closed='Show all '+rows.length+'  ·  +'+(rows.length-cap)+' more';return '<div class="ilist">'+rows.slice(0,cap).join('')+'<div class="imore" hidden>'+rows.slice(cap).join('')+'</div><button type="button" class="morebtn" data-more data-closed="'+closed+'" data-open="▴ Show fewer" aria-expanded="false">▾ '+closed+'</button></div>';}
+function insList(rows,cap){cap=cap||20;if(rows.length<=cap)return '<div class="ilist">'+rows.join('')+'</div>';const closed=I18N.L('Show all '+rows.length+'  ·  +'+(rows.length-cap)+' more','ಎಲ್ಲಾ '+rows.length+' ತೋರಿಸಿ  ·  +'+(rows.length-cap)+' ಇನ್ನಷ್ಟು');const openLbl=I18N.L('▴ Show fewer','▴ ಕಡಿಮೆ ತೋರಿಸಿ');return '<div class="ilist">'+rows.slice(0,cap).join('')+'<div class="imore" hidden>'+rows.slice(cap).join('')+'</div><button type="button" class="morebtn" data-more data-closed="'+closed+'" data-open="'+openLbl+'" aria-expanded="false">▾ '+closed+'</button></div>';}
 function renderInsights(){
   const t=STATE.today,prev=STATE.prev;
   const T=m=>sum(t.rows,m),pct=(a,b)=>b?Math.round(a/b*100):0;
   const E='Total Elector',D='Total EFs Distributed',V='EFs Verified by BLO',G='Total EFs Digitized',S='EFs Submitted by Elector ( Not verified by BLO)',NM='No Mapping';
   const elect=T(E),dist=T(D),ver=T(V),dig=T(G),nomap=T(NM),uef=T('Total UEF'),self=T('Mapped as Self'),prog=T('Mapped as Progeny');
   let h='<div class="ins"><div class="ifun">';
-  [['Distributed EF',dist],['Verified EF',ver],['Digitized EF',dig]].forEach(x=>{h+='<div class="ifr"><div class="ifl"><span>'+x[0]+'</span><span>'+fmt(x[1])+' / '+fmt(elect)+' · '+pct(x[1],elect)+'%</span></div><div class="ibar"><i style="width:'+pct(x[1],elect)+'%"></i></div></div>';});
-  h+='<div class="ichips"><span class="ichip warn">No-mapping '+fmt(nomap)+'</span><span class="ichip">Self '+fmt(self)+'</span><span class="ichip">Progeny '+fmt(prog)+'</span><span class="ichip">UEF '+fmt(uef)+'</span></div></div>';
+  [[I18N.L('Distributed EF','ವಿತರಿಸಿದ EF'),dist],[I18N.L('Verified EF','ಪರಿಶೀಲಿಸಿದ EF'),ver],[I18N.L('Digitized EF','ಡಿಜಿಟಲೀಕರಿಸಿದ EF'),dig]].forEach(x=>{h+='<div class="ifr"><div class="ifl"><span>'+x[0]+'</span><span>'+fmt(x[1])+' / '+fmt(elect)+' · '+pct(x[1],elect)+'%</span></div><div class="ibar"><i style="width:'+pct(x[1],elect)+'%"></i></div></div>';});
+  h+='<div class="ichips"><span class="ichip warn">'+I18N.L('No-mapping','ಮ್ಯಾಪಿಂಗ್ ಇಲ್ಲ')+' '+fmt(nomap)+'</span><span class="ichip">'+I18N.L('Self','ಸ್ವಂತ')+' '+fmt(self)+'</span><span class="ichip">'+I18N.L('Progeny','ಸಂತತಿ')+' '+fmt(prog)+'</span><span class="ichip">UEF '+fmt(uef)+'</span></div></div>';
   const dmap=prev?new Map(STATE.diff.changed.map(c=>[keyOf(c.row,STATE.key),c.dmap])):null;
   const pd=(r,m)=>{if(!dmap)return 0;const d=dmap.get(keyOf(r,STATE.key));return d&&d[m]?d[m].delta:0;};
   const kv=pn=>{const c=PART_CONTACT[pn];return c&&c.v;};
   // 1) needs a nudge
   h+='<section class="isec">';
-  if(!prev){h+='<h3>⚠️ Needs a nudge</h3><p class="isub">Pick two days (From → To) to see which booths didn\'t move.</p>';}
+  if(!prev){h+='<h3>⚠️ '+I18N.L('Needs a nudge','ಸ್ವಲ್ಪ ಪ್ರಚೋದನೆ ಬೇಕು')+'</h3><p class="isub">'+I18N.L('Pick two days (From → To) to see which booths didn\'t move.','ಯಾವ ಬೂತ್‌ಗಳಲ್ಲಿ ಚಲನೆ ಆಗಿಲ್ಲ ಎಂದು ನೋಡಲು ಎರಡು ದಿನಗಳನ್ನು (From → To) ಆಯ್ಕೆಮಾಡಿ.')+'</p>';}
   else{
     const L=t.rows.filter(r=>((r[D]||0)<(r[E]||0))&&(Math.abs(pd(r,D))+Math.abs(pd(r,V))+Math.abs(pd(r,G))+Math.abs(pd(r,S)))===0).sort((a,b)=>(b[E]||0)-(a[E]||0));
-    h+='<h3>⚠️ Needs a nudge <span class="in">'+L.length+'</span></h3><p class="isub">No movement '+esc(STATE.from)+' → '+esc(STATE.to)+', not yet complete — biggest booths first.</p>'+(L.length?insList(L.map(r=>{const pn=r["Part Number"];const m=(r[D]||0)>0?('stalled · '+fmt(r[D])+' / '+fmt(r[E])+' distributed'):'<b class="hot">not started</b>';return insRow(pn,kv(pn),m);})):'<p class="isub">Every booth moved. 🎉</p>');
+    h+='<h3>⚠️ '+I18N.L('Needs a nudge','ಸ್ವಲ್ಪ ಪ್ರಚೋದನೆ ಬೇಕು')+' <span class="in">'+L.length+'</span></h3><p class="isub">'+I18N.L('No movement '+esc(STATE.from)+' → '+esc(STATE.to)+', not yet complete — biggest booths first.',esc(STATE.from)+' → '+esc(STATE.to)+' ನಡುವೆ ಚಲನೆ ಇಲ್ಲ, ಇನ್ನೂ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ — ದೊಡ್ಡ ಬೂತ್‌ಗಳು ಮೊದಲು.')+'</p>'+(L.length?insList(L.map(r=>{const pn=r["Part Number"];const m=(r[D]||0)>0?(I18N.L('stalled','ನಿಂತಿದೆ')+' · '+fmt(r[D])+' / '+fmt(r[E])+' '+I18N.L('distributed','ವಿತರಿಸಲಾಗಿದೆ')):'<b class="hot">'+I18N.L('not started','ಪ್ರಾರಂಭವಾಗಿಲ್ಲ')+'</b>';return insRow(pn,kv(pn),m);})):'<p class="isub">'+I18N.L('Every booth moved. 🎉','ಎಲ್ಲಾ ಬೂತ್‌ಗಳಲ್ಲಿ ಚಲನೆ ಆಗಿದೆ. 🎉')+'</p>');
   }
   h+='</section>';
   // 2) no-mapping hotspots
   const NL=t.rows.filter(r=>(r[NM]||0)>0).sort((a,b)=>(b[NM]||0)-(a[NM]||0));
-  h+='<section class="isec"><h3>📄 No-mapping hotspots'+(NL.length?' <span class="in">'+NL.length+'</span>':'')+'</h3><p class="isub">Voters who are neither Self nor Progeny → they\'ll need documents. Most first.</p>'+(NL.length?insList(NL.map(r=>{const pn=r["Part Number"];return insRow(pn,kv(pn),'<b class="hot">'+fmt(r[NM])+'</b> no-mapping');})):'<p class="isub">None yet.</p>')+'</section>';
+  h+='<section class="isec"><h3>📄 '+I18N.L('No-mapping hotspots','ಮ್ಯಾಪಿಂಗ್ ಇಲ್ಲದ ಸ್ಥಳಗಳು')+(NL.length?' <span class="in">'+NL.length+'</span>':'')+'</h3><p class="isub">'+I18N.L('Voters who are neither Self nor Progeny → they\'ll need documents. Most first.','ಸ್ವಂತ ಅಥವಾ ಸಂತತಿ ಎಂದು ಮ್ಯಾಪ್ ಆಗದ ಮತದಾರರು → ಅವರಿಗೆ ದಾಖಲೆಗಳು ಬೇಕಾಗುತ್ತವೆ. ಹೆಚ್ಚು ಇರುವವರು ಮೊದಲು.')+'</p>'+(NL.length?insList(NL.map(r=>{const pn=r["Part Number"];return insRow(pn,kv(pn),'<b class="hot">'+fmt(r[NM])+'</b> '+I18N.L('no-mapping','ಮ್ಯಾಪಿಂಗ್ ಇಲ್ಲ'));})):'<p class="isub">'+I18N.L('None yet.','ಇನ್ನೂ ಇಲ್ಲ.')+'</p>')+'</section>';
   // 3) pace vs deadline
   h+='<section class="isec">';
-  if(!prev){h+='<h3>⏱️ Pace vs '+DEADLINE+'</h3><p class="isub">Pick two days to project the finish date from the daily rate.</p>';}
+  if(!prev){h+='<h3>⏱️ '+I18N.L('Pace vs '+DEADLINE,DEADLINE+' ಗುರಿಗೆ ವೇಗ')+'</h3><p class="isub">'+I18N.L('Pick two days to project the finish date from the daily rate.','ದೈನಂದಿನ ದರದಿಂದ ಮುಗಿಯುವ ದಿನಾಂಕ ಅಂದಾಜಿಸಲು ಎರಡು ದಿನಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.')+'</p>';}
   else{
     const days=daysBetween(STATE.from,STATE.to),dl=Math.max(0,Math.round((new Date(DEADLINE)-new Date(STATE.to))/864e5));
     const M=[];t.rows.forEach(r=>{const rem=(r[E]||0)-(r[D]||0);if(rem<=0)return;const vel=pd(r,D)/days,eta=vel>0?rem/vel:Infinity;if(eta===Infinity||eta>dl)M.push({r,rem,eta});});
     M.sort((a,b)=>(b.eta===Infinity?1e9:b.eta)-(a.eta===Infinity?1e9:a.eta));
-    h+='<h3>⏱️ Won\'t finish by '+DEADLINE+(M.length?' <span class="in">'+M.length+'</span>':'')+'</h3><p class="isub">'+dl+' days left · projected at the '+esc(STATE.from)+' → '+esc(STATE.to)+' distribution rate.</p>'+(M.length?insList(M.map(o=>{const pn=o.r["Part Number"];const late=o.eta===Infinity?'no movement — stalled':('ETA '+addDays(STATE.to,Math.ceil(o.eta))+' · '+Math.ceil(o.eta-dl)+'d late');return insRow(pn,kv(pn),'<b class="hot">'+esc(late)+'</b> · '+fmt(o.rem)+' left');})):'<p class="isub">On track. 🎉</p>');
+    h+='<h3>⏱️ '+I18N.L('Won\'t finish by '+DEADLINE,DEADLINE+' ಒಳಗೆ ಮುಗಿಯುವುದಿಲ್ಲ')+(M.length?' <span class="in">'+M.length+'</span>':'')+'</h3><p class="isub">'+I18N.L(dl+' days left · projected at the '+esc(STATE.from)+' → '+esc(STATE.to)+' distribution rate.',dl+' ದಿನ ಉಳಿದಿದೆ · '+esc(STATE.from)+' → '+esc(STATE.to)+' ವಿತರಣಾ ದರದ ಆಧಾರದಲ್ಲಿ ಅಂದಾಜು.')+'</p>'+(M.length?insList(M.map(o=>{const pn=o.r["Part Number"];const late=o.eta===Infinity?I18N.L('no movement — stalled','ಚಲನೆ ಇಲ್ಲ — ನಿಂತಿದೆ'):(I18N.L('ETA','ಅಂದಾಜು')+' '+addDays(STATE.to,Math.ceil(o.eta))+' · '+Math.ceil(o.eta-dl)+I18N.L('d late','ದಿನ ತಡ'));return insRow(pn,kv(pn),'<b class="hot">'+esc(late)+'</b> · '+fmt(o.rem)+' '+I18N.L('left','ಬಾಕಿ'));})):'<p class="isub">'+I18N.L('On track. 🎉','ಸರಿಯಾದ ದಾರಿಯಲ್ಲಿದೆ. 🎉')+'</p>');
   }
   h+='</section></div>';
   el.list.innerHTML=h;
@@ -406,10 +418,10 @@ function renderKendra(){
       return insRow(pn,null,'<b>'+pctOf(d,e)+'%</b> · '+fmt(d)+' / '+fmt(e));
     });
     return '<details class="ksec"><summary>'
-      +'<div class="ksrow"><div class="ksname">'+esc(k.msk)+'<span class="ksn">'+k.parts.length+' booths</span></div>'
+      +'<div class="ksrow"><div class="ksname">'+esc(k.msk)+'<span class="ksn">'+k.parts.length+' '+I18N.L('booths','ಬೂತ್‌ಗಳು')+'</span></div>'
       +'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></div>'
       +'<div class="ksbar"><div class="ibar"><i style="width:'+k.pct+'%"></i></div></div>'
-      +'<div class="kspct">'+k.pct+'% distributed<span class="ksnum">'+fmt(k.dist)+' / '+fmt(k.elect)+'</span></div>'
+      +'<div class="kspct">'+k.pct+'% '+I18N.L('distributed','ವಿತರಿಸಲಾಗಿದೆ')+'<span class="ksnum">'+fmt(k.dist)+' / '+fmt(k.elect)+'</span></div>'
       +'</summary><div class="klist">'+insList(rows)+'</div></details>';
   }).join('');
   el.list.innerHTML='<div class="ins">'+h+'</div>';
@@ -437,7 +449,7 @@ function deltaChip(d,cls){ if(d==null) return ''; if(d===0) return '<span class=
 function renderStats(){
   const t=STATE.today, df=STATE.diff;
   const cards=[];
-  cards.push('<div class="stat"><div class="l">Parts</div><div class="v">'+fmt(t.rows.length)+'</div></div>');
+  cards.push('<div class="stat"><div class="l">'+I18N.L('Parts','ಭಾಗಗಳು')+'</div><div class="v">'+fmt(t.rows.length)+'</div></div>');
   STATE.summary.forEach(m=>{
     const tt=df.totals[m]||{now:sum(t.rows,m),delta:null};
     cards.push('<div class="stat"><div class="l">'+esc(sh(m))+'</div><div class="v">'+fmt(tt.now)+'</div>'+(tt.delta!=null?'<div>'+deltaChip(tt.delta)+'</div>':'')+'</div>');
@@ -446,7 +458,7 @@ function renderStats(){
 }
 
 function renderTabs(){
-  const defs=[['kendra','🏛️ Kendra',null],['insights','⚡ Insights',null],['all','All parts',STATE.today.rows.length]];
+  const defs=[['kendra','🏛️ '+I18N.L('Kendra','ಕೇಂದ್ರ'),null],['insights','⚡ '+I18N.L('Insights','ಒಳನೋಟ'),null],['all',I18N.L('All parts','ಎಲ್ಲಾ ಭಾಗಗಳು'),STATE.today.rows.length]];
   el.tabs.innerHTML=defs.map(([id,lab,n])=>'<button class="tab" type="button" data-tab="'+id+'" aria-pressed="'+(STATE.tab===id)+'">'+lab+(n!=null?'<span class="n">'+n+'</span>':'')+'</button>').join('');
 }
 
@@ -468,12 +480,12 @@ function partCard(r,opts){
   opts=opts||{}; const dmap=opts.dmap;
   const pn=r["Part Number"], asm=r["Asmbly Name"]||'', ac=r["AC Number"];
   let flag='';
-  if(dmap){ const n=Object.keys(dmap).length; flag='<span class="flag ch">▲ '+n+' changed</span>'; }
+  if(dmap){ const n=Object.keys(dmap).length; flag='<span class="flag ch">▲ '+n+' '+I18N.L('changed','ಬದಲಾಗಿದೆ')+'</span>'; }
   return '<div class="pcard '+(dmap?'ch':'')+'">'+
-    '<div class="ph"><div class="pn"><span class="hash">Part </span>'+esc(String(pn))+'</div><div class="pmeta">'+(ac!=null?'AC '+esc(String(ac))+(asm?' · ':''):'')+esc(asm)+'</div>'+flag+'</div>'+
+    '<div class="ph"><div class="pn"><span class="hash">'+I18N.L('Part','ಭಾಗ')+' </span>'+esc(String(pn))+'</div><div class="pmeta">'+(ac!=null?I18N.L('AC','AC')+' '+esc(String(ac))+(asm?' · ':''):'')+esc(asm)+'</div>'+flag+'</div>'+
     '<div class="grid">'+headlineCells(r,dmap)+'</div>'+
     '<div class="ircon pconn">'+partContacts(pn)+'</div>'+
-    '<details class="more"><summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>'+(dmap?'All fields & changes':'All '+STATE.metrics.length+' fields')+'</summary><div class="full">'+fullRows(r,dmap)+'</div></details>'+
+    '<details class="more"><summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>'+(dmap?I18N.L('All fields & changes','ಎಲ್ಲಾ ಕ್ಷೇತ್ರಗಳು ಮತ್ತು ಬದಲಾವಣೆಗಳು'):I18N.L('All '+STATE.metrics.length+' fields','ಎಲ್ಲಾ '+STATE.metrics.length+' ಕ್ಷೇತ್ರಗಳು'))+'</summary><div class="full">'+fullRows(r,dmap)+'</div></details>'+
     '</div>';
 }
 
@@ -488,8 +500,8 @@ function render(){
   if(STATE.tab==='insights'){ el.count.innerHTML=''; renderInsights(); return; }
   if(STATE.tab==='kendra'){ el.count.innerHTML=''; renderKendra(); return; }
   const items=currentList();
-  el.count.innerHTML='<b>'+items.length+'</b> '+(items.length===1?'part':'parts');
-  if(!items.length){ el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>Nothing here</h3><p>No part matches your search.</p></div>'; return; }
+  el.count.innerHTML='<b>'+items.length+'</b> '+I18N.L(items.length===1?'part':'parts','ಭಾಗಗಳು');
+  if(!items.length){ el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>'+I18N.L('Nothing here','ಇಲ್ಲಿ ಏನೂ ಇಲ್ಲ')+'</h3><p>'+I18N.L('No part matches your search.','ನಿಮ್ಮ ಹುಡುಕಾಟಕ್ಕೆ ಯಾವುದೇ ಭಾಗ ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ.')+'</p></div>'; return; }
   el.list.innerHTML='<div class="cards">'+items.map(it=>partCard(it.r,it)).join('')+'</div>';
 }
 
@@ -503,14 +515,14 @@ const prevDate=()=>STATE.dates.length>1?STATE.dates[STATE.dates.length-2]:latest
 
 function optionsHTML(sel){
   const L=latestDate();
-  return STATE.dates.slice().reverse().map(d=>'<option value="'+d+'"'+(d===sel?' selected':'')+'>'+esc(d)+(d===L?' (latest)':'')+'</option>').join('');
+  return STATE.dates.slice().reverse().map(d=>'<option value="'+d+'"'+(d===sel?' selected':'')+'>'+esc(d)+(d===L?' '+I18N.L('(latest)','(ಇತ್ತೀಚಿನ)'):'')+'</option>').join('');
 }
 function buildControls(){
   const multi=STATE.dates.length>1;
   const q = multi ? '<div class="qbtns">'
-      +'<button class="qbtn" type="button" data-q="yesterday">Yesterday</button>'
-      +'<button class="qbtn" type="button" data-q="today">Today</button>'
-      +'<button class="qbtn" type="button" data-q="diff">Yesterday → Today</button></div>' : '';
+      +'<button class="qbtn" type="button" data-q="yesterday">'+I18N.L('Yesterday','ನಿನ್ನೆ')+'</button>'
+      +'<button class="qbtn" type="button" data-q="today">'+I18N.L('Today','ಇಂದು')+'</button>'
+      +'<button class="qbtn" type="button" data-q="diff">'+I18N.L('Yesterday → Today','ನಿನ್ನೆ → ಇಂದು')+'</button></div>' : '';
   el.ctrl.innerHTML=q+'<div class="range"><select id="fromSel" aria-label="From date"></select><span class="arrow">→</span><select id="toSel" aria-label="To date"></select></div>';
   el.fromSel=document.getElementById('fromSel'); el.toSel=document.getElementById('toSel');
   el.fromSel.innerHTML=optionsHTML(STATE.from); el.toSel.innerHTML=optionsHTML(STATE.to);
@@ -532,9 +544,17 @@ function refreshControls(){
   el.ctrl.querySelectorAll('[data-q]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.q===active));
 }
 
+function paintHeader(){
+  const single=STATE.from===STATE.to;
+  el.hdate.innerHTML='<div class="d">'+esc(STATE.to)+'</div><div class="v">'+(single?I18N.L('single day','ಒಂದೇ ದಿನ'):I18N.L('vs ','ಹೋಲಿಕೆ ')+esc(STATE.from))+'</div>';
+  el.note.innerHTML=single
+    ? '<div class="note">'+I18N.L('Showing ','')+'<b>'+esc(STATE.to)+'</b>'+I18N.L(' — snapshot totals',' — ಸ್ನ್ಯಾಪ್‌ಶಾಟ್ ಒಟ್ಟು ಮೊತ್ತ')+(STATE.dates.length>1?I18N.L('. Pick a different “From” day to see the difference.','. ವ್ಯತ್ಯಾಸ ನೋಡಲು ಬೇರೆ "From" ದಿನಾಂಕ ಆಯ್ಕೆಮಾಡಿ.'):I18N.L(' (first snapshot; the diff appears once a second day exists).',' (ಮೊದಲ ಸ್ನ್ಯಾಪ್‌ಶಾಟ್; ಎರಡನೇ ದಿನ ಬಂದ ನಂತರ ವ್ಯತ್ಯಾಸ ಕಾಣಿಸುತ್ತದೆ).'))+'</div>'
+    : '';
+}
+
 async function loadView(){
   try{
-    el.list.innerHTML='<div class="loading"><div class="spin"></div>Loading…</div>';
+    el.list.innerHTML='<div class="loading"><div class="spin"></div>'+I18N.L('Loading…','ಲೋಡ್ ಆಗುತ್ತಿದೆ…')+'</div>';
     if(STATE.from>STATE.to){const t=STATE.from;STATE.from=STATE.to;STATE.to=t;}
     const single=STATE.from===STATE.to;
     const to=await getSnap(STATE.to);
@@ -543,13 +563,10 @@ async function loadView(){
     STATE.headline=HEADLINE.filter(m=>to.metrics.includes(m)); if(!STATE.headline.length) STATE.headline=to.metrics.slice(0,4);
     STATE.summary=SUMMARY.filter(m=>to.metrics.includes(m)); if(!STATE.summary.length) STATE.summary=to.metrics.slice(0,5);
     STATE.diff=buildDiff(to,from);
-    el.hdate.innerHTML='<div class="d">'+esc(STATE.to)+'</div><div class="v">'+(single?'single day':'vs '+esc(STATE.from))+'</div>';
-    el.note.innerHTML=single
-      ? '<div class="note">Showing <b>'+esc(STATE.to)+'</b> — snapshot totals'+(STATE.dates.length>1?'. Pick a different “From” day to see the difference.':' (first snapshot; the diff appears once a second day exists).')+'</div>'
-      : '';
+    paintHeader();
     refreshControls(); renderStats(); renderTabs(); setTab('kendra');
   }catch(e){
-    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
+    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>'+I18N.L('Could not load data','ಡೇಟಾ ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ')+'</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
   }
 }
 
@@ -563,9 +580,14 @@ async function boot(){
     await loadView();
     loadBLA2().then(()=>{ if(STATE.today) render(); });   // enrich contacts once maha.html resolves; never blocks initial paint
   }catch(e){
-    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
+    el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>'+I18N.L('Could not load data','ಡೇಟಾ ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ')+'</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
   }
 }
+I18N.applyStatic();
+I18N.mountToggle('langtog',()=>{
+  paintHeader(); buildControls(); refreshControls(); renderStats(); renderTabs();
+  if(STATE.today) render();
+});
 
 el.tabs.addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab);});
 el.list.addEventListener('click',e=>{

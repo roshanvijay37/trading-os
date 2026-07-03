@@ -62,10 +62,12 @@ body{
 .badge{flex:0 0 auto;font-family:'Sora';font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--green-deep);background:rgba(19,136,8,.1);border:1px solid rgba(19,136,8,.2);padding:5px 9px;border-radius:999px}
 
 /* back link */
-.backbar{max-width:760px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
+.backbar{max-width:760px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right));display:flex;align-items:center;justify-content:space-between;gap:10px}
 .back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--saffron-deep);text-decoration:none;font-family:'Sora'}
 .back svg{width:15px;height:15px}
 .back:active{opacity:.6}
+.langtog{flex:0 0 auto;font-family:'Sora';font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--saffron-deep);cursor:pointer;box-shadow:var(--shadow);white-space:nowrap}
+.langtog:active{opacity:.7}
 
 .leaders{display:flex;justify-content:center;gap:14px;max-width:760px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left)) 0 max(16px,env(safe-area-inset-right))}
 .leaders img{width:58px;height:58px;border-radius:50%;object-fit:cover;object-position:center 15%;border:2px solid #fff;box-shadow:0 2px 8px rgba(24,20,16,.12),0 0 0 2px var(--line)}
@@ -276,16 +278,17 @@ textarea#msg:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring);
   <div class="hdr-in">
     <div class="lotus"><img src="bjplogo.jpg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
     <div class="hdr-txt">
-      <h1>Booth Outreach</h1>
+      <h1 data-en="Booth Outreach" data-kn="ಬೂತ್ ಸಂಪರ್ಕ ಅಭಿಯಾನ">Booth Outreach</h1>
       <div class="kn">ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ</div>
-      <div class="sub" id="hsub">Message every booth BLA-2 — one tap each</div>
+      <div class="sub" id="hsub" data-en="Message every booth BLA-2 — one tap each" data-kn="ಪ್ರತಿ ಬೂತ್ BLA-2 ಗೆ ಸಂದೇಶ — ಒಂದೇ ಟ್ಯಾಪ್‌ನಲ್ಲಿ">Message every booth BLA-2 — one tap each</div>
     </div>
     <span class="badge">BLA 2</span>
   </div>
 </header>
 
 <div class="backbar">
-  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>Mandal Directory</a>
+  <a class="back" href="mandal.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg><span data-en="Mandal Directory" data-kn="ಮಂಡಲ ಡೈರೆಕ್ಟರಿ">Mandal Directory</span></a>
+  <button class="langtog" id="langtog" type="button">ಕನ್ನಡ</button>
 </div>
 
 <div class="leaders">
@@ -296,27 +299,27 @@ textarea#msg:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring);
 <main class="wrap">
   <!-- Composer -->
   <div class="composer">
-    <div class="lbl"><span class="ic">✍️</span><span>Your message</span></div>
-    <textarea id="msg" placeholder="Type the message you want to send to every booth agent…&#10;&#10;Tip: use {name} and {booth} — each person gets it personalised." spellcheck="true"></textarea>
+    <div class="lbl"><span class="ic">✍️</span><span data-en="Your message" data-kn="ನಿಮ್ಮ ಸಂದೇಶ">Your message</span></div>
+    <textarea id="msg" placeholder="Type the message you want to send to every booth agent…&#10;&#10;Tip: use {name} and {booth} — each person gets it personalised." data-en-ph="Type the message you want to send to every booth agent…&#10;&#10;Tip: use {name} and {booth} — each person gets it personalised." data-kn-ph="ಪ್ರತಿ ಬೂತ್ ಏಜೆಂಟ್‌ಗೆ ಕಳುಹಿಸಬೇಕಾದ ಸಂದೇಶವನ್ನು ಟೈಪ್ ಮಾಡಿ…&#10;&#10;ಸಲಹೆ: {name} ಮತ್ತು {booth} ಬಳಸಿ — ಪ್ರತಿಯೊಬ್ಬರಿಗೂ ವೈಯಕ್ತಿಕಗೊಳಿಸಲಾಗುತ್ತದೆ." spellcheck="true"></textarea>
     <div class="tokrow">
       <button class="tok" data-tok="{name}" type="button">＋ <span class="mono">{name}</span></button>
       <button class="tok" data-tok="{booth}" type="button">＋ <span class="mono">{booth}</span></button>
-      <button class="tok ghost" id="sampleBtn" type="button">Insert sample</button>
-      <button class="tok ghost" id="clearMsg" type="button">Clear</button>
+      <button class="tok ghost" id="sampleBtn" type="button" data-en="Insert sample" data-kn="ಮಾದರಿ ಸೇರಿಸಿ">Insert sample</button>
+      <button class="tok ghost" id="clearMsg" type="button" data-en="Clear" data-kn="ಅಳಿಸಿ">Clear</button>
     </div>
     <div class="cmeta">
-      <span>Personalised per person — not a group. Never looks like spam.</span>
+      <span data-en="Personalised per person — not a group. Never looks like spam." data-kn="ಪ್ರತಿಯೊಬ್ಬರಿಗೂ ವೈಯಕ್ತಿಕ — ಗುಂಪು ಸಂದೇಶವಲ್ಲ. ಸ್ಪ್ಯಾಮ್‌ನಂತೆ ಕಾಣುವುದಿಲ್ಲ.">Personalised per person — not a group. Never looks like spam.</span>
       <span class="cc" id="cc">0</span>
     </div>
     <div class="preview" id="preview"></div>
-    <div class="tip">Tap <b>WhatsApp</b> on a booth → it opens with your message ready → you hit send. Sending marks that booth <b>done</b>, so you never lose your place.</div>
+    <div class="tip" data-en-html="Tap <b>WhatsApp</b> on a booth → it opens with your message ready → you hit send. Sending marks that booth <b>done</b>, so you never lose your place." data-kn-html="ಬೂತ್‌ನಲ್ಲಿ <b>ವಾಟ್ಸಾಪ್</b> ಒತ್ತಿ → ನಿಮ್ಮ ಸಂದೇಶ ಸಿದ್ಧವಾಗಿ ತೆರೆಯುತ್ತದೆ → ನೀವು ಕಳುಹಿಸಿ. ಕಳುಹಿಸಿದ ನಂತರ ಆ ಬೂತ್ <b>ಮುಗಿದಿದೆ</b> ಎಂದು ಗುರುತಾಗುತ್ತದೆ, ಆದ್ದರಿಂದ ನಿಮ್ಮ ಸ್ಥಳ ತಪ್ಪುವುದಿಲ್ಲ.">Tap <b>WhatsApp</b> on a booth → it opens with your message ready → you hit send. Sending marks that booth <b>done</b>, so you never lose your place.</div>
   </div>
 
   <!-- Progress -->
   <div class="prog">
     <div class="prog-top">
-      <div class="pl">Messaged <b id="sentN">0</b> / <span id="totN">0</span> booths</div>
-      <button class="reset" id="reset" disabled>Reset progress</button>
+      <div class="pl"><span data-en="Messaged" data-kn="ಸಂದೇಶ ಕಳುಹಿಸಲಾಗಿದೆ">Messaged</span> <b id="sentN">0</b> / <span id="totN">0</span> <span data-en="booths" data-kn="ಬೂತ್‌ಗಳು">booths</span></div>
+      <button class="reset" id="reset" disabled data-en="Reset progress" data-kn="ಪ್ರಗತಿ ಮರುಹೊಂದಿಸಿ">Reset progress</button>
     </div>
     <div class="progbar"><i id="progFill"></i></div>
   </div>
@@ -324,23 +327,23 @@ textarea#msg:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring);
   <!-- Search -->
   <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
-    <input id="search" type="search" inputmode="search" placeholder="Search name, booth or phone" autocomplete="off">
+    <input id="search" type="search" inputmode="search" placeholder="Search name, booth or phone" data-en-ph="Search name, booth or phone" data-kn-ph="ಹೆಸರು, ಬೂತ್ ಅಥವಾ ಫೋನ್ ಹುಡುಕಿ" autocomplete="off">
     <button class="clear" id="clear" aria-label="Clear search">&times;</button>
   </div>
   <div class="chips" id="chips"></div>
   <div class="filters" id="filters"></div>
   <div class="count" id="count"></div>
-  <div id="list"><div class="loading"><div class="spin"></div>Loading booth contacts…</div></div>
+  <div id="list"><div class="loading"><div class="spin"></div><span data-en="Loading booth contacts…" data-kn="ಬೂತ್ ಸಂಪರ್ಕಗಳು ಲೋಡ್ ಆಗುತ್ತಿದೆ…">Loading booth contacts…</span></div></div>
 </main>
 
 <footer class="foot">
   <div class="div"></div>
-  <div class="by">Roshan Belvai</div>
-  <div class="org">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>
+  <div class="by" data-en="Roshan Belvai" data-kn="ರೋಶನ್ ಬೆಳ್ವೈ">Roshan Belvai</div>
+  <div class="org" data-en="Bharatiya Janata Party · Mulki–Moodbidri Mandal" data-kn="ಭಾರತೀಯ ಜನತಾ ಪಕ್ಷ · ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>
   <div class="contact">
-    <div class="cname">Roshan V</div>
+    <div class="cname" data-en="Roshan V" data-kn="ರೋಶನ್ ವಿ">Roshan V</div>
     <a class="cphone" href="tel:+917349495469">7349495469</a>
-    <div class="ctitle">Secretary BJP Yuvamorcha Mulki Moodbidri Mandala</div>
+    <div class="ctitle" data-en="Secretary BJP Yuvamorcha Mulki Moodbidri Mandala" data-kn="ಕಾರ್ಯದರ್ಶಿ, ಬಿಜೆಪಿ ಯುವಮೋರ್ಚಾ ಮುಲ್ಕಿ ಮೂಡುಬಿದಿರೆ ಮಂಡಲ">Secretary BJP Yuvamorcha Mulki Moodbidri Mandala</div>
   </div>
   <div class="me"><img src="me.jpg" alt="" loading="lazy"></div>
 </footer>
@@ -350,6 +353,7 @@ textarea#msg:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring);
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>
 </button>
 
+<script src="i18n.js"></script>
 <script>
 /* ---------- SVG ---------- */
 const SVG_CALL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
@@ -411,14 +415,15 @@ function buildMsg(r){
 }
 function refreshComposer(){
   const v=el.msg.value||'';
-  el.cc.textContent=v.length+' chars';
+  el.cc.textContent=v.length+' '+I18N.L('chars','ಅಕ್ಷರಗಳು');
   const sample=DATA[0];
+  const pvLabel=I18N.L('Preview','ಮುನ್ನೋಟ');
   if(!v.trim()){
-    el.preview.innerHTML='<span class="pv-h">Preview</span><span class="pv-empty">Empty — WhatsApp will just open the chat with no pre-typed text. Type above to pre-fill a message.</span>';
+    el.preview.innerHTML='<span class="pv-h">'+pvLabel+'</span><span class="pv-empty">'+I18N.L('Empty — WhatsApp will just open the chat with no pre-typed text. Type above to pre-fill a message.','ಖಾಲಿ — ವಾಟ್ಸಾಪ್ ಸಂದೇಶವಿಲ್ಲದೆ ಚಾಟ್ ತೆರೆಯುತ್ತದೆ. ಮೇಲೆ ಟೈಪ್ ಮಾಡಿ ಸಂದೇಶ ಮೊದಲೇ ತುಂಬಲು.')+'</span>';
   }else if(sample){
-    el.preview.innerHTML='<span class="pv-h">Preview → to '+esc(sample.name)+' (booth '+sample.booth+')</span>'+esc(buildMsg(sample));
+    el.preview.innerHTML='<span class="pv-h">'+pvLabel+I18N.L(' → to ',' → ')+esc(sample.name)+' ('+I18N.L('booth','ಬೂತ್')+' '+sample.booth+')</span>'+esc(buildMsg(sample));
   }else{
-    el.preview.innerHTML='<span class="pv-h">Preview</span><span class="pv-empty">Loading contacts…</span>';
+    el.preview.innerHTML='<span class="pv-h">'+pvLabel+'</span><span class="pv-empty">'+I18N.L('Loading contacts…','ಸಂಪರ್ಕಗಳು ಲೋಡ್ ಆಗುತ್ತಿದೆ…')+'</span>';
   }
   try{localStorage.setItem(K_MSG,v);}catch(e){}
 }
@@ -453,7 +458,7 @@ function sirInfo(booth){
   const E=+row['Total Elector']||0, D=+row['Total EFs Distributed']||0;
   const pct=E?Math.round(D/E*100):0;
   let cls='ok', label=fmt(D)+' / '+fmt(E)+' EF · '+pct+'%';
-  if(D===0){cls='ns';label='⚠ EF not distributed';}
+  if(D===0){cls='ns';label='⚠ '+I18N.L('EF not distributed','EF ವಿತರಣೆಯಾಗಿಲ್ಲ');}
   else if(pct<10){cls='low';label=fmt(D)+' / '+fmt(E)+' EF · '+pct+'%';}
   return {cls,label,pct,D,E};
 }
@@ -469,14 +474,14 @@ function buildChips(){
     return b;
   };
   el.chips.innerHTML='';
-  el.chips.appendChild(mk('All','',DATA.length));
+  el.chips.appendChild(mk(I18N.L('All','ಎಲ್ಲಾ'),'',DATA.length));
   KENDRAS.forEach(k=>el.chips.appendChild(mk(k.replace(/ Maha Shakti Kendra$/,''),k,DATA.filter(d=>d.kendra===k).length)));
 }
 function buildFilters(){
-  const modes=[['all','All'],['unsent','Not messaged']];
-  if(sirOK)modes.push(['ns','EF not distributed']);
+  const modes=[['all',I18N.L('All','ಎಲ್ಲಾ')],['unsent',I18N.L('Not messaged','ಸಂದೇಶ ಕಳುಹಿಸಿಲ್ಲ')]];
+  if(sirOK)modes.push(['ns',I18N.L('EF not distributed','EF ವಿತರಣೆಯಾಗಿಲ್ಲ')]);
   let h='<div class="seg" role="tablist">'+modes.map(m=>'<button type="button" data-mode="'+m[0]+'" aria-pressed="'+(filterMode===m[0])+'">'+m[1]+'</button>').join('')+'</div>';
-  if(sirOK)h+='<button type="button" class="sortbtn" data-sort aria-pressed="'+sortLeast+'">↕ Least EF distributed first</button>';
+  if(sirOK)h+='<button type="button" class="sortbtn" data-sort aria-pressed="'+sortLeast+'">↕ '+I18N.L('Least EF distributed first','ಕಡಿಮೆ EF ವಿತರಣೆಯಾಗಿರುವುದು ಮೊದಲು')+'</button>';
   el.filters.innerHTML=h;
 }
 
@@ -492,10 +497,10 @@ function cardHTML(r){
     :'<span class="fab wa" aria-disabled="true" title="No number on file">'+SVG_WA+'</span>';
   const phone=ok
     ?'<button type="button" class="ph" data-copy="'+esc(r.phone)+'" aria-label="Copy '+esc(r.phone)+'">'+esc(r.phone)+SVG_COPY+'</button>'
-    :'<span class="ph nophone">No number on file</span>';
+    :'<span class="ph nophone">'+I18N.L('No number on file','ಸಂಖ್ಯೆ ಲಭ್ಯವಿಲ್ಲ')+'</span>';
   const s=sirInfo(r.booth);
   const sir=s?'<span class="sir '+s.cls+'" title="Latest SIR — EFs distributed vs total electors">'+esc(s.label)+'</span>':'';
-  const done='<button type="button" class="done" data-undo="'+r.booth+'">'+SVG_TICK+'Messaged · undo</button>';
+  const done='<button type="button" class="done" data-undo="'+r.booth+'">'+SVG_TICK+I18N.L('Messaged · undo','ಕಳುಹಿಸಲಾಗಿದೆ · ರದ್ದುಮಾಡಿ')+'</button>';
   return '<div class="card'+(isSent?' sent':'')+'" data-booth="'+r.booth+'">'+
     '<div class="avatar" style="background:linear-gradient(150deg,'+c1+','+c2+')">'+initials(r.name)+'<span class="bn">#'+r.booth+'</span></div>'+
     '<div class="meta"><div class="nm">'+nm+'</div>'+phone+
@@ -514,12 +519,14 @@ function render(animate){
   });
 
   const nSent=rows.filter(d=>sent.has(d.booth)).length;
-  el.count.innerHTML='<b>'+rows.length+'</b> '+(rows.length===1?'booth':'booths')+
-    (activeKendra?' in '+esc(activeKendra.replace(/ Maha Shakti Kendra$/,'')):'')+
-    (rows.length?' · <b>'+nSent+'</b> messaged':'');
+  const kendraShort=activeKendra?esc(activeKendra.replace(/ Maha Shakti Kendra$/,'')):'';
+  const boothWord=I18N.L(rows.length===1?'booth':'booths','ಬೂತ್‌ಗಳು');
+  const kendraTail=activeKendra?I18N.L(' in '+kendraShort,' — '+kendraShort):'';
+  const sentTail=rows.length?' · <b>'+nSent+'</b> '+I18N.L('messaged','ಸಂದೇಶ ಕಳುಹಿಸಲಾಗಿದೆ'):'';
+  el.count.innerHTML='<b>'+rows.length+'</b> '+boothWord+kendraTail+sentTail;
 
   if(!rows.length){
-    el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>No booths match</h3><p>Try a different search or clear the filters.</p></div>';
+    el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>'+I18N.L('No booths match','ಯಾವುದೇ ಬೂತ್ ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ')+'</h3><p>'+I18N.L('Try a different search or clear the filters.','ಬೇರೆ ಹುಡುಕಾಟ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ ಫಿಲ್ಟರ್‌ಗಳನ್ನು ತೆರವುಗೊಳಿಸಿ.')+'</p></div>';
     return;
   }
 
@@ -576,7 +583,7 @@ el.list.addEventListener('click',e=>{
   const cp=e.target.closest('[data-copy]');
   if(cp){
     const num=cp.getAttribute('data-copy');
-    copyText(num).then(ok=>{haptic(ok?12:0);if(ok)showToast('Number copied · '+num);});
+    copyText(num).then(ok=>{haptic(ok?12:0);if(ok)showToast(I18N.L('Number copied','ಸಂಖ್ಯೆ ನಕಲಿಸಲಾಗಿದೆ')+' · '+num);});
     return;
   }
   const fab=e.target.closest('[data-haptic]');
@@ -593,7 +600,7 @@ el.filters.addEventListener('click',e=>{
 el.msg.addEventListener('input',refreshComposer);
 document.querySelectorAll('[data-tok]').forEach(b=>b.addEventListener('click',()=>{haptic(6);insToken(b.getAttribute('data-tok'));}));
 document.getElementById('sampleBtn').addEventListener('click',()=>{
-  if(el.msg.value.trim() && !confirm('Replace the current message with the sample template?'))return;
+  if(el.msg.value.trim() && !confirm(I18N.L('Replace the current message with the sample template?','ಪ್ರಸ್ತುತ ಸಂದೇಶವನ್ನು ಮಾದರಿ ಟೆಂಪ್ಲೇಟ್‌ನಿಂದ ಬದಲಾಯಿಸಬೇಕೇ?')))return;
   el.msg.value=SAMPLE;el.msg.focus();refreshComposer();
 });
 document.getElementById('clearMsg').addEventListener('click',()=>{el.msg.value='';el.msg.focus();refreshComposer();});
@@ -603,8 +610,9 @@ el.clear.addEventListener('click',()=>{el.search.value='';el.search.focus();rend
 
 el.reset.addEventListener('click',()=>{
   if(!sent.size)return;
-  if(!confirm('Clear the messaged/done marks on all '+sent.size+' booths? Your typed message is kept.'))return;
-  sent.clear();persistSent();updateProgress();render(false);haptic(12);showToast('Progress reset');
+  const q=I18N.L('Clear the messaged/done marks on all '+sent.size+' booths? Your typed message is kept.','ಎಲ್ಲಾ '+sent.size+' ಬೂತ್‌ಗಳ ಸಂದೇಶ/ಮುಗಿದಿದೆ ಗುರುತುಗಳನ್ನು ತೆರವುಗೊಳಿಸಬೇಕೇ? ನಿಮ್ಮ ಟೈಪ್ ಮಾಡಿದ ಸಂದೇಶ ಹಾಗೆಯೇ ಇರುತ್ತದೆ.');
+  if(!confirm(q))return;
+  sent.clear();persistSent();updateProgress();render(false);haptic(12);showToast(I18N.L('Progress reset','ಪ್ರಗತಿ ಮರುಹೊಂದಿಸಲಾಗಿದೆ'));
 });
 
 window.addEventListener('scroll',()=>{el.totop.classList.toggle('show',window.scrollY>560);},{passive:true});
@@ -619,13 +627,18 @@ async function loadContacts(){
   if(!Array.isArray(arr)||!arr.length)throw new Error('empty contacts');
   return arr;
 }
+function refreshHsub(){
+  el.hsub.textContent=sirOK
+    ?I18N.L('Live SIR status','ಲೈವ್ SIR ಸ್ಥಿತಿ')+' · '+sirDate
+    :I18N.L('Message every booth BLA-2 — one tap each','ಪ್ರತಿ ಬೂತ್ BLA-2 ಗೆ ಸಂದೇಶ — ಒಂದೇ ಟ್ಯಾಪ್‌ನಲ್ಲಿ');
+}
 async function loadSIR(){
   try{
     const idx=await getJSON('data/sir/index.json');
     const snap=await getJSON('data/sir/'+idx.latest+'.json');
     (snap.rows||[]).forEach(r=>{const pn=+r['Part Number'];if(pn)SIR[pn]=r;});
     sirDate=idx.latest;sirOK=true;
-    el.hsub.textContent='Live SIR status · '+sirDate;
+    refreshHsub();
   }catch(e){sirOK=false;}
 }
 async function boot(){
@@ -637,7 +650,7 @@ async function boot(){
   try{
     DATA=await loadContacts();
   }catch(e){
-    el.list.innerHTML='<div class="empty"><div class="ico">📵</div><h3>Couldn\'t load contacts</h3><p>Open this page over the web (roshanvijay.com/outreach.html) — it reads the booth list from the live site.</p></div>';
+    el.list.innerHTML='<div class="empty"><div class="ico">📵</div><h3>'+I18N.L("Couldn't load contacts","ಸಂಪರ್ಕಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ")+'</h3><p>'+I18N.L('Open this page over the web (roshanvijay.com/outreach.html) — it reads the booth list from the live site.','ಈ ಪುಟವನ್ನು ವೆಬ್‌ನಲ್ಲಿ ತೆರೆಯಿರಿ (roshanvijay.com/outreach.html) — ಇದು ಲೈವ್ ಸೈಟ್‌ನಿಂದ ಬೂತ್ ಪಟ್ಟಿಯನ್ನು ಓದುತ್ತದೆ.')+'</p></div>';
     return;
   }
   byBooth={};DATA.forEach(d=>byBooth[d.booth]=d);
@@ -646,10 +659,13 @@ async function boot(){
   refreshComposer();   // now that DATA[0] exists, show a live personalised preview
 
   await loadSIR();               // optional; enriches but never blocks
+  refreshHsub();
   buildChips();
   buildFilters();
   render(true);
 }
+I18N.applyStatic();
+I18N.mountToggle('langtog',()=>{refreshHsub();refreshComposer();buildChips();buildFilters();render(false);});
 boot();
 </script>
 </body>
