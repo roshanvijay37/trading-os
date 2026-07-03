@@ -48,11 +48,11 @@ body{
 .hdr-bar{height:4px;background:linear-gradient(90deg,var(--saffron) 0%,var(--saffron) 33%,#fff 33%,#fff 66%,var(--green) 66%,var(--green) 100%)}
 .hdr-in{max-width:760px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 12px max(16px,env(safe-area-inset-right));display:flex;align-items:center;gap:12px}
 .lotus{
-  width:46px;height:46px;border-radius:13px;flex:0 0 auto;
+  width:46px;height:46px;border-radius:50%;flex:0 0 auto;
   background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));
   display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34);overflow:hidden;
 }
-.lotus img{width:34px;height:34px;object-fit:contain;}
+.lotus img{width:100%;height:100%;object-fit:cover;}
 .lotus .fallback{font-size:24px;line-height:1}
 .hdr-txt{min-width:0;flex:1}
 .hdr-txt h1{font-family:'Sora';font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
@@ -179,8 +179,8 @@ body{
 
 .foot{max-width:760px;margin:8px auto 0;padding:28px 16px calc(40px + env(safe-area-inset-bottom));text-align:center}
 .foot .div{height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent);margin-bottom:22px}
-.foot .lotus-sm{width:40px;height:40px;border-radius:11px;margin:0 auto 12px;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.3);overflow:hidden}
-.foot .lotus-sm img{width:28px;height:28px;object-fit:contain;}
+.foot .lotus-sm{width:40px;height:40px;border-radius:50%;margin:0 auto 12px;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.3);overflow:hidden}
+.foot .lotus-sm img{width:100%;height:100%;object-fit:cover;}
 .foot .lotus-sm .fallback{font-size:20px}
 .foot .love{font-size:14px;font-weight:500;color:var(--ink)}
 .foot .love .heart{color:#E0245E}
@@ -198,7 +198,7 @@ body{
 <header class="hdr">
   <div class="hdr-bar"></div>
   <div class="hdr-in">
-    <div class="lotus"><img src="bjplogo.png" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+    <div class="lotus"><img src="bjplogo.jpg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
     <div class="hdr-txt">
       <h1>Booth Contacts</h1>
       <div class="kn">ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ</div>
@@ -226,7 +226,7 @@ body{
 
 <footer class="foot">
   <div class="div"></div>
-  <div class="lotus-sm"><img src="bjplogo.png" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+  <div class="lotus-sm"><img src="bjplogo.jpg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
   <div class="love">Developed with <span class="heart">&hearts;</span> by</div>
   <div class="by">Roshan Belvai</div>
   <div class="org">Bharatiya Janata Party · Mulki–Moodbidri Mandal</div>

@@ -49,11 +49,11 @@ body{
 .hdr-bar{height:4px;background:linear-gradient(90deg,var(--saffron) 0%,var(--saffron) 33%,#fff 33%,#fff 66%,var(--green) 66%,var(--green) 100%)}
 .hdr-in{max-width:760px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 12px max(16px,env(safe-area-inset-right));display:flex;align-items:center;gap:12px}
 .lotus{
-  width:46px;height:46px;border-radius:13px;flex:0 0 auto;
+  width:46px;height:46px;border-radius:50%;flex:0 0 auto;
   background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));
   display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34);overflow:hidden;
 }
-.lotus img{width:34px;height:34px;object-fit:contain;}
+.lotus img{width:100%;height:100%;object-fit:cover;}
 .lotus .fallback{font-size:24px;line-height:1}
 .hdr-txt{min-width:0;flex:1}
 .hdr-txt h1{font-family:'Sora';font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
@@ -265,7 +265,7 @@ textarea#msg:focus{border-color:var(--saffron);box-shadow:0 0 0 4px var(--ring);
 <header class="hdr">
   <div class="hdr-bar"></div>
   <div class="hdr-in">
-    <div class="lotus"><img src="bjplogo.png" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
+    <div class="lotus"><img src="bjplogo.jpg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
     <div class="hdr-txt">
       <h1>Booth Outreach</h1>
       <div class="kn">ಮುಲ್ಕಿ–ಮೂಡುಬಿದಿರೆ ಮಂಡಲ</div>
