@@ -334,6 +334,58 @@ const SK_CONTACTS=[
 {v:"Kenjaru",msk:"Bajpe",b:"183,184,185,186,187",pk:["Sharath C Babu","9964107734"],pr:["Geethalakshmi","7760645515"]},
 {v:"Karambaru",msk:"Bajpe",b:"188,189,190,191",pk:["Satish Devadiga","9845910567"],pr:["Lokesh Bajpe","9945690178"]}
 ];
+// Kannada transliterations for village/Kendra names, Maha Shakti Kendra names and person
+// names — parallel display-only data, keyed by the raw English strings above (which
+// remain the canonical identity/matching keys used to build PART_CONTACT/MSK_PARTS).
+const VILLAGE_KN={
+"Omalke":"ಓಮಳ್ಕೆ","Kesaragadde":"ಕೇಸರಗದ್ದೆ","Padumarnadu":"ಪಡುಮರ್ನಾಡು","Moodumarnadu":"ಮೂಡುಮರ್ನಾಡು",
+"Panapila":"ಪಣಪಿಲ","Mantadi":"ಮಂತಾಡಿ","Konaje":"ಕೊಣಾಜೆ","Aliyooru":"ಅಳಿಯೂರು",
+"Alangaru":"ಅಳಂಗಾರು","Ontikatte":"ಒಂಟಿಕಟ್ಟೆ","Jain Pete":"ಜೈನ್ ಪೇಟೆ","Ladi":"ಲಾಡಿ",
+"Kallabettu":"ಕಲ್ಲಬೆಟ್ಟು","Maruru":"ಮಾರೂರು","Kallamundkur":"ಕಲ್ಲಮುಂಡ್ಕೂರು","Niddodi":"ನಿಡ್ಡೋಡಿ",
+"Kadandale":"ಕಡಂದಲೆ","Paladka":"ಪಲಡ್ಕ","Nelligudde":"ನೆಲ್ಲಿಗುಡ್ಡೆ","Sampige":"ಸಂಪಿಗೆ",
+"Ashwathpura":"ಅಶ್ವತ್ಥಪುರ","Mijaru":"ಮಿಜಾರು","Thodaru":"ತೋಡಾರು","Puchamogaru":"ಪುಚ್ಚಮೊಗರು",
+"Iruvailu":"ಇರುವೈಲು","Kondemoola":"ಕೊಂಡೆಮೂಲ","Mennabettu":"ಮೆನ್ನಬೆಟ್ಟು","Thalipadi":"ತಾಳಿಪಾಡಿ",
+"Punaruru":"ಪುನರೂರು","Bappanadu":"ಬಪ್ಪನಾಡು","Karnad":"ಕರ್ನಾಡ್","K.S. Rao Nagar":"ಕೆ.ಎಸ್. ರಾವ್ ನಗರ",
+"Shimanthooru":"ಶಿಮಂತೂರು","Karnire Kavathar":"ಕರ್ನಿರೆ ಕವತಾರ್","Balkunje Kolluru":"ಬಲ್ಕುಂಜೆ ಕೊಳ್ಳೂರು","Elinje":"ಎಳಿಂಜೆ",
+"Kilpady":"ಕಿಲ್ಪಾಡಿ","Bellayaru":"ಬೆಳ್ಳಾಯರು","10th Thokuru":"10ನೇ ತೊಕ್ಕೂರು","Sasihithlu":"ಸಸಿಹಿತ್ಲು",
+"Kemral":"ಕೆಮ್ರಾಲ್","Haleyangadi":"ಹಳೆಯಂಗಡಿ","Ekkaru":"ಎಕ್ಕಾರು","Delanthabettu":"ದೇಲಂತಬೆಟ್ಟು",
+"Madhya Chelyaru":"ಮಧ್ಯ ಚೆಲ್ಯಾರು","Kuthethoor":"ಕುತ್ತೆತ್ತೂರು","Kalavaru":"ಕಳವಾರು","Jokatte":"ಜೊಕಟ್ಟೆ",
+"Jara":"ಜಾರ","Bajpe Nagar":"ಬಜ್ಪೆ ನಗರ","Bajpe Rural":"ಬಜ್ಪೆ ಗ್ರಾಮಾಂತರ","Kenjaru":"ಕೆಂಜಾರು",
+"Karambaru":"ಕರಂಬಾರು"
+};
+const MSK_KN={
+"Shirthady":"ಶಿರ್ತಾಡಿ","Moodbidri Nagara":"ಮೂಡುಬಿದಿರೆ ನಗರ","Puttige":"ಪುತ್ತಿಗೆ","Kinnigoli":"ಕಿನ್ನಿಗೋಳಿ",
+"Mulki Nagara":"ಮುಲ್ಕಿ ನಗರ","Haleyangadi":"ಹಳೆಯಂಗಡಿ","62nd Thokuru / Permude":"62ನೇ ತೊಕ್ಕೂರು / ಪೆರ್ಮುದೆ","Bajpe":"ಬಜ್ಪೆ"
+};
+const NAME_KN={
+"Somanath Kotyan":"ಸೋಮನಾಥ್ ಕೊಟ್ಯಾನ್","Jayanth Hegde":"ಜಯಂತ್ ಹೆಗ್ಡೆ","Kumar Prasad":"ಕುಮಾರ್ ಪ್ರಸಾದ್","Vinod Bellayaru":"ವಿನೋದ್ ಬೆಳ್ಳಾಯರು","Dinesh Putran":"ದಿನೇಶ್ ಪುತ್ರನ್",
+"Lakshmana Poojari":"ಲಕ್ಷ್ಮಣ ಪೂಜಾರಿ","Yashavanth Mastikatte":"ಯಶವಂತ್ ಮಾಸ್ತಿಕಟ್ಟೆ","Poornima":"ಪೂರ್ಣಿಮಾ","Nagaraja Poojari":"ನಾಗರಾಜ ಪೂಜಾರಿ","Umanath Kotyan":"ಉಮಾನಾಥ್ ಕೊಟ್ಯಾನ್",
+"Nagesh Amin":"ನಾಗೇಶ್ ಅಮೀನ್","Shivakumar Shetty":"ಶಿವಕುಮಾರ್ ಶೆಟ್ಟಿ","Sooraj Jain Marnad":"ಸೂರಜ್ ಜೈನ್ ಮಾರ್ನಾಡ್","Surekha":"ಸುರೇಖಾ","Abhilash Shetty":"ಅಭಿಲಾಷ್ ಶೆಟ್ಟಿ",
+"Yatish Acharya":"ಯತೀಶ್ ಆಚಾರ್ಯ","Vinod Bolluru":"ವಿನೋದ್ ಬೊಳ್ಳೂರು","Ishwar Kateel":"ಈಶ್ವರ್ ಕಟೀಲ್","Krishnaraja Shetty":"ಕೃಷ್ಣರಾಜ ಶೆಟ್ಟಿ","Shailesh Kumar Mulki":"ಶೈಲೇಶ್ ಕುಮಾರ್ ಮುಲ್ಕಿ",
+"Prashanth Mulki":"ಪ್ರಶಾಂತ್ ಮುಲ್ಕಿ","Sukesh Shetty":"ಸುಕೇಶ್ ಶೆಟ್ಟಿ","Jayananda Mulki":"ಜಯಾನಂದ ಮುಲ್ಕಿ","Lakshman Salyan Bellayaru":"ಲಕ್ಷ್ಮಣ್ ಸಾಲ್ಯಾನ್ ಬೆಳ್ಳಾಯರು","Jeevan Shetty":"ಜೀವನ್ ಶೆಟ್ಟಿ",
+"Rajesh Amin":"ರಾಜೇಶ್ ಅಮೀನ್","Gururaj Sapaliga":"ಗುರುರಾಜ್ ಸಪಾಳಿಗ","Harish Moodushedde":"ಹರೀಶ್ ಮೂಡುಶೆಡ್ಡೆ","Dinesh Kukyan":"ದಿನೇಶ್ ಕುಕ್ಯಾನ್","Bharath Shetty":"ಭರತ್ ಶೆಟ್ಟಿ",
+"Jayanth Salyan":"ಜಯಂತ್ ಸಾಲ್ಯಾನ್","Vijay Kumar":"ವಿಜಯ್ ಕುಮಾರ್","Dinesh Shetty":"ದಿನೇಶ್ ಶೆಟ್ಟಿ","Keshava Karkera":"ಕೇಶವ ಕಾರ್ಕೇರ","Naveen Raj":"ನವೀನ್ ರಾಜ್",
+"Harshavarma Hegde":"ಹರ್ಷವರ್ಮ ಹೆಗ್ಡೆ","Dixith Panapila":"ದೀಕ್ಷಿತ್ ಪಣಪಿಲ","Vandana Prabhu":"ವಂದನಾ ಪ್ರಭು","Bola Vishwanath Kamath":"ಬೊಳ ವಿಶ್ವನಾಥ್ ಕಾಮತ್","Santhosh Jain":"ಸಂತೋಷ್ ಜೈನ್",
+"Roshan Shetty":"ರೋಶನ್ ಶೆಟ್ಟಿ","Rajeshwara Nayak":"ರಾಜೇಶ್ವರ ನಾಯಕ್","Sudhakar D Poojari":"ಸುಧಾಕರ್ ಡಿ ಪೂಜಾರಿ","Sachin Panapila":"ಸಚಿನ್ ಪಣಪಿಲ","Jayaraj":"ಜಯರಾಜ್",
+"Muniraj Hegde":"ಮುನಿರಾಜ್ ಹೆಗ್ಡೆ","Latha Hegde":"ಲತಾ ಹೆಗ್ಡೆ","Ashwath Panapila":"ಅಶ್ವತ್ ಪಣಪಿಲ","Lakshan":"ಲಕ್ಷಣ್","Pradeep Walpady":"ಪ್ರದೀಪ್ ವಾಲ್ಪಾಡಿ",
+"Karunakara Shetty":"ಕರುಣಾಕರ ಶೆಟ್ಟಿ","Gautham Rai":"ಗೌತಮ್ ರೈ","Bahubali Prasad":"ಬಾಹುಬಲಿ ಪ್ರಸಾದ್","Rajesh Shetty":"ರಾಜೇಶ್ ಶೆಟ್ಟಿ","Shwetha Jain":"ಶ್ವೇತಾ ಜೈನ್",
+"Satvik Mallya":"ಸಾತ್ವಿಕ್ ಮಲ್ಯ","Sampath Poojari":"ಸಂಪತ್ ಪೂಜಾರಿ","Shashikiran Kallabettu":"ಶಶಿಕಿರಣ್ ಕಲ್ಲಬೆಟ್ಟು","Prasad Bhandari":"ಪ್ರಸಾದ್ ಭಂಡಾರಿ","Dinesh Thirumalabettu":"ದಿನೇಶ್ ತಿರುಮಲಬೆಟ್ಟು",
+"Dinesh Maruru":"ದಿನೇಶ್ ಮಾರೂರು","Vasanth Naik":"ವಸಂತ್ ನಾಯಕ್","Prashanth Amin":"ಪ್ರಶಾಂತ್ ಅಮೀನ್","Janardhana Gowda":"ಜನಾರ್ದನ ಗೌಡ","Santhosh Bhandari":"ಸಂತೋಷ್ ಭಂಡಾರಿ",
+"Jivandhar Shettigar":"ಜೀವಂಧರ್ ಶೆಟ್ಟಿಗಾರ್","Chandrashekhar Poojari":"ಚಂದ್ರಶೇಖರ ಪೂಜಾರಿ","Sudarshan Kolakebailu":"ಸುದರ್ಶನ್ ಕೋಲಕೆಬೈಲು","Uday Kumar Shetty":"ಉದಯ್ ಕುಮಾರ್ ಶೆಟ್ಟಿ","Prabhakar Kulal":"ಪ್ರಭಾಕರ್ ಕುಲಾಲ್",
+"Nagaraj Karkera":"ನಾಗರಾಜ್ ಕಾರ್ಕೇರ","Nagesh Prabhu":"ನಾಗೇಶ್ ಪ್ರಭು","Raghavendra Rao":"ರಾಘವೇಂದ್ರ ರಾವ್","Shalini Salyan":"ಶಾಲಿನಿ ಸಾಲ್ಯಾನ್","Mahesh Gowda":"ಮಹೇಶ್ ಗೌಡ",
+"Shashidhar Nayak":"ಶಶಿಧರ ನಾಯಕ್","Sunil Shetty":"ಸುನಿಲ್ ಶೆಟ್ಟಿ","Harish M K":"ಹರೀಶ್ ಎಂ ಕೆ","Divakara Shetty":"ದಿವಾಕರ ಶೆಟ್ಟಿ","Sujatha Shyam Kundar":"ಸುಜಾತಾ ಶ್ಯಾಮ್ ಕುಂದರ್",
+"Balachandra Shetty":"ಬಾಲಚಂದ್ರ ಶೆಟ್ಟಿ","Sundar Niddodi":"ಸುಂದರ್ ನಿಡ್ಡೋಡಿ","Arun Kumar":"ಅರುಣ್ ಕುಮಾರ್","Dhanush Shettigar":"ಧನುಶ್ ಶೆಟ್ಟಿಗಾರ್","Damodar Shetty":"ದಾಮೋದರ ಶೆಟ್ಟಿ",
+"Shailesh Anchan":"ಶೈಲೇಶ್ ಅಂಚನ್","Divakara Karkera":"ದಿವಾಕರ ಕಾರ್ಕೇರ","Pranik":"ಪ್ರಣಿಕ್","Hemalatha Punaruru":"ಹೇಮಲತಾ ಪುನರೂರು","Gopala Krishna":"ಗೋಪಾಲ ಕೃಷ್ಣ",
+"Satyendra":"ಸತ್ಯೇಂದ್ರ","Subhash Shetty":"ಸುಭಾಷ್ ಶೆಟ್ಟಿ","Ashok Kumar":"ಅಶೋಕ್ ಕುಮಾರ್","Satish Anchan":"ಸತೀಶ್ ಅಂಚನ್","Harishchandra Kotyan":"ಹರಿಶ್ಚಂದ್ರ ಕೊಟ್ಯಾನ್",
+"Praveen":"ಪ್ರವೀಣ್","Vikas Shetty":"ವಿಕಾಸ್ ಶೆಟ್ಟಿ","Dhanraj Kundar":"ಧನರಾಜ್ ಕುಂದರ್","Naveenchandra Shetty":"ನವೀನಚಂದ್ರ ಶೆಟ್ಟಿ","Hariprasad Shetty":"ಹರಿಪ್ರಸಾದ್ ಶೆಟ್ಟಿ",
+"Jayalakshmi K":"ಜಯಲಕ್ಷ್ಮಿ ಕೆ","Bhaskar Shetty":"ಭಾಸ್ಕರ್ ಶೆಟ್ಟಿ","Purushottam Shettigar":"ಪುರುಷೋತ್ತಮ ಶೆಟ್ಟಿಗಾರ್","Harikrishna Das":"ಹರಿಕೃಷ್ಣ ದಾಸ್","Shobhendra Sasihithlu":"ಶೋಭೇಂದ್ರ ಸಸಿಹಿತ್ಲು",
+"Lohith":"ಲೋಹಿತ್","Jeevan Prakash":"ಜೀವನ್ ಪ್ರಕಾಶ್","Sachin Shetty":"ಸಚಿನ್ ಶೆಟ್ಟಿ","Mohan Das":"ಮೋಹನ್ ದಾಸ್","Nagaraj":"ನಾಗರಾಜ್",
+"Hemanath Amin":"ಹೇಮನಾಥ್ ಅಮೀನ್","Anil Kundar":"ಅನಿಲ್ ಕುಂದರ್","Shashikumar Mulki":"ಶಶಿಕುಮಾರ್ ಮುಲ್ಕಿ","Satish Shetty":"ಸತೀಶ್ ಶೆಟ್ಟಿ","Praveen Acharya":"ಪ್ರವೀಣ್ ಆಚಾರ್ಯ",
+"Dinesh":"ದಿನೇಶ್","Manohar Shetty":"ಮನೋಹರ್ ಶೆಟ್ಟಿ","Balakrishna":"ಬಾಲಕೃಷ್ಣ","Jayananda Chelyaru":"ಜಯಾನಂದ ಚೆಲ್ಯಾರು","Prasad Anchan":"ಪ್ರಸಾದ್ ಅಂಚನ್",
+"Durgaprasad Kuthethoor":"ದುರ್ಗಾಪ್ರಸಾದ್ ಕುತ್ತೆತ್ತೂರು","Kiran Rai":"ಕಿರಣ್ ರೈ","Shankar Jogi":"ಶಂಕರ್ ಜೋಗಿ","Mukesh":"ಮುಕೇಶ್","Prakhyath Shetty":"ಪ್ರಖ್ಯಾತ್ ಶೆಟ್ಟಿ",
+"Anil Moodushedde":"ಅನಿಲ್ ಮೂಡುಶೆಡ್ಡೆ","Chitresh Shetty":"ಚಿತ್ರೇಶ್ ಶೆಟ್ಟಿ","Leelavathi":"ಲೀಲಾವತಿ","Sudhakar Kamath":"ಸುಧಾಕರ್ ಕಾಮತ್","Sharath C Babu":"ಶರತ್ ಸಿ ಬಾಬು",
+"Geethalakshmi":"ಗೀತಾಲಕ್ಷ್ಮಿ","Satish Devadiga":"ಸತೀಶ್ ದೇವಾಡಿಗ","Lokesh Bajpe":"ಲೋಕೇಶ್ ಬಜ್ಪೆ"
+};
 const PART_CONTACT={};
 SK_CONTACTS.forEach(k=>k.b.split(',').forEach(n=>{const p=parseInt(n,10);if(p)PART_CONTACT[p]={v:k.v,msk:k.msk,pk:k.pk,pr:k.pr};}));
 const MSK_PARTS={};
@@ -347,7 +399,10 @@ const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toIS
 const daysBetween=(a,b)=>Math.max(1,Math.round((new Date(b)-new Date(a))/864e5));
 
 function contactMini(person,label){
-  const d=((person&&person[1])||'').replace(/\D/g,''),ok=d.length>=10,nm=esc((person&&person[0])||'—');
+  const d=((person&&person[1])||'').replace(/\D/g,''),ok=d.length>=10;
+  const en=(person&&person[0])||'—';
+  const kn=(person&&person[2])!=null?person[2]:(NAME_KN[en]||en);
+  const nm=esc(I18N.L(en,kn));
   const call=ok?'<a class="mfab call" href="tel:+91'+d+'" data-haptic aria-label="Call '+nm+'">'+SVG_CALL+'</a>':'';
   const wa=ok?'<a class="mfab wa" href="https://wa.me/91'+d+'?text='+encodeURIComponent(WA_GREETING)+'" target="_blank" rel="noopener" data-haptic aria-label="WhatsApp '+nm+'">'+SVG_WA+'</a>':'';
   return '<span class="conn"><span class="cl">'+label+'</span>'+nm+call+wa+'</span>';
@@ -360,7 +415,7 @@ async function loadBLA2(){
     if(!m)return;
     const arr=new Function('return '+m[1])();
     if(!Array.isArray(arr))return;
-    arr.forEach(d=>{BLA2_CONTACT[d.booth]=[d.name,d.phone];});
+    arr.forEach(d=>{BLA2_CONTACT[d.booth]=[d.name,d.phone,d.nameKn];});
   }catch(e){}
 }
 function partContacts(pn){
@@ -370,7 +425,7 @@ function partContacts(pn){
   if(c)out+=contactMini(c.pk,I18N.L('Pramukh','ಪ್ರಮುಖ್'))+contactMini(c.pr,I18N.L('Prabhari','ಪ್ರಭಾರಿ'));
   return out||'<span class="conn muted">'+I18N.L('no contact on file','ಸಂಪರ್ಕ ಲಭ್ಯವಿಲ್ಲ')+'</span>';
 }
-function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>'+I18N.L('Part','ಭಾಗ')+' '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(kendra)+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
+function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>'+I18N.L('Part','ಭಾಗ')+' '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(I18N.L(kendra,VILLAGE_KN[kendra]||kendra))+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
 
 function insList(rows,cap){cap=cap||20;if(rows.length<=cap)return '<div class="ilist">'+rows.join('')+'</div>';const closed=I18N.L('Show all '+rows.length+'  ·  +'+(rows.length-cap)+' more','ಎಲ್ಲಾ '+rows.length+' ತೋರಿಸಿ  ·  +'+(rows.length-cap)+' ಇನ್ನಷ್ಟು');const openLbl=I18N.L('▴ Show fewer','▴ ಕಡಿಮೆ ತೋರಿಸಿ');return '<div class="ilist">'+rows.slice(0,cap).join('')+'<div class="imore" hidden>'+rows.slice(cap).join('')+'</div><button type="button" class="morebtn" data-more data-closed="'+closed+'" data-open="'+openLbl+'" aria-expanded="false">▾ '+closed+'</button></div>';}
 function renderInsights(){
@@ -426,7 +481,7 @@ function renderKendra(){
       return insRow(pn,null,'<b>'+pctOf(d,e)+'%</b> · '+fmt(d)+' / '+fmt(e));
     });
     return '<details class="ksec"><summary>'
-      +'<div class="ksrow"><div class="ksname">'+esc(k.msk)+'<span class="ksn">'+k.parts.length+' '+I18N.L('booths','ಬೂತ್‌ಗಳು')+'</span></div>'
+      +'<div class="ksrow"><div class="ksname">'+esc(I18N.L(k.msk,MSK_KN[k.msk]||k.msk))+'<span class="ksn">'+k.parts.length+' '+I18N.L('booths','ಬೂತ್‌ಗಳು')+'</span></div>'
       +'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></div>'
       +'<div class="ksbar"><div class="ibar"><i style="width:'+k.pct+'%"></i></div></div>'
       +'<div class="kspct">'+k.pct+'% '+I18N.L('distributed','ವಿತರಿಸಲಾಗಿದೆ')+'<span class="ksnum">'+fmt(k.dist)+' / '+fmt(k.elect)+'</span></div>'

@@ -246,62 +246,92 @@ body{
 // Shakti Kendra Prabhari (in-charge) directory.
 // Names romanised from the Kannada (Nudi) source; 28 spellings verified against the booth list by phone match.
 const DATA = [
-  {sk:"Omalke", name:"Dixith Panapila", role:"OBC Morcha", phone:"9535588971"},
-  {sk:"Kesaragadde", name:"Bola Vishwanath Kamath", role:"Pramukh", phone:"7760487725"},
-  {sk:"Padumarnadu", name:"Roshan Shetty", role:"Yuva Morcha Secretary", phone:"7349495469"},
-  {sk:"Moodumarnadu", name:"Vandana Prabhu", role:"Mandal Member", phone:"7760361341"},
-  {sk:"Panapila", name:"Sachin Panapila", role:"OBC Morcha Treasurer", phone:"9902354750"},
-  {sk:"Mantadi", name:"Muniraj Hegde", role:"Panchayat Member", phone:"9901726467"},
-  {sk:"Konaje", name:"Gopal Shettigar", role:"Pramukh", phone:"9945998807"},
-  {sk:"Aliyooru", name:"Pradeep Walpady", role:"OBC Morcha President", phone:"9535617794"},
-  {sk:"Alangaru", name:"Gautham Rai", role:"Yuva Morcha", phone:"8105039396"},
-  {sk:"Ontikatte", name:"Bahubali Prasad", role:"Senior Member", phone:"9845838548"},
-  {sk:"Jain Pete", name:"Shwetha Jain", role:"Former Municipal Member", phone:"9632944623"},
-  {sk:"Ladi", name:"Sampath Poojari", role:"OBC Morcha Gen. Secretary", phone:"9164174331"},
-  {sk:"Kallabettu", name:"Prasad Bhandari", role:"Former Municipal President", phone:"9663993284"},
-  {sk:"Maruru", name:"Dinesh Maruru", role:"Pramukh", phone:"9632658242"},
-  {sk:"Kallamundkur", name:"Prashanth Amin", role:"Social Media", phone:"8105484497"},
-  {sk:"Niddodi", name:"Surekha", role:"Former Panchayat Member", phone:"9591590421"},
-  {sk:"Kadandale", name:"Jivandhar Shettigar", role:"OBC Morcha Vice President", phone:"8105198531"},
-  {sk:"Paladka", name:"Sudarshan Kolakebailu", role:"Social Media Convener", phone:"9663766014"},
-  {sk:"Nelligudde", name:"Prabhakar Kulal", role:"Mandal Treasurer", phone:"9945998528"},
-  {sk:"Sampige", name:"Nagesh Prabhu", role:"Yuva Morcha Secretary", phone:"8861131880"},
-  {sk:"Ashwathpura", name:"Shalini Salyan", role:"Former Panchayat President", phone:"9901660124"},
-  {sk:"Mijaru", name:"Shashidhar Nayak", role:"Pramukh", phone:"9845290952"},
-  {sk:"Thodaru", name:"Harish M K", role:"Pramukh", phone:"9845240064"},
-  {sk:"Puchamogaru", name:"Sujatha Shyam Kundar", role:"Mahila Morcha Vice President", phone:"9482644896"},
-  {sk:"Iruvailu", name:"Sundar Niddodi", role:"Pramukh", phone:"9164314149"},
-  {sk:"Kondemoola", name:"Dhanush Shettigar", role:"Town Panchayat Member", phone:"9741676023"},
-  {sk:"Mennabettu", name:"Shailesh Anchan", role:"Town Panchayat Member", phone:"9964218369"},
-  {sk:"Thalipadi", name:"Pranik", role:"Town Panchayat Member", phone:"8861115538"},
-  {sk:"Punaruru", name:"Gopala Krishna", role:"SC Morcha President", phone:"8971651298"},
-  {sk:"Bappanadu", name:"Subhash Shetty", role:"Mandal Secretary", phone:"9008147217"},
-  {sk:"Karnad", name:"Satish Anchan", role:"Former City Panchayat President", phone:"9535204350"},
-  {sk:"K.S. Rao Nagar", name:"Naveen Raj", role:"District Yuva Morcha Secretary", phone:"9844813751"},
-  {sk:"Shimanthooru", name:"Vikas Shetty", role:"Panchayat President", phone:"9448627568"},
-  {sk:"Karnire Kavathar", name:"Naveenchandra Shetty", role:"Former Panchayat Vice President", phone:"9742251991"},
-  {sk:"Balkunje Kolluru", name:"Jayalakshmi K", role:"Mahila Morcha Secretary", phone:"8105543211"},
-  {sk:"Elinje", name:"Damodar Shetty", role:"Professional Cell Convener", phone:"9964277884"},
-  {sk:"Kilpady", name:"Jayananda Mulki", role:"Pramukh", phone:"9880585187"},
-  {sk:"Bellayaru", name:"Shobhendra Sasihithlu", role:"District Secretary", phone:"9945619138"},
-  {sk:"10th Thokuru", name:"Devaprasad Punaruru", role:"Pramukh", phone:"9880123345"},
-  {sk:"Pakshikere", name:"Ishwar Kateel", role:"Pramukh", phone:"9448300700"},
-  {sk:"Kemral", name:"Mohan Das", role:"Former Padupanamboor President", phone:"9980753865"},
-  {sk:"Haleyangadi", name:"Hemanath Amin", role:"Panchayat Vice President", phone:"8105008609"},
-  {sk:"Sasihithlu", name:"Vinod Bolluru", role:"Mandal Vice President", phone:"9448039431"},
-  {sk:"Ekkaru", name:"Satish Shetty", role:"Panchayat Member", phone:"9880933364"},
-  {sk:"Delanthabettu", name:"Manohar Shetty", role:"Pramukh", phone:"9980018907"},
-  {sk:"Madhya Chelyaru", name:"Jayananda Chelyaru", role:"Panchayat President", phone:"9964590138"},
-  {sk:"Kuthethoor", name:"Durgaprasad Kuthethoor", role:"Pramukh", phone:"8971409230"},
-  {sk:"Kalavaru", name:"Shankar Jogi", role:"Former Panchayat President", phone:"8197102092"},
-  {sk:"Jokatte", name:"Jayanth Salyan", role:"Pramukh", phone:"9448480368"},
-  {sk:"Jara", name:"Anil Moodushedde", role:"Former Panchayat President", phone:"9845372080"},
-  {sk:"Pilikula", name:"Shashikala", role:"Mandal Mahila Morcha", phone:"9108616882"},
-  {sk:"Bajpe Nagar", name:"Rajesh Amin", role:"Kisan Morcha President", phone:"8123721329"},
-  {sk:"Bajpe Rural", name:"Sudhakar Kamath", role:"Pramukh", phone:"9448887764"},
-  {sk:"Kenjaru", name:"Geethalakshmi", role:"Mahila Morcha President", phone:"7760645515"},
-  {sk:"Karambaru", name:"Lokesh Bajpe", role:"Town Panchayat President", phone:"9945690178"},
+  {sk:"Omalke", name:"Dixith Panapila", nameKn:"ದೀಕ್ಷಿತ್ ಪಣಪಿಲ", role:"OBC Morcha", phone:"9535588971"},
+  {sk:"Kesaragadde", name:"Bola Vishwanath Kamath", nameKn:"ಬೊಳ ವಿಶ್ವನಾಥ್ ಕಾಮತ್", role:"Pramukh", phone:"7760487725"},
+  {sk:"Padumarnadu", name:"Roshan Shetty", nameKn:"ರೋಶನ್ ಶೆಟ್ಟಿ", role:"Yuva Morcha Secretary", phone:"7349495469"},
+  {sk:"Moodumarnadu", name:"Vandana Prabhu", nameKn:"ವಂದನಾ ಪ್ರಭು", role:"Mandal Member", phone:"7760361341"},
+  {sk:"Panapila", name:"Sachin Panapila", nameKn:"ಸಚಿನ್ ಪಣಪಿಲ", role:"OBC Morcha Treasurer", phone:"9902354750"},
+  {sk:"Mantadi", name:"Muniraj Hegde", nameKn:"ಮುನಿರಾಜ್ ಹೆಗ್ಡೆ", role:"Panchayat Member", phone:"9901726467"},
+  {sk:"Konaje", name:"Gopal Shettigar", nameKn:"ಗೋಪಾಲ್ ಶೆಟ್ಟಿಗಾರ್", role:"Pramukh", phone:"9945998807"},
+  {sk:"Aliyooru", name:"Pradeep Walpady", nameKn:"ಪ್ರದೀಪ್ ವಾಲ್ಪಾಡಿ", role:"OBC Morcha President", phone:"9535617794"},
+  {sk:"Alangaru", name:"Gautham Rai", nameKn:"ಗೌತಮ್ ರೈ", role:"Yuva Morcha", phone:"8105039396"},
+  {sk:"Ontikatte", name:"Bahubali Prasad", nameKn:"ಬಾಹುಬಲಿ ಪ್ರಸಾದ್", role:"Senior Member", phone:"9845838548"},
+  {sk:"Jain Pete", name:"Shwetha Jain", nameKn:"ಶ್ವೇತಾ ಜೈನ್", role:"Former Municipal Member", phone:"9632944623"},
+  {sk:"Ladi", name:"Sampath Poojari", nameKn:"ಸಂಪತ್ ಪೂಜಾರಿ", role:"OBC Morcha Gen. Secretary", phone:"9164174331"},
+  {sk:"Kallabettu", name:"Prasad Bhandari", nameKn:"ಪ್ರಸಾದ್ ಭಂಡಾರಿ", role:"Former Municipal President", phone:"9663993284"},
+  {sk:"Maruru", name:"Dinesh Maruru", nameKn:"ದಿನೇಶ್ ಮಾರೂರು", role:"Pramukh", phone:"9632658242"},
+  {sk:"Kallamundkur", name:"Prashanth Amin", nameKn:"ಪ್ರಶಾಂತ್ ಅಮೀನ್", role:"Social Media", phone:"8105484497"},
+  {sk:"Niddodi", name:"Surekha", nameKn:"ಸುರೇಖಾ", role:"Former Panchayat Member", phone:"9591590421"},
+  {sk:"Kadandale", name:"Jivandhar Shettigar", nameKn:"ಜೀವಂಧರ್ ಶೆಟ್ಟಿಗಾರ್", role:"OBC Morcha Vice President", phone:"8105198531"},
+  {sk:"Paladka", name:"Sudarshan Kolakebailu", nameKn:"ಸುದರ್ಶನ್ ಕೋಲಕೆಬೈಲು", role:"Social Media Convener", phone:"9663766014"},
+  {sk:"Nelligudde", name:"Prabhakar Kulal", nameKn:"ಪ್ರಭಾಕರ್ ಕುಲಾಲ್", role:"Mandal Treasurer", phone:"9945998528"},
+  {sk:"Sampige", name:"Nagesh Prabhu", nameKn:"ನಾಗೇಶ್ ಪ್ರಭು", role:"Yuva Morcha Secretary", phone:"8861131880"},
+  {sk:"Ashwathpura", name:"Shalini Salyan", nameKn:"ಶಾಲಿನಿ ಸಾಲ್ಯಾನ್", role:"Former Panchayat President", phone:"9901660124"},
+  {sk:"Mijaru", name:"Shashidhar Nayak", nameKn:"ಶಶಿಧರ ನಾಯಕ್", role:"Pramukh", phone:"9845290952"},
+  {sk:"Thodaru", name:"Harish M K", nameKn:"ಹರೀಶ್ ಎಂ ಕೆ", role:"Pramukh", phone:"9845240064"},
+  {sk:"Puchamogaru", name:"Sujatha Shyam Kundar", nameKn:"ಸುಜಾತಾ ಶ್ಯಾಮ್ ಕುಂದರ್", role:"Mahila Morcha Vice President", phone:"9482644896"},
+  {sk:"Iruvailu", name:"Sundar Niddodi", nameKn:"ಸುಂದರ್ ನಿಡ್ಡೋಡಿ", role:"Pramukh", phone:"9164314149"},
+  {sk:"Kondemoola", name:"Dhanush Shettigar", nameKn:"ಧನುಶ್ ಶೆಟ್ಟಿಗಾರ್", role:"Town Panchayat Member", phone:"9741676023"},
+  {sk:"Mennabettu", name:"Shailesh Anchan", nameKn:"ಶೈಲೇಶ್ ಅಂಚನ್", role:"Town Panchayat Member", phone:"9964218369"},
+  {sk:"Thalipadi", name:"Pranik", nameKn:"ಪ್ರಣಿಕ್", role:"Town Panchayat Member", phone:"8861115538"},
+  {sk:"Punaruru", name:"Gopala Krishna", nameKn:"ಗೋಪಾಲ ಕೃಷ್ಣ", role:"SC Morcha President", phone:"8971651298"},
+  {sk:"Bappanadu", name:"Subhash Shetty", nameKn:"ಸುಭಾಷ್ ಶೆಟ್ಟಿ", role:"Mandal Secretary", phone:"9008147217"},
+  {sk:"Karnad", name:"Satish Anchan", nameKn:"ಸತೀಶ್ ಅಂಚನ್", role:"Former City Panchayat President", phone:"9535204350"},
+  {sk:"K.S. Rao Nagar", name:"Naveen Raj", nameKn:"ನವೀನ್ ರಾಜ್", role:"District Yuva Morcha Secretary", phone:"9844813751"},
+  {sk:"Shimanthooru", name:"Vikas Shetty", nameKn:"ವಿಕಾಸ್ ಶೆಟ್ಟಿ", role:"Panchayat President", phone:"9448627568"},
+  {sk:"Karnire Kavathar", name:"Naveenchandra Shetty", nameKn:"ನವೀನಚಂದ್ರ ಶೆಟ್ಟಿ", role:"Former Panchayat Vice President", phone:"9742251991"},
+  {sk:"Balkunje Kolluru", name:"Jayalakshmi K", nameKn:"ಜಯಲಕ್ಷ್ಮಿ ಕೆ", role:"Mahila Morcha Secretary", phone:"8105543211"},
+  {sk:"Elinje", name:"Damodar Shetty", nameKn:"ದಾಮೋದರ ಶೆಟ್ಟಿ", role:"Professional Cell Convener", phone:"9964277884"},
+  {sk:"Kilpady", name:"Jayananda Mulki", nameKn:"ಜಯಾನಂದ ಮುಲ್ಕಿ", role:"Pramukh", phone:"9880585187"},
+  {sk:"Bellayaru", name:"Shobhendra Sasihithlu", nameKn:"ಶೋಭೇಂದ್ರ ಸಸಿಹಿತ್ಲು", role:"District Secretary", phone:"9945619138"},
+  {sk:"10th Thokuru", name:"Devaprasad Punaruru", nameKn:"ದೇವಪ್ರಸಾದ್ ಪುನರೂರು", role:"Pramukh", phone:"9880123345"},
+  {sk:"Pakshikere", name:"Ishwar Kateel", nameKn:"ಈಶ್ವರ್ ಕಟೀಲ್", role:"Pramukh", phone:"9448300700"},
+  {sk:"Kemral", name:"Mohan Das", nameKn:"ಮೋಹನ್ ದಾಸ್", role:"Former Padupanamboor President", phone:"9980753865"},
+  {sk:"Haleyangadi", name:"Hemanath Amin", nameKn:"ಹೇಮನಾಥ್ ಅಮೀನ್", role:"Panchayat Vice President", phone:"8105008609"},
+  {sk:"Sasihithlu", name:"Vinod Bolluru", nameKn:"ವಿನೋದ್ ಬೊಳ್ಳೂರು", role:"Mandal Vice President", phone:"9448039431"},
+  {sk:"Ekkaru", name:"Satish Shetty", nameKn:"ಸತೀಶ್ ಶೆಟ್ಟಿ", role:"Panchayat Member", phone:"9880933364"},
+  {sk:"Delanthabettu", name:"Manohar Shetty", nameKn:"ಮನೋಹರ್ ಶೆಟ್ಟಿ", role:"Pramukh", phone:"9980018907"},
+  {sk:"Madhya Chelyaru", name:"Jayananda Chelyaru", nameKn:"ಜಯಾನಂದ ಚೆಲ್ಯಾರು", role:"Panchayat President", phone:"9964590138"},
+  {sk:"Kuthethoor", name:"Durgaprasad Kuthethoor", nameKn:"ದುರ್ಗಾಪ್ರಸಾದ್ ಕುತ್ತೆತ್ತೂರು", role:"Pramukh", phone:"8971409230"},
+  {sk:"Kalavaru", name:"Shankar Jogi", nameKn:"ಶಂಕರ್ ಜೋಗಿ", role:"Former Panchayat President", phone:"8197102092"},
+  {sk:"Jokatte", name:"Jayanth Salyan", nameKn:"ಜಯಂತ್ ಸಾಲ್ಯಾನ್", role:"Pramukh", phone:"9448480368"},
+  {sk:"Jara", name:"Anil Moodushedde", nameKn:"ಅನಿಲ್ ಮೂಡುಶೆಡ್ಡೆ", role:"Former Panchayat President", phone:"9845372080"},
+  {sk:"Pilikula", name:"Shashikala", nameKn:"ಶಶಿಕಲಾ", role:"Mandal Mahila Morcha", phone:"9108616882"},
+  {sk:"Bajpe Nagar", name:"Rajesh Amin", nameKn:"ರಾಜೇಶ್ ಅಮೀನ್", role:"Kisan Morcha President", phone:"8123721329"},
+  {sk:"Bajpe Rural", name:"Sudhakar Kamath", nameKn:"ಸುಧಾಕರ್ ಕಾಮತ್", role:"Pramukh", phone:"9448887764"},
+  {sk:"Kenjaru", name:"Geethalakshmi", nameKn:"ಗೀತಾಲಕ್ಷ್ಮಿ", role:"Mahila Morcha President", phone:"7760645515"},
+  {sk:"Karambaru", name:"Lokesh Bajpe", nameKn:"ಲೋಕೇಶ್ ಬಜ್ಪೆ", role:"Town Panchayat President", phone:"9945690178"},
 ];
+// Kannada transliterations for village/Kendra names and free-text role designations —
+// parallel display-only data, keyed by the raw English strings above. Person names carry
+// their Kannada form inline as nameKn (see DATA); sk/role stay raw for filter matching.
+const VILLAGE_KN={
+"Omalke":"ಓಮಳ್ಕೆ","Kesaragadde":"ಕೇಸರಗದ್ದೆ","Padumarnadu":"ಪಡುಮರ್ನಾಡು","Moodumarnadu":"ಮೂಡುಮರ್ನಾಡು",
+"Panapila":"ಪಣಪಿಲ","Mantadi":"ಮಂತಾಡಿ","Konaje":"ಕೊಣಾಜೆ","Aliyooru":"ಅಳಿಯೂರು",
+"Alangaru":"ಅಳಂಗಾರು","Ontikatte":"ಒಂಟಿಕಟ್ಟೆ","Jain Pete":"ಜೈನ್ ಪೇಟೆ","Ladi":"ಲಾಡಿ",
+"Kallabettu":"ಕಲ್ಲಬೆಟ್ಟು","Maruru":"ಮಾರೂರು","Kallamundkur":"ಕಲ್ಲಮುಂಡ್ಕೂರು","Niddodi":"ನಿಡ್ಡೋಡಿ",
+"Kadandale":"ಕಡಂದಲೆ","Paladka":"ಪಲಡ್ಕ","Nelligudde":"ನೆಲ್ಲಿಗುಡ್ಡೆ","Sampige":"ಸಂಪಿಗೆ",
+"Ashwathpura":"ಅಶ್ವತ್ಥಪುರ","Mijaru":"ಮಿಜಾರು","Thodaru":"ತೋಡಾರು","Puchamogaru":"ಪುಚ್ಚಮೊಗರು",
+"Iruvailu":"ಇರುವೈಲು","Kondemoola":"ಕೊಂಡೆಮೂಲ","Mennabettu":"ಮೆನ್ನಬೆಟ್ಟು","Thalipadi":"ತಾಳಿಪಾಡಿ",
+"Punaruru":"ಪುನರೂರು","Bappanadu":"ಬಪ್ಪನಾಡು","Karnad":"ಕರ್ನಾಡ್","K.S. Rao Nagar":"ಕೆ.ಎಸ್. ರಾವ್ ನಗರ",
+"Shimanthooru":"ಶಿಮಂತೂರು","Karnire Kavathar":"ಕರ್ನಿರೆ ಕವತಾರ್","Balkunje Kolluru":"ಬಲ್ಕುಂಜೆ ಕೊಳ್ಳೂರು","Elinje":"ಎಳಿಂಜೆ",
+"Kilpady":"ಕಿಲ್ಪಾಡಿ","Bellayaru":"ಬೆಳ್ಳಾಯರು","10th Thokuru":"10ನೇ ತೊಕ್ಕೂರು","Pakshikere":"ಪಕ್ಷಿಕೆರೆ",
+"Kemral":"ಕೆಮ್ರಾಲ್","Haleyangadi":"ಹಳೆಯಂಗಡಿ","Sasihithlu":"ಸಸಿಹಿತ್ಲು","Ekkaru":"ಎಕ್ಕಾರು",
+"Delanthabettu":"ದೇಲಂತಬೆಟ್ಟು","Madhya Chelyaru":"ಮಧ್ಯ ಚೆಲ್ಯಾರು","Kuthethoor":"ಕುತ್ತೆತ್ತೂರು","Kalavaru":"ಕಳವಾರು",
+"Jokatte":"ಜೊಕಟ್ಟೆ","Jara":"ಜಾರ","Pilikula":"ಪಿಲಿಕುಳ","Bajpe Nagar":"ಬಜ್ಪೆ ನಗರ",
+"Bajpe Rural":"ಬಜ್ಪೆ ಗ್ರಾಮಾಂತರ","Kenjaru":"ಕೆಂಜಾರು","Karambaru":"ಕರಂಬಾರು"
+};
+const ROLE_KN={
+"OBC Morcha":"ಒಬಿಸಿ ಮೋರ್ಚಾ","Pramukh":"ಪ್ರಮುಖ್","Yuva Morcha Secretary":"ಯುವ ಮೋರ್ಚಾ ಕಾರ್ಯದರ್ಶಿ","Mandal Member":"ಮಂಡಲ ಸದಸ್ಯ",
+"OBC Morcha Treasurer":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಖಜಾಂಚಿ","Panchayat Member":"ಪಂಚಾಯತ್ ಸದಸ್ಯ","OBC Morcha President":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ","Yuva Morcha":"ಯುವ ಮೋರ್ಚಾ",
+"Senior Member":"ಹಿರಿಯ ಸದಸ್ಯ","Former Municipal Member":"ಮಾಜಿ ಪುರಸಭೆ ಸದಸ್ಯ","OBC Morcha Gen. Secretary":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಪ್ರಧಾನ ಕಾರ್ಯದರ್ಶಿ","Former Municipal President":"ಮಾಜಿ ಪುರಸಭೆ ಅಧ್ಯಕ್ಷ",
+"Social Media":"ಸೋಶಿಯಲ್ ಮೀಡಿಯಾ","Former Panchayat Member":"ಮಾಜಿ ಪಂಚಾಯತ್ ಸದಸ್ಯ","OBC Morcha Vice President":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಉಪಾಧ್ಯಕ್ಷ","Social Media Convener":"ಸೋಶಿಯಲ್ ಮೀಡಿಯಾ ಸಂಚಾಲಕ",
+"Mandal Treasurer":"ಮಂಡಲ ಖಜಾಂಚಿ","Former Panchayat President":"ಮಾಜಿ ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ","Mahila Morcha Vice President":"ಮಹಿಳಾ ಮೋರ್ಚಾ ಉಪಾಧ್ಯಕ್ಷ","Town Panchayat Member":"ಪಟ್ಟಣ ಪಂಚಾಯತ್ ಸದಸ್ಯ",
+"SC Morcha President":"ಎಸ್‌ಸಿ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ","Mandal Secretary":"ಮಂಡಲ ಕಾರ್ಯದರ್ಶಿ","Former City Panchayat President":"ಮಾಜಿ ನಗರ ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ","District Yuva Morcha Secretary":"ಜಿಲ್ಲಾ ಯುವ ಮೋರ್ಚಾ ಕಾರ್ಯದರ್ಶಿ",
+"Panchayat President":"ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ","Former Panchayat Vice President":"ಮಾಜಿ ಪಂಚಾಯತ್ ಉಪಾಧ್ಯಕ್ಷ","Mahila Morcha Secretary":"ಮಹಿಳಾ ಮೋರ್ಚಾ ಕಾರ್ಯದರ್ಶಿ","Professional Cell Convener":"ವೃತ್ತಿಪರ ಸೆಲ್ ಸಂಚಾಲಕ",
+"District Secretary":"ಜಿಲ್ಲಾ ಕಾರ್ಯದರ್ಶಿ","Former Padupanamboor President":"ಮಾಜಿ ಪಡುಪಣಂಬೂರು ಅಧ್ಯಕ್ಷ","Panchayat Vice President":"ಪಂಚಾಯತ್ ಉಪಾಧ್ಯಕ್ಷ","Mandal Vice President":"ಮಂಡಲ ಉಪಾಧ್ಯಕ್ಷ",
+"Kisan Morcha President":"ಕಿಸಾನ್ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ","Mahila Morcha President":"ಮಹಿಳಾ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ","Town Panchayat President":"ಪಟ್ಟಣ ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ","Mandal Mahila Morcha":"ಮಂಡಲ ಮಹಿಳಾ ಮೋರ್ಚಾ"
+};
 
 const PALETTES = [
   ['#FF6A00','#E85D04'],['#138808','#0B6E04'],['#2563EB','#1E40AF'],
@@ -343,7 +373,7 @@ function cardHTML(r){
   const ok=d.length===10;
   const tel='+91'+d;
   const [c1,c2]=palette(r.name);
-  const nm=esc(r.name);
+  const nm=esc(I18N.L(r.name,r.nameKn||r.name));
   const call=ok
     ?'<a class="fab call" href="tel:'+tel+'" data-haptic aria-label="Call '+nm+'" title="Call '+nm+'">'+SVG_CALL+'</a>'
     :'<span class="fab call" aria-disabled="true" title="No number on file">'+SVG_CALL+'</span>';
@@ -357,8 +387,8 @@ function cardHTML(r){
     '<div class="avatar" style="background:linear-gradient(150deg,'+c1+','+c2+')">'+initials(r.name)+'</div>'+
     '<div class="meta">'+
       '<div class="nm">'+nm+'</div>'+
-      '<div class="sk">'+SVG_PIN+'<span>'+esc(r.sk)+'</span></div>'+
-      '<span class="role">'+esc(r.role)+'</span>'+
+      '<div class="sk">'+SVG_PIN+'<span>'+esc(I18N.L(r.sk,VILLAGE_KN[r.sk]||r.sk))+'</span></div>'+
+      '<span class="role">'+esc(I18N.L(r.role,ROLE_KN[r.role]||r.role))+'</span>'+
       '<div>'+phone+'</div>'+
     '</div>'+
     '<div class="acts">'+call+wa+'</div></div>';
@@ -369,7 +399,8 @@ function render(animate){
   clearEl.classList.toggle('show',!!searchEl.value);
   let rows=DATA.filter(d=>{
     if(!q) return true;
-    return d.name.toLowerCase().includes(q)||d.sk.toLowerCase().includes(q)||d.role.toLowerCase().includes(q)||d.phone.includes(q);
+    if(d.name.toLowerCase().includes(q)||d.sk.toLowerCase().includes(q)||d.role.toLowerCase().includes(q)||d.phone.includes(q)) return true;
+    return (d.nameKn||'').includes(q)||(VILLAGE_KN[d.sk]||'').includes(q)||(ROLE_KN[d.role]||'').includes(q);
   });
 
   countEl.innerHTML='<b>'+rows.length+'</b> '+I18N.L(rows.length===1?'Prabhari':'Prabharis','ಪ್ರಭಾರಿಗಳು');

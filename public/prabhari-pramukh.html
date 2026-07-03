@@ -292,6 +292,71 @@ const DATA = [
   ]},
 ];
 
+// Kannada transliterations for village/Kendra names, Maha Shakti Kendra names, free-text
+// role designations, and person names — parallel display-only data, keyed by the raw
+// English strings above (which remain the canonical identity/matching keys).
+const VILLAGE_KN={
+"Omalke":"ಓಮಳ್ಕೆ","Kesaragadde":"ಕೇಸರಗದ್ದೆ","Padumarnadu":"ಪಡುಮರ್ನಾಡು","Moodumarnadu":"ಮೂಡುಮರ್ನಾಡು",
+"Panapila":"ಪಣಪಿಲ","Mantadi":"ಮಂತಾಡಿ","Konaje":"ಕೊಣಾಜೆ","Aliyooru":"ಅಳಿಯೂರು",
+"Alangaru":"ಅಳಂಗಾರು","Ontikatte":"ಒಂಟಿಕಟ್ಟೆ","Jain Pete":"ಜೈನ್ ಪೇಟೆ","Ladi":"ಲಾಡಿ",
+"Kallabettu":"ಕಲ್ಲಬೆಟ್ಟು","Maruru":"ಮಾರೂರು","Kallamundkur":"ಕಲ್ಲಮುಂಡ್ಕೂರು","Niddodi":"ನಿಡ್ಡೋಡಿ",
+"Kadandale":"ಕಡಂದಲೆ","Paladka":"ಪಲಡ್ಕ","Nelligudde":"ನೆಲ್ಲಿಗುಡ್ಡೆ","Sampige":"ಸಂಪಿಗೆ",
+"Ashwathpura":"ಅಶ್ವತ್ಥಪುರ","Mijaru":"ಮಿಜಾರು","Thodaru":"ತೋಡಾರು","Puchamogaru":"ಪುಚ್ಚಮೊಗರು",
+"Iruvailu":"ಇರುವೈಲು","Kondemoola":"ಕೊಂಡೆಮೂಲ","Mennabettu":"ಮೆನ್ನಬೆಟ್ಟು","Thalipadi":"ತಾಳಿಪಾಡಿ",
+"Punaruru":"ಪುನರೂರು","Bappanadu":"ಬಪ್ಪನಾಡು","Karnad":"ಕರ್ನಾಡ್","K.S. Rao Nagar":"ಕೆ.ಎಸ್. ರಾವ್ ನಗರ",
+"Shimanthooru":"ಶಿಮಂತೂರು","Karnire Kavathar":"ಕರ್ನಿರೆ ಕವತಾರ್","Balkunje Kolluru":"ಬಲ್ಕುಂಜೆ ಕೊಳ್ಳೂರು","Elinje":"ಎಳಿಂಜೆ",
+"Kilpady":"ಕಿಲ್ಪಾಡಿ","Bellayaru":"ಬೆಳ್ಳಾಯರು","10th Thokuru":"10ನೇ ತೊಕ್ಕೂರು","Sasihithlu":"ಸಸಿಹಿತ್ಲು",
+"Kemral":"ಕೆಮ್ರಾಲ್","Haleyangadi":"ಹಳೆಯಂಗಡಿ","Ekkaru":"ಎಕ್ಕಾರು","Delanthabettu":"ದೇಲಂತಬೆಟ್ಟು",
+"Madhya Chelyaru":"ಮಧ್ಯ ಚೆಲ್ಯಾರು","Kuthethoor":"ಕುತ್ತೆತ್ತೂರು","Kalavaru":"ಕಳವಾರು","Jokatte":"ಜೊಕಟ್ಟೆ",
+"Jara":"ಜಾರ","Bajpe Nagar":"ಬಜ್ಪೆ ನಗರ","Bajpe Rural":"ಬಜ್ಪೆ ಗ್ರಾಮಾಂತರ","Kenjaru":"ಕೆಂಜಾರು",
+"Karambaru":"ಕರಂಬಾರು"
+};
+const MSK_KN={
+"Shirthady":"ಶಿರ್ತಾಡಿ","Moodbidri Nagara":"ಮೂಡುಬಿದಿರೆ ನಗರ","Puttige":"ಪುತ್ತಿಗೆ","Kinnigoli":"ಕಿನ್ನಿಗೋಳಿ",
+"Mulki Nagara":"ಮುಲ್ಕಿ ನಗರ","Haleyangadi":"ಹಳೆಯಂಗಡಿ","62nd Thokuru / Permude":"62ನೇ ತೊಕ್ಕೂರು / ಪೆರ್ಮುದೆ","Bajpe":"ಬಜ್ಪೆ"
+};
+const ROLE_KN={
+"OBC Morcha":"ಒಬಿಸಿ ಮೋರ್ಚಾ","Pramukh":"ಪ್ರಮುಖ್","Yuva Morcha Secretary":"ಯುವ ಮೋರ್ಚಾ ಕಾರ್ಯದರ್ಶಿ","Mandal Member":"ಮಂಡಲ ಸದಸ್ಯ",
+"OBC Morcha Treasurer":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಖಜಾಂಚಿ","Panchayat Member":"ಪಂಚಾಯತ್ ಸದಸ್ಯ","OBC Morcha Vice President":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಉಪಾಧ್ಯಕ್ಷ","OBC Morcha President":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ",
+"Yuva Morcha":"ಯುವ ಮೋರ್ಚಾ","Senior Member":"ಹಿರಿಯ ಸದಸ್ಯ","Former Municipal Member":"ಮಾಜಿ ಪುರಸಭೆ ಸದಸ್ಯ","OBC Morcha Gen. Secretary":"ಒಬಿಸಿ ಮೋರ್ಚಾ ಪ್ರಧಾನ ಕಾರ್ಯದರ್ಶಿ",
+"Former Municipal President":"ಮಾಜಿ ಪುರಸಭೆ ಅಧ್ಯಕ್ಷ","Social Media":"ಸೋಶಿಯಲ್ ಮೀಡಿಯಾ","Former Panchayat Member":"ಮಾಜಿ ಪಂಚಾಯತ್ ಸದಸ್ಯ","Social Media Convener":"ಸೋಶಿಯಲ್ ಮೀಡಿಯಾ ಸಂಚಾಲಕ",
+"Mandal Treasurer":"ಮಂಡಲ ಖಜಾಂಚಿ","Former Panchayat President":"ಮಾಜಿ ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ","Mahila Morcha Vice President":"ಮಹಿಳಾ ಮೋರ್ಚಾ ಉಪಾಧ್ಯಕ್ಷ","Town Panchayat Member":"ಪಟ್ಟಣ ಪಂಚಾಯತ್ ಸದಸ್ಯ",
+"SC Morcha President":"ಎಸ್‌ಸಿ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ","Mandal Secretary":"ಮಂಡಲ ಕಾರ್ಯದರ್ಶಿ","Former City Panchayat President":"ಮಾಜಿ ನಗರ ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ","District Yuva Morcha Secretary":"ಜಿಲ್ಲಾ ಯುವ ಮೋರ್ಚಾ ಕಾರ್ಯದರ್ಶಿ",
+"Panchayat President":"ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ","Former Panchayat Vice President":"ಮಾಜಿ ಪಂಚಾಯತ್ ಉಪಾಧ್ಯಕ್ಷ","Mahila Morcha Secretary":"ಮಹಿಳಾ ಮೋರ್ಚಾ ಕಾರ್ಯದರ್ಶಿ","Yuva Morcha Gen. Secretary":"ಯುವ ಮೋರ್ಚಾ ಪ್ರಧಾನ ಕಾರ್ಯದರ್ಶಿ",
+"District Secretary":"ಜಿಲ್ಲಾ ಕಾರ್ಯದರ್ಶಿ","Mandal Vice President":"ಮಂಡಲ ಉಪಾಧ್ಯಕ್ಷ","Former Padupanamboor President":"ಮಾಜಿ ಪಡುಪಣಂಬೂರು ಅಧ್ಯಕ್ಷ","Panchayat Vice President":"ಪಂಚಾಯತ್ ಉಪಾಧ್ಯಕ್ಷ",
+"District Cell":"ಜಿಲ್ಲಾ ಸೆಲ್","Kisan Morcha President":"ಕಿಸಾನ್ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ","Mahila Morcha President":"ಮಹಿಳಾ ಮೋರ್ಚಾ ಅಧ್ಯಕ್ಷ","Town Panchayat President":"ಪಟ್ಟಣ ಪಂಚಾಯತ್ ಅಧ್ಯಕ್ಷ",
+"Professional Cell Convener":"ವೃತ್ತಿಪರ ಸೆಲ್ ಸಂಚಾಲಕ","Mandal Mahila Morcha":"ಮಂಡಲ ಮಹಿಳಾ ಮೋರ್ಚಾ"
+};
+const NAME_KN={
+"Somanath Kotyan":"ಸೋಮನಾಥ್ ಕೊಟ್ಯಾನ್","Jayanth Hegde":"ಜಯಂತ್ ಹೆಗ್ಡೆ","Kumar Prasad":"ಕುಮಾರ್ ಪ್ರಸಾದ್","Vinod Bellayaru":"ವಿನೋದ್ ಬೆಳ್ಳಾಯರು","Dinesh Putran":"ದಿನೇಶ್ ಪುತ್ರನ್",
+"Lakshmana Poojari":"ಲಕ್ಷ್ಮಣ ಪೂಜಾರಿ","Yashavanth Mastikatte":"ಯಶವಂತ್ ಮಾಸ್ತಿಕಟ್ಟೆ","Poornima":"ಪೂರ್ಣಿಮಾ","Nagaraja Poojari":"ನಾಗರಾಜ ಪೂಜಾರಿ","Umanath Kotyan":"ಉಮಾನಾಥ್ ಕೊಟ್ಯಾನ್",
+"Nagesh Amin":"ನಾಗೇಶ್ ಅಮೀನ್","Shivakumar Shetty":"ಶಿವಕುಮಾರ್ ಶೆಟ್ಟಿ","Sooraj Jain Marnad":"ಸೂರಜ್ ಜೈನ್ ಮಾರ್ನಾಡ್","Surekha":"ಸುರೇಖಾ","Abhilash Shetty":"ಅಭಿಲಾಷ್ ಶೆಟ್ಟಿ",
+"Yatish Acharya":"ಯತೀಶ್ ಆಚಾರ್ಯ","Vinod Bolluru":"ವಿನೋದ್ ಬೊಳ್ಳೂರು","Ishwar Kateel":"ಈಶ್ವರ್ ಕಟೀಲ್","Krishnaraja Shetty":"ಕೃಷ್ಣರಾಜ ಶೆಟ್ಟಿ","Shailesh Kumar Mulki":"ಶೈಲೇಶ್ ಕುಮಾರ್ ಮುಲ್ಕಿ",
+"Prashanth Mulki":"ಪ್ರಶಾಂತ್ ಮುಲ್ಕಿ","Sukesh Shetty":"ಸುಕೇಶ್ ಶೆಟ್ಟಿ","Jayananda Mulki":"ಜಯಾನಂದ ಮುಲ್ಕಿ","Lakshman Salyan Bellayaru":"ಲಕ್ಷ್ಮಣ್ ಸಾಲ್ಯಾನ್ ಬೆಳ್ಳಾಯರು","Jeevan Shetty":"ಜೀವನ್ ಶೆಟ್ಟಿ",
+"Rajesh Amin":"ರಾಜೇಶ್ ಅಮೀನ್","Gururaj Sapaliga":"ಗುರುರಾಜ್ ಸಪಾಳಿಗ","Harish Moodushedde":"ಹರೀಶ್ ಮೂಡುಶೆಡ್ಡೆ","Dinesh Kukyan":"ದಿನೇಶ್ ಕುಕ್ಯಾನ್","Bharath Shetty":"ಭರತ್ ಶೆಟ್ಟಿ",
+"Jayanth Salyan":"ಜಯಂತ್ ಸಾಲ್ಯಾನ್","Vijay Kumar":"ವಿಜಯ್ ಕುಮಾರ್","Dinesh Shetty":"ದಿನೇಶ್ ಶೆಟ್ಟಿ","Keshava Karkera":"ಕೇಶವ ಕಾರ್ಕೇರ","Naveen Raj":"ನವೀನ್ ರಾಜ್",
+"Harshavarma Hegde":"ಹರ್ಷವರ್ಮ ಹೆಗ್ಡೆ","Dixith Panapila":"ದೀಕ್ಷಿತ್ ಪಣಪಿಲ","Vandana Prabhu":"ವಂದನಾ ಪ್ರಭು","Bola Vishwanath Kamath":"ಬೊಳ ವಿಶ್ವನಾಥ್ ಕಾಮತ್","Santhosh Jain":"ಸಂತೋಷ್ ಜೈನ್",
+"Roshan Shetty":"ರೋಶನ್ ಶೆಟ್ಟಿ","Rajeshwara Nayak":"ರಾಜೇಶ್ವರ ನಾಯಕ್","Sudhakar D Poojari":"ಸುಧಾಕರ್ ಡಿ ಪೂಜಾರಿ","Sachin Panapila":"ಸಚಿನ್ ಪಣಪಿಲ","Jayaraj":"ಜಯರಾಜ್",
+"Muniraj Hegde":"ಮುನಿರಾಜ್ ಹೆಗ್ಡೆ","Latha Hegde":"ಲತಾ ಹೆಗ್ಡೆ","Ashwath Panapila":"ಅಶ್ವತ್ ಪಣಪಿಲ","Lakshan":"ಲಕ್ಷಣ್","Pradeep Walpady":"ಪ್ರದೀಪ್ ವಾಲ್ಪಾಡಿ",
+"Karunakara Shetty":"ಕರುಣಾಕರ ಶೆಟ್ಟಿ","Gautham Rai":"ಗೌತಮ್ ರೈ","Bahubali Prasad":"ಬಾಹುಬಲಿ ಪ್ರಸಾದ್","Rajesh Shetty":"ರಾಜೇಶ್ ಶೆಟ್ಟಿ","Shwetha Jain":"ಶ್ವೇತಾ ಜೈನ್",
+"Satvik Mallya":"ಸಾತ್ವಿಕ್ ಮಲ್ಯ","Sampath Poojari":"ಸಂಪತ್ ಪೂಜಾರಿ","Shashikiran Kallabettu":"ಶಶಿಕಿರಣ್ ಕಲ್ಲಬೆಟ್ಟು","Prasad Bhandari":"ಪ್ರಸಾದ್ ಭಂಡಾರಿ","Dinesh Thirumalabettu":"ದಿನೇಶ್ ತಿರುಮಲಬೆಟ್ಟು",
+"Dinesh Maruru":"ದಿನೇಶ್ ಮಾರೂರು","Vasanth Naik":"ವಸಂತ್ ನಾಯಕ್","Prashanth Amin":"ಪ್ರಶಾಂತ್ ಅಮೀನ್","Janardhana Gowda":"ಜನಾರ್ದನ ಗೌಡ","Santhosh Bhandari":"ಸಂತೋಷ್ ಭಂಡಾರಿ",
+"Jivandhar Shettigar":"ಜೀವಂಧರ್ ಶೆಟ್ಟಿಗಾರ್","Chandrashekhar Poojari":"ಚಂದ್ರಶೇಖರ ಪೂಜಾರಿ","Sudarshan Kolakebailu":"ಸುದರ್ಶನ್ ಕೋಲಕೆಬೈಲು","Uday Kumar Shetty":"ಉದಯ್ ಕುಮಾರ್ ಶೆಟ್ಟಿ","Prabhakar Kulal":"ಪ್ರಭಾಕರ್ ಕುಲಾಲ್",
+"Nagaraj Karkera":"ನಾಗರಾಜ್ ಕಾರ್ಕೇರ","Nagesh Prabhu":"ನಾಗೇಶ್ ಪ್ರಭು","Raghavendra Rao":"ರಾಘವೇಂದ್ರ ರಾವ್","Shalini Salyan":"ಶಾಲಿನಿ ಸಾಲ್ಯಾನ್","Mahesh Gowda":"ಮಹೇಶ್ ಗೌಡ",
+"Shashidhar Nayak":"ಶಶಿಧರ ನಾಯಕ್","Sunil Shetty":"ಸುನಿಲ್ ಶೆಟ್ಟಿ","Harish M K":"ಹರೀಶ್ ಎಂ ಕೆ","Divakara Shetty":"ದಿವಾಕರ ಶೆಟ್ಟಿ","Sujatha Shyam Kundar":"ಸುಜಾತಾ ಶ್ಯಾಮ್ ಕುಂದರ್",
+"Balachandra Shetty":"ಬಾಲಚಂದ್ರ ಶೆಟ್ಟಿ","Sundar Niddodi":"ಸುಂದರ್ ನಿಡ್ಡೋಡಿ","Arun Kumar":"ಅರುಣ್ ಕುಮಾರ್","Dhanush Shettigar":"ಧನುಶ್ ಶೆಟ್ಟಿಗಾರ್","Damodar Shetty":"ದಾಮೋದರ ಶೆಟ್ಟಿ",
+"Shailesh Anchan":"ಶೈಲೇಶ್ ಅಂಚನ್","Divakara Karkera":"ದಿವಾಕರ ಕಾರ್ಕೇರ","Pranik":"ಪ್ರಣಿಕ್","Hemalatha Punaruru":"ಹೇಮಲತಾ ಪುನರೂರು","Gopala Krishna":"ಗೋಪಾಲ ಕೃಷ್ಣ",
+"Satyendra":"ಸತ್ಯೇಂದ್ರ","Subhash Shetty":"ಸುಭಾಷ್ ಶೆಟ್ಟಿ","Ashok Kumar":"ಅಶೋಕ್ ಕುಮಾರ್","Satish Anchan":"ಸತೀಶ್ ಅಂಚನ್","Harishchandra Kotyan":"ಹರಿಶ್ಚಂದ್ರ ಕೊಟ್ಯಾನ್",
+"Praveen":"ಪ್ರವೀಣ್","Vikas Shetty":"ವಿಕಾಸ್ ಶೆಟ್ಟಿ","Dhanraj Kundar":"ಧನರಾಜ್ ಕುಂದರ್","Naveenchandra Shetty":"ನವೀನಚಂದ್ರ ಶೆಟ್ಟಿ","Hariprasad Shetty":"ಹರಿಪ್ರಸಾದ್ ಶೆಟ್ಟಿ",
+"Jayalakshmi K":"ಜಯಲಕ್ಷ್ಮಿ ಕೆ","Bhaskar Shetty":"ಭಾಸ್ಕರ್ ಶೆಟ್ಟಿ","Purushottam Shettigar":"ಪುರುಷೋತ್ತಮ ಶೆಟ್ಟಿಗಾರ್","Harikrishna Das":"ಹರಿಕೃಷ್ಣ ದಾಸ್","Shobhendra Sasihithlu":"ಶೋಭೇಂದ್ರ ಸಸಿಹಿತ್ಲು",
+"Lohith":"ಲೋಹಿತ್","Jeevan Prakash":"ಜೀವನ್ ಪ್ರಕಾಶ್","Sachin Shetty":"ಸಚಿನ್ ಶೆಟ್ಟಿ","Mohan Das":"ಮೋಹನ್ ದಾಸ್","Nagaraj":"ನಾಗರಾಜ್",
+"Hemanath Amin":"ಹೇಮನಾಥ್ ಅಮೀನ್","Anil Kundar":"ಅನಿಲ್ ಕುಂದರ್","Shashikumar Mulki":"ಶಶಿಕುಮಾರ್ ಮುಲ್ಕಿ","Satish Shetty":"ಸತೀಶ್ ಶೆಟ್ಟಿ","Praveen Acharya":"ಪ್ರವೀಣ್ ಆಚಾರ್ಯ",
+"Dinesh":"ದಿನೇಶ್","Manohar Shetty":"ಮನೋಹರ್ ಶೆಟ್ಟಿ","Balakrishna":"ಬಾಲಕೃಷ್ಣ","Jayananda Chelyaru":"ಜಯಾನಂದ ಚೆಲ್ಯಾರು","Prasad Anchan":"ಪ್ರಸಾದ್ ಅಂಚನ್",
+"Durgaprasad Kuthethoor":"ದುರ್ಗಾಪ್ರಸಾದ್ ಕುತ್ತೆತ್ತೂರು","Kiran Rai":"ಕಿರಣ್ ರೈ","Shankar Jogi":"ಶಂಕರ್ ಜೋಗಿ","Mukesh":"ಮುಕೇಶ್","Prakhyath Shetty":"ಪ್ರಖ್ಯಾತ್ ಶೆಟ್ಟಿ",
+"Anil Moodushedde":"ಅನಿಲ್ ಮೂಡುಶೆಡ್ಡೆ","Chitresh Shetty":"ಚಿತ್ರೇಶ್ ಶೆಟ್ಟಿ","Leelavathi":"ಲೀಲಾವತಿ","Sudhakar Kamath":"ಸುಧಾಕರ್ ಕಾಮತ್","Sharath C Babu":"ಶರತ್ ಸಿ ಬಾಬು",
+"Geethalakshmi":"ಗೀತಾಲಕ್ಷ್ಮಿ","Satish Devadiga":"ಸತೀಶ್ ದೇವಾಡಿಗ","Lokesh Bajpe":"ಲೋಕೇಶ್ ಬಜ್ಪೆ"
+};
+
 const PALETTES = [['#FF6A00','#E85D04'],['#138808','#0B6E04'],['#2563EB','#1E40AF'],['#9333EA','#6B21A8'],['#DB2777','#9D174D'],['#0891B2','#0E7490'],['#CA8A04','#854D0E'],['#DC2626','#991B1B'],['#475569','#1E293B']];
 function initials(name){const p=name.replace(/\(.\)/g,'').trim().split(/\s+/).filter(Boolean);return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase()||'#';}
 function palette(name){let h=0;for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0;return PALETTES[h%PALETTES.length];}
@@ -320,7 +385,7 @@ function renderStats(){
 let activeMsk='';
 
 function acts(person,sm){
-  const d=digits(person[1]); const ok=d.length>=10; const tel='+91'+d; const nm=esc(person[0]); const c=sm?'fab sm':'fab';
+  const d=digits(person[1]); const ok=d.length>=10; const tel='+91'+d; const nm=esc(I18N.L(person[0],NAME_KN[person[0]]||person[0])); const c=sm?'fab sm':'fab';
   const call=ok?'<a class="'+c+' call" href="tel:'+tel+'" data-haptic aria-label="Call '+nm+'">'+SVG_CALL+'</a>':'<span class="'+c+' call" aria-disabled="true">'+SVG_CALL+'</span>';
   const wa=ok?'<a class="'+c+' wa" href="https://wa.me/91'+d+'?text='+encodeURIComponent(WA_GREETING)+'" target="_blank" rel="noopener" data-haptic aria-label="WhatsApp '+nm+'">'+SVG_WA+'</a>':'<span class="'+c+' wa" aria-disabled="true">'+SVG_WA+'</span>';
   return call+wa;
@@ -330,19 +395,19 @@ function phoneBtn(p){const d=digits(p);if(d.length<10)return '<span class="pph">
 function personRow(person,kind,role){
   const [c1,c2]=palette(person[0]);
   const tag='<span class="tag '+(kind==='pk'?'pk':'pr')+'">'+(kind==='pk'?I18N.L('Pramukh','ಪ್ರಮುಖ್'):I18N.L('Prabhari','ಪ್ರಭಾರಿ'))+'</span>';
-  const roleHtml=role?'<span class="prole">'+esc(role)+'</span>':'';
+  const roleHtml=role?'<span class="prole">'+esc(I18N.L(role,ROLE_KN[role]||role))+'</span>':'';
   return '<div class="prow">'+
     '<div class="pav" style="background:linear-gradient(150deg,'+c1+','+c2+')">'+initials(person[0])+'</div>'+
-    '<div class="pmeta"><div class="pname">'+esc(person[0])+'</div>'+
+    '<div class="pmeta"><div class="pname">'+esc(I18N.L(person[0],NAME_KN[person[0]]||person[0]))+'</div>'+
       '<div class="psub">'+tag+roleHtml+phoneBtn(person[1])+'</div></div>'+
     '<div class="pacts">'+acts(person,false)+'</div></div>';
 }
 function leadRow(role,person){
   if(!person||!person[0])return '';
-  return '<div class="lrow"><div class="lrole">'+esc(role)+'</div><div class="lname">'+esc(person[0])+'</div><div class="lacts">'+acts(person,true)+'</div></div>';
+  return '<div class="lrow"><div class="lrole">'+esc(role)+'</div><div class="lname">'+esc(I18N.L(person[0],NAME_KN[person[0]]||person[0]))+'</div><div class="lacts">'+acts(person,true)+'</div></div>';
 }
 function kcardHTML(k){
-  return '<div class="kcard"><div class="ktop"><span class="kv">'+esc(k.v)+'</span><span class="kb">'+I18N.L('Booths','ಬೂತ್‌ಗಳು')+' '+esc(k.booths)+'</span></div>'+
+  return '<div class="kcard"><div class="ktop"><span class="kv">'+esc(I18N.L(k.v,VILLAGE_KN[k.v]||k.v))+'</span><span class="kb">'+I18N.L('Booths','ಬೂತ್‌ಗಳು')+' '+esc(k.booths)+'</span></div>'+
     personRow(k.pk,'pk','')+personRow(k.pr,'pr',k.pr[2])+'</div>';
 }
 function leadHTML(o){
@@ -352,19 +417,25 @@ function leadHTML(o){
 
 function kMatch(k,q){
   if(!q)return true;
-  return (k.v+' '+k.booths+' '+k.pk[0]+' '+k.pk[1]+' '+k.pr[0]+' '+k.pr[1]+' '+(k.pr[2]||'')).toLowerCase().includes(q);
+  const en=(k.v+' '+k.booths+' '+k.pk[0]+' '+k.pk[1]+' '+k.pr[0]+' '+k.pr[1]+' '+(k.pr[2]||'')).toLowerCase();
+  if(en.includes(q))return true;
+  const kn=((VILLAGE_KN[k.v]||'')+' '+(NAME_KN[k.pk[0]]||'')+' '+(NAME_KN[k.pr[0]]||'')+' '+(ROLE_KN[k.pr[2]]||'')).toLowerCase();
+  return kn.includes(q);
 }
 function leadMatch(s,q){
   if(!q)return false;
   const o=s.office; const all=[s.msk,o.president,o.secretary,o.prabhari,o.pramukh,o.sir].map(x=>Array.isArray(x)?x.join(' '):x).join(' ').toLowerCase();
-  return all.includes(q);
+  if(all.includes(q))return true;
+  const names=[o.president,o.secretary,o.prabhari,o.pramukh,o.sir].map(p=>NAME_KN[p[0]]||'').join(' ');
+  const kn=((MSK_KN[s.msk]||'')+' '+names).toLowerCase();
+  return kn.includes(q);
 }
 
 function buildChips(){
   const mk=(label,val,n)=>{const b=document.createElement('button');b.className='chip';b.type='button';b.setAttribute('aria-pressed',val===activeMsk);b.innerHTML=esc(label)+'<span class="n">'+n+'</span>';b.onclick=()=>{haptic(8);activeMsk=val;buildChips();render(true);window.scrollTo({top:0,behavior:'smooth'});};return b;};
   chipsEl.innerHTML='';
   chipsEl.appendChild(mk(I18N.L('All','ಎಲ್ಲಾ'),'',totalK));
-  DATA.forEach(s=>chipsEl.appendChild(mk(s.msk,s.msk,s.kendras.length)));
+  DATA.forEach(s=>chipsEl.appendChild(mk(I18N.L(s.msk,MSK_KN[s.msk]||s.msk),s.msk,s.kendras.length)));
 }
 
 function render(animate){
@@ -377,11 +448,11 @@ function render(animate){
     const ks=s.kendras.filter(k=>lm||kMatch(k,q));
     if(!ks.length) return;
     shown+=ks.length;
-    html+='<section class="group"><div class="group-head"><span class="dot"></span><h2>'+esc(s.msk)+'</h2><span class="gc">'+ks.length+' '+I18N.L(ks.length===1?'kendra':'kendras','ಕೇಂದ್ರ')+'</span></div>'+
+    html+='<section class="group"><div class="group-head"><span class="dot"></span><h2>'+esc(I18N.L(s.msk,MSK_KN[s.msk]||s.msk))+'</h2><span class="gc">'+ks.length+' '+I18N.L(ks.length===1?'kendra':'kendras','ಕೇಂದ್ರ')+'</span></div>'+
       leadHTML(s.office)+
       '<div class="cards'+(animate?' anim':'')+'">'+ks.map(kcardHTML).join('')+'</div></section>';
   });
-  const mskTail=activeMsk?I18N.L(' in '+esc(activeMsk),' — '+esc(activeMsk)):'';
+  const mskTail=activeMsk?I18N.L(' in '+esc(activeMsk),' — '+esc(MSK_KN[activeMsk]||activeMsk)):'';
   countEl.innerHTML='<b>'+shown+'</b> '+I18N.L('Shakti '+(shown===1?'Kendra':'Kendras'),'ಶಕ್ತಿ ಕೇಂದ್ರಗಳು')+mskTail;
   if(!shown){listEl.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>'+I18N.L('Nothing found','ಏನೂ ಸಿಗಲಿಲ್ಲ')+'</h3><p>'+I18N.L('Try a different kendra, name, role, booth or phone.','ಬೇರೆ ಕೇಂದ್ರ, ಹೆಸರು, ಪಾತ್ರ, ಬೂತ್ ಅಥವಾ ಫೋನ್ ಪ್ರಯತ್ನಿಸಿ.')+'</p></div>';return;}
   listEl.innerHTML=html;
