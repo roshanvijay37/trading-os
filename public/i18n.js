@@ -3,7 +3,7 @@
    Include with <script src="i18n.js"></script> before a page's own <script>. */
 (function(){
   var KEY = 'mandalLang';
-  function getLang(){ try{ return localStorage.getItem(KEY) || 'en'; }catch(e){ return 'en'; } }
+  function getLang(){ try{ return localStorage.getItem(KEY) || 'kn'; }catch(e){ return 'kn'; } }
   function setLang(l){ try{ localStorage.setItem(KEY, l); }catch(e){} }
 
   var I18N = { lang: getLang() };
@@ -28,6 +28,7 @@
   // <input data-en-ph="Search…" data-kn-ph="ಹುಡುಕಿ…">
   I18N.applyStatic = function(root){
     root = root || document;
+    document.documentElement.lang = I18N.lang === 'kn' ? 'kn' : 'en';
     root.querySelectorAll('[data-en]').forEach(function(el){
       var kn = el.getAttribute('data-kn');
       el.textContent = (I18N.lang === 'kn' && kn != null) ? kn : el.getAttribute('data-en');
