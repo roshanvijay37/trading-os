@@ -81,16 +81,12 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 @media(min-width:680px){.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
 .pcard{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
 .pcard.ch{border-color:rgba(255,106,0,.35)}
-.pcard.add{border-color:rgba(11,138,62,.4)}
-.pcard.rem{border-color:rgba(194,65,12,.4);opacity:.92}
 .ph{display:flex;align-items:center;gap:10px;padding:11px 13px}
 .pn{font-family:'Sora';font-weight:800;font-size:15px;letter-spacing:-.01em;flex:0 0 auto}
 .pn .hash{color:var(--ink-soft);font-weight:600}
 .pmeta{flex:1;min-width:0;font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .flag{flex:0 0 auto;font-family:'Sora';font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:3px 8px;border-radius:999px;text-transform:uppercase}
 .flag.ch{color:var(--saffron-deep);background:rgba(255,106,0,.1);border:1px solid rgba(255,106,0,.2)}
-.flag.add{color:var(--up);background:var(--up-bg);border:1px solid rgba(11,138,62,.2)}
-.flag.rem{color:var(--down);background:var(--down-bg);border:1px solid rgba(194,65,12,.2)}
 .pconn{padding:10px 13px 0}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)}
 .cell{background:var(--card);padding:8px 13px}
@@ -358,20 +354,19 @@ function renderInsights(){
 
 function buildDiff(today,prev){
   const k=today.key, M=today.metrics;
-  const tMap=new Map(today.rows.map(r=>[keyOf(r,k),r]));
   const pMap=prev?new Map(prev.rows.map(r=>[keyOf(r,k),r])):new Map();
-  const added=[],removed=[],changed=[],same=[];
-  for(const [kk,r] of tMap){
-    if(!prev){ same.push(r); continue; }
-    const pr=pMap.get(kk);
-    if(!pr){ added.push(r); continue; }
-    const diffs=[];
-    for(const m of M){ const a=r[m]??0,b=pr[m]??0; if(a!==b) diffs.push({field:m,from:b,to:a,delta:(typeof a==='number'&&typeof b==='number')?a-b:null}); }
-    if(diffs.length) changed.push({row:r,prev:pr,diffs,dmap:Object.fromEntries(diffs.map(d=>[d.field,d]))}); else same.push(r);
+  const changed=[];
+  if(prev){
+    for(const r of today.rows){
+      const pr=pMap.get(keyOf(r,k));
+      if(!pr) continue;
+      const diffs=[];
+      for(const m of M){ const a=r[m]??0,b=pr[m]??0; if(a!==b) diffs.push({field:m,from:b,to:a,delta:(typeof a==='number'&&typeof b==='number')?a-b:null}); }
+      if(diffs.length) changed.push({row:r,prev:pr,diffs,dmap:Object.fromEntries(diffs.map(d=>[d.field,d]))});
+    }
   }
-  if(prev) for(const [kk,pr] of pMap) if(!tMap.has(kk)) removed.push(pr);
   const totals={}; for(const m of M) totals[m]={now:sum(today.rows,m),delta:prev?sum(today.rows,m)-sum(prev.rows,m):null};
-  return {added,removed,changed,same,totals,partsDelta:prev?today.rows.length-prev.rows.length:null};
+  return {changed,totals};
 }
 
 function deltaChip(d,cls){ if(d==null) return ''; if(d===0) return '<span class="'+(cls||'dl')+' flat">±0</span>'; const up=d>0; return '<span class="'+(cls||'dl')+' '+(up?'up':'down')+'">'+(up?'▲':'▼')+' '+fmt(Math.abs(d))+'</span>'; }
@@ -379,7 +374,7 @@ function deltaChip(d,cls){ if(d==null) return ''; if(d===0) return '<span class=
 function renderStats(){
   const t=STATE.today, df=STATE.diff;
   const cards=[];
-  cards.push('<div class="stat"><div class="l">Parts</div><div class="v">'+fmt(t.rows.length)+'</div>'+(df.partsDelta!=null?'<div>'+deltaChip(df.partsDelta)+'</div>':'')+'</div>');
+  cards.push('<div class="stat"><div class="l">Parts</div><div class="v">'+fmt(t.rows.length)+'</div></div>');
   STATE.summary.forEach(m=>{
     const tt=df.totals[m]||{now:sum(t.rows,m),delta:null};
     cards.push('<div class="stat"><div class="l">'+esc(sh(m))+'</div><div class="v">'+fmt(tt.now)+'</div>'+(tt.delta!=null?'<div>'+deltaChip(tt.delta)+'</div>':'')+'</div>');
@@ -388,9 +383,7 @@ function renderStats(){
 }
 
 function renderTabs(){
-  const df=STATE.diff, hasPrev=!!STATE.prev;
   const defs=[['insights','⚡ Insights',null],['all','All parts',STATE.today.rows.length]];
-  if(hasPrev){ defs.push(['changed','Changed',df.changed.length],['added','Added',df.added.length],['removed','Removed',df.removed.length]); }
   el.tabs.innerHTML=defs.map(([id,lab,n])=>'<button class="tab" type="button" data-tab="'+id+'" aria-pressed="'+(STATE.tab===id)+'">'+lab+(n!=null?'<span class="n">'+n+'</span>':'')+'</button>').join('');
 }
 
@@ -409,13 +402,11 @@ function fullRows(r,dmap){
   }).join('');
 }
 function partCard(r,opts){
-  opts=opts||{}; const dmap=opts.dmap; const kind=opts.kind||'';
+  opts=opts||{}; const dmap=opts.dmap;
   const pn=r["Part Number"], asm=r["Asmbly Name"]||'', ac=r["AC Number"];
   let flag='';
-  if(kind==='add') flag='<span class="flag add">New</span>';
-  else if(kind==='rem') flag='<span class="flag rem">Removed</span>';
-  else if(dmap){ const n=Object.keys(dmap).length; flag='<span class="flag ch">▲ '+n+' changed</span>'; }
-  return '<div class="pcard '+(kind==='add'?'add':kind==='rem'?'rem':(dmap?'ch':''))+'">'+
+  if(dmap){ const n=Object.keys(dmap).length; flag='<span class="flag ch">▲ '+n+' changed</span>'; }
+  return '<div class="pcard '+(dmap?'ch':'')+'">'+
     '<div class="ph"><div class="pn"><span class="hash">Part </span>'+esc(String(pn))+'</div><div class="pmeta">'+(ac!=null?'AC '+esc(String(ac))+(asm?' · ':''):'')+esc(asm)+'</div>'+flag+'</div>'+
     '<div class="grid">'+headlineCells(r,dmap)+'</div>'+
     '<div class="ircon pconn">'+partContacts(pn)+'</div>'+
@@ -425,23 +416,16 @@ function partCard(r,opts){
 
 function currentList(){
   const df=STATE.diff, q=STATE.q.trim().toLowerCase();
-  let items;
-  if(STATE.tab==='changed') items=df.changed.map(c=>({r:c.row,dmap:c.dmap}));
-  else if(STATE.tab==='added') items=df.added.map(r=>({r,kind:'add'}));
-  else if(STATE.tab==='removed') items=df.removed.map(r=>({r,kind:'rem'}));
-  else { // all: attach dmap if changed
-    const cm=new Map(df.changed.map(c=>[keyOf(c.row,STATE.key),c.dmap]));
-    items=STATE.today.rows.map(r=>({r,dmap:cm.get(keyOf(r,STATE.key))}));
-  }
+  const cm=new Map(df.changed.map(c=>[keyOf(c.row,STATE.key),c.dmap]));
+  let items=STATE.today.rows.map(r=>({r,dmap:cm.get(keyOf(r,STATE.key))}));
   if(q){ items=items.filter(it=>{ const r=it.r; if(String(r["Part Number"]).includes(q)) return true; return STATE.metrics.some(m=>String(r[m]).includes(q)) || String(r["Asmbly Name"]||'').toLowerCase().includes(q); }); }
   return items;
 }
 function render(){
   if(STATE.tab==='insights'){ el.count.innerHTML=''; renderInsights(); return; }
   const items=currentList();
-  const lbl=STATE.tab==='all'?'parts':STATE.tab;
-  el.count.innerHTML='<b>'+items.length+'</b> '+(STATE.tab==='all'?(items.length===1?'part':'parts'):lbl);
-  if(!items.length){ el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>Nothing here</h3><p>'+(STATE.q?'No part matches your search.':'No '+lbl+' for this view.')+'</p></div>'; return; }
+  el.count.innerHTML='<b>'+items.length+'</b> '+(items.length===1?'part':'parts');
+  if(!items.length){ el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>Nothing here</h3><p>No part matches your search.</p></div>'; return; }
   el.list.innerHTML='<div class="cards">'+items.map(it=>partCard(it.r,it)).join('')+'</div>';
 }
 
@@ -498,7 +482,7 @@ async function loadView(){
     el.hdate.innerHTML='<div class="d">'+esc(STATE.to)+'</div><div class="v">'+(single?'single day':'vs '+esc(STATE.from))+'</div>';
     el.note.innerHTML=single
       ? '<div class="note">Showing <b>'+esc(STATE.to)+'</b> — snapshot totals'+(STATE.dates.length>1?'. Pick a different “From” day to see the difference.':' (first snapshot; the diff appears once a second day exists).')+'</div>'
-      : '<div class="note"><b>'+esc(STATE.from)+' → '+esc(STATE.to)+':</b> '+STATE.diff.changed.length+' parts changed, '+STATE.diff.added.length+' added, '+STATE.diff.removed.length+' removed. Tap a part for field-level from → to.</div>';
+      : '<div class="note"><b>'+esc(STATE.from)+' → '+esc(STATE.to)+':</b> '+STATE.diff.changed.length+' of '+STATE.today.rows.length+' parts moved. Tap a part for field-level from → to.</div>';
     refreshControls(); renderStats(); renderTabs(); setTab('all');
   }catch(e){
     el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
