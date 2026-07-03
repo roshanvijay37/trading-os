@@ -326,8 +326,8 @@ async function loadBLA2(){
 function partContacts(pn){
   const c=PART_CONTACT[pn],b2=BLA2_CONTACT[pn];
   let out='';
-  if(c)out+=contactMini(c.pk,'Pramukh')+contactMini(c.pr,'Prabhari');
   if(b2)out+=contactMini(b2,'BLA2');
+  if(c)out+=contactMini(c.pk,'Pramukh')+contactMini(c.pr,'Prabhari');
   return out||'<span class="conn muted">no contact on file</span>';
 }
 function insRow(pn,kendra,metricHTML){return '<div class="irow"><div class="irhead"><b>Part '+pn+'</b>'+(kendra?' · <span class="ik">'+esc(kendra)+'</span>':'')+' · <span class="irm">'+metricHTML+'</span></div><div class="ircon">'+partContacts(pn)+'</div></div>';}
