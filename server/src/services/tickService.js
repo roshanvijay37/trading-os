@@ -420,23 +420,27 @@ function parseInterval(interval) {
 }
 
 // ─── Get Period Start Timestamp ───────────────────────────────────
-function getPeriodStart(timestamp, unit, value) {
-  const date = new Date(timestamp);
-  
+// Minute candles are anchored to the NSE SESSION OPEN (09:15 IST), not the server-local
+// clock. NSE/FYERS bars run 09:15–09:45–10:15… for 30m and 09:15–10:15… for 60m; the old
+// getMinutes()-based bucketing produced :00/:30 server-local boundaries, so tick-built
+// 30m/60m candles disagreed with REST-history/backtest bars and shifted the EMA (a live-vs-
+// backtest parity break). Anchoring at session open yields identical boundaries for 5m/15m
+// (09:15 is on the 5/15-minute grid) and FIXES 30m/60m. Exported for unit tests.
+export function getPeriodStart(timestamp, unit, value) {
   if (unit === "second") {
     // Round down to nearest N seconds
+    const date = new Date(timestamp);
     const seconds = Math.floor(date.getSeconds() / value) * value;
     date.setSeconds(seconds, 0);
     return date.getTime();
   }
-  
+
   if (unit === "minute") {
-    // Round down to nearest N minutes
-    const minutes = Math.floor(date.getMinutes() / value) * value;
-    date.setMinutes(minutes, 0, 0);
-    return date.getTime();
+    const sessionStart = currentSessionStartMs(timestamp);
+    const periodMs = value * 60000;
+    return sessionStart + Math.floor((timestamp - sessionStart) / periodMs) * periodMs;
   }
-  
+
   return timestamp;
 }
 

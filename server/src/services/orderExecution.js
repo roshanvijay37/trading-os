@@ -326,12 +326,27 @@ export async function placeOrder({
 /**
  * Poll a single order until it is terminal or the timeout elapses.
  * Returns the final state including filled quantity and average fill price.
+ *
+ * NEVER throws on a failed poll: a single transient network error or FYERS 429 mid-poll
+ * must not abort the caller — an aborted openPosition leaves a live entry order untracked
+ * with no stop-loss, and an aborted closePosition can double-fire a market exit after the
+ * broker SL was already cancelled. Failed polls are tolerated until the deadline; the
+ * caller then reconciles the TIMEOUT/last-known state (cancel + re-read) as usual.
  */
 export async function waitForFill(orderId, session, options = {}) {
-  const { timeoutMs = 30000, pollMs = 1000, paperTrading = false, paperFillPrice = 0, auditLogger = null } = options;
+  const {
+    timeoutMs = 30000,
+    pollMs = 1000,
+    paperTrading = false,
+    paperFillPrice = 0,
+    auditLogger = null,
+    // Injectable for unit tests; production always uses the real order lookup.
+    fetchDetails = getOrderDetails,
+  } = options;
 
   const start = Date.now();
   let lastState = null;
+  let pollErrors = 0;
 
   while (Date.now() - start < timeoutMs) {
     if (paperTrading) {
@@ -351,24 +366,37 @@ export async function waitForFill(orderId, session, options = {}) {
       return lastState;
     }
 
-    const details = await getOrderDetails(orderId, session);
-    lastState = details;
-
-    if (["FILLED", "REJECTED", "CANCELLED", "EXPIRED"].includes(details.status)) {
-      if (auditLogger) {
-        auditLogger({
-          type: details.status === "FILLED" ? "ORDER_FILLED" : `ORDER_${details.status}`,
-          orderId,
-          ...details,
-        });
+    let details = null;
+    try {
+      details = await fetchDetails(orderId, session);
+      pollErrors = 0;
+    } catch (err) {
+      pollErrors += 1;
+      console.error(`[ORDER] Fill poll ${pollErrors} failed for ${orderId} (tolerating until deadline):`, err.message);
+      if (pollErrors === 1 && auditLogger) {
+        auditLogger({ type: "FILL_POLL_ERROR", orderId, error: err.message });
       }
-      return details;
     }
 
-    // Partial fill while still pending: keep waiting.
-    if (details.filledQty > 0 && details.status === "PENDING") {
-      if (auditLogger) {
-        auditLogger({ type: "PARTIAL_FILL", orderId, ...details });
+    if (details) {
+      lastState = details;
+
+      if (["FILLED", "REJECTED", "CANCELLED", "EXPIRED"].includes(details.status)) {
+        if (auditLogger) {
+          auditLogger({
+            type: details.status === "FILLED" ? "ORDER_FILLED" : `ORDER_${details.status}`,
+            orderId,
+            ...details,
+          });
+        }
+        return details;
+      }
+
+      // Partial fill while still pending: keep waiting.
+      if (details.filledQty > 0 && details.status === "PENDING") {
+        if (auditLogger) {
+          auditLogger({ type: "PARTIAL_FILL", orderId, ...details });
+        }
       }
     }
 

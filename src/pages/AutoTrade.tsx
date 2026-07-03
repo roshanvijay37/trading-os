@@ -29,7 +29,9 @@ export function AutoTrade() {
   const [configForm, setConfigForm] = useState<BotConfig>({
     riskPercent: 0.5,
     maxTradesPerDay: 10,
-    paperTrading: false,
+    // Fail-SAFE: never initialize the form to live money. Before the first /status sync
+    // resolves, a Save must not be able to flip a paper bot live.
+    paperTrading: true,
     positionSizingMode: "RISK",
     fixedLots: 1,
     selectedStrategies: ["EMA5"],

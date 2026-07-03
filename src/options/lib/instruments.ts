@@ -10,7 +10,7 @@ export const INSTRUMENTS: Record<InstrumentId, InstrumentConfig> = {
     id: "NIFTY",
     label: "NIFTY",
     underlying: "NSE:NIFTY50-INDEX",
-    lotSize: 75,
+    lotSize: 65, // 75→65 per NSE Jan-2026 series revision (FAOP70616)
     strikeInterval: 50,
     expiryWeekday: 4, // Thursday
     fallbackIv: 0.13,

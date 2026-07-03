@@ -16,7 +16,7 @@ import type { OptionLeg } from "./optionMetrics";
 const SQRT_2PI = Math.sqrt(2 * Math.PI);
 const MIN_YEARS = 1 / (365 * 24 * 60); // ~1 minute floor so √T never collapses to 0
 const DEFAULT_R = 0.065;
-const DEFAULT_LOT = 75; // NIFTY contract multiplier
+const DEFAULT_LOT = 65; // NIFTY contract multiplier — 75→65 per NSE Jan-2026 series revision
 
 function normPDF(x: number): number {
   return Math.exp(-0.5 * x * x) / SQRT_2PI;

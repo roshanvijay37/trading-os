@@ -92,7 +92,7 @@ export function getOptionDefaults(symbol = "") {
   if (s.includes("NIFTYBANK") || s.includes("BANKNIFTY")) return { iv: 0.18, strikeInterval: 100, lotSize: 30 };
   if (s.includes("FINNIFTY")) return { iv: 0.16, strikeInterval: 50, lotSize: 65 };
   if (s.includes("SENSEX")) return { iv: 0.15, strikeInterval: 100, lotSize: 20 };
-  return { iv: 0.13, strikeInterval: 50, lotSize: 75 }; // NIFTY 50
+  return { iv: 0.13, strikeInterval: 50, lotSize: 65 }; // NIFTY 50 — 75→65 per NSE Jan-2026 series revision (FAOP70616)
 }
 
 /**

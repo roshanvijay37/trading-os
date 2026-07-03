@@ -55,7 +55,11 @@ import { computeOptionCosts } from "./blackScholes.js";
 const CONFIG = {
   POLL_INTERVAL_MS: 30000,
   UNDERLYINGS: [
-    { name: "NIFTY", symbol: "NSE:NIFTY50-INDEX", lotSize: 75, marginPerLot: 150000 },
+    // Lot sizes per the NSE Jan-2026 series revision (circular FAOP70616): NIFTY 75→65,
+    // BANKNIFTY 35→30. A wrong lot size is silently fatal live — every order is exchange-
+    // rejected as an invalid multiple — while paper mode happily fills it, so re-verify
+    // these against the NSE circulars at every series revision.
+    { name: "NIFTY", symbol: "NSE:NIFTY50-INDEX", lotSize: 65, marginPerLot: 150000 },
     { name: "BANKNIFTY", symbol: "NSE:NIFTYBANK-INDEX", lotSize: 30, marginPerLot: 180000 },
   ],
   CAPITAL: 100000,
@@ -86,7 +90,10 @@ const CONFIG = {
   OPTION_DELTA_ESTIMATE: 0.5,
   ALLOW_CORRELATED_TRADES: false,
   TRAILING_SL_ENABLED: false,
-  PAPER_TRADING: false,
+  // Fail-SAFE default: if auto-trade-state.json is ever missing/unreadable (fresh host, cwd
+  // change), the bot must come up in PAPER mode — going live requires an explicit operator
+  // toggle. The previous default (false = live) meant a lost state file silently armed real money.
+  PAPER_TRADING: true,
   BROKERAGE_PER_ORDER: 20,
   EMERGENCY_STOP: false,
   SELECTED_STRATEGIES: ["EMA5"],
@@ -458,6 +465,9 @@ async function fetchIndiaVIX(session) {
     return indiaVIX;
   } catch (err) {
     console.error("[AUTO-TRADER] VIX fetch failed:", err.message);
+    // Fail-OPEN by design (a dead VIX feed shouldn't halt trading) — but leave a trace so a
+    // day traded without the VIX filter is visible in the audit trail.
+    logAudit({ type: "VIX_FETCH_FAILED", error: err.message });
     return 0;
   }
 }
@@ -789,6 +799,7 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
   position.exitOrderId = exitOrderId;
   position.exitPrice = exitPrice;
   position.quantity = exitQty;
+  position.pendingExitOrderId = null; // exit resolved — nothing in flight anymore
 
   // C4: report NET P&L — deduct brokerage + statutory costs (same model the backtest uses) so the
   // dashboard/audit isn't optimistic. Paper mode has no real costs. The round-trip cost is charged
@@ -857,6 +868,47 @@ async function closePosition(position, session, reason) {
 
   let heldQty = position.entryQty ?? position.quantity;
 
+  // ─── Settle any exit order a PREVIOUS closePosition attempt left in flight ─────────────
+  // (process crash or API outage between placing the market exit and confirming its fill —
+  // pendingExitOrderId is persisted with the position). Without this, a retry would place a
+  // SECOND market sell while the first may have filled: an oversell into a naked short. If
+  // the broker is unreachable, abort and retry next cycle — the id stays on the position.
+  if (position.pendingExitOrderId && !CONFIG.PAPER_TRADING) {
+    let det = null;
+    try {
+      det = await getOrderDetails(position.pendingExitOrderId, session);
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Cannot verify in-flight exit ${position.pendingExitOrderId} for ${position.optionSymbol}; retrying next cycle:`, err.message);
+      return;
+    }
+    if (det.status === "FILLED" || (Number(det.filledQty) || 0) >= heldQty) {
+      finalizeClose(position, {
+        exitPrice: det.avgFillPrice || position.currentLTP || position.avgFillPrice,
+        exitQty: heldQty,
+        reason,
+        exitOrderId: det.orderId,
+      });
+      return;
+    }
+    if (!["REJECTED", "CANCELLED", "EXPIRED"].includes(det.status)) {
+      // Still working at the broker — cancel the remainder, then re-read the true final fill
+      // so a fill landing between the read and the cancel is never lost (entry C-LIVE-1 pattern).
+      try {
+        await cancelOrder(position.pendingExitOrderId, session, logAudit);
+        det = await getOrderDetails(position.pendingExitOrderId, session);
+      } catch (err) {
+        console.error(`[AUTO-TRADER] Cannot cancel/re-read in-flight exit ${position.pendingExitOrderId} for ${position.optionSymbol}; retrying next cycle:`, err.message);
+        return;
+      }
+    }
+    if ((Number(det.filledQty) || 0) > 0) {
+      heldQty = settleLeg(position, det.avgFillPrice || position.currentLTP || position.avgFillPrice, Math.min(det.filledQty, heldQty), "PENDING_EXIT_SETTLED");
+    }
+    position.pendingExitOrderId = null;
+    saveState();
+    // Fall through: remaining qty (possibly 0) is handled by the normal flow below.
+  }
+
   // ─── C1: never double-exit into a naked short. Account for what the broker SL has ALREADY sold ──
   if (position.slOrderId && !CONFIG.PAPER_TRADING) {
     let slDetails = null;
@@ -885,6 +937,11 @@ async function closePosition(position, session, reason) {
   if (position.slOrderId) {
     try {
       await cancelOrder(position.slOrderId, session, logAudit);
+      // The id now points at a CANCELLED order — forget it, or reconcileStopLossOrders would
+      // read the cancelled SL as "SL failed" next cycle and fire a DUPLICATE closePosition
+      // while this exit is still in flight. On cancel failure keep the id: the SL may still
+      // be live at the broker and must stay tracked.
+      position.slOrderId = null;
     } catch (err) {
       console.error(`[AUTO-TRADER] Could not cancel SL order ${position.slOrderId}:`, err.message);
     }
@@ -908,6 +965,12 @@ async function closePosition(position, session, reason) {
     auditLogger: logAudit,
   });
 
+  // Track the in-flight exit BEFORE polling (and persist it): if the process dies or the
+  // broker becomes unreachable mid-poll, the next closePosition attempt settles THIS order
+  // instead of placing a second market sell on quantity that may already be gone.
+  position.pendingExitOrderId = exitOrder.orderId;
+  saveState();
+
   const fill = await waitForFill(exitOrder.orderId, session, {
     timeoutMs: CONFIG.ORDER_FILL_TIMEOUT_MS,
     pollMs: CONFIG.ORDER_POLL_INTERVAL_MS,
@@ -916,8 +979,27 @@ async function closePosition(position, session, reason) {
     auditLogger: logAudit,
   });
 
-  const exitPrice = fill.avgFillPrice || paperFillPrice;
-  const plan = classifyExit({ paper: CONFIG.PAPER_TRADING, entryQty: heldQty, fillQty: fill.filledQty });
+  // Non-terminal outcome (TIMEOUT, or PARTIAL at deadline): the order may STILL be working at
+  // the broker. Cancel the remainder and re-read the true final fill (entry C-LIVE-1 pattern).
+  // If the broker is unreachable, RETURN with pendingExitOrderId still set — never re-arm an
+  // SL next to a possibly-live exit order (the pair could sell the same quantity twice).
+  let finalFill = fill;
+  if (!CONFIG.PAPER_TRADING && !["FILLED", "REJECTED", "CANCELLED", "EXPIRED"].includes(fill.status)) {
+    try {
+      await cancelOrder(exitOrder.orderId, session, logAudit);
+      const reread = await getOrderDetails(exitOrder.orderId, session);
+      finalFill = { ...fill, ...reread, avgFillPrice: reread.avgFillPrice || fill.avgFillPrice };
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Exit ${exitOrder.orderId} unconfirmed for ${position.optionSymbol} (${err.message}); will settle next cycle`);
+      logAudit({ type: "EXIT_UNCONFIRMED", optionSymbol: position.optionSymbol, exitOrderId: exitOrder.orderId, reason });
+      recalcDailyPnL();
+      saveState();
+      return;
+    }
+  }
+
+  const exitPrice = finalFill.avgFillPrice || paperFillPrice;
+  const plan = classifyExit({ paper: CONFIG.PAPER_TRADING, entryQty: heldQty, fillQty: finalFill.filledQty });
 
   // ─── C2: a partial / unfilled exit must NOT mark the position CLOSED and orphan the remainder ──
   // Realize any filled portion, keep the position OPEN with the leftover qty, re-arm a broker SL on
@@ -926,11 +1008,12 @@ async function closePosition(position, session, reason) {
     if (plan.action === "partial") {
       settleLeg(position, exitPrice, plan.exitQty, `MARKET_PARTIAL:${reason}`);
     } else {
-      logAudit({ type: "EXIT_UNFILLED", optionSymbol: position.optionSymbol, reason, exitOrderId: exitOrder.orderId, fillStatus: fill.status });
-      console.error(`[AUTO-TRADER] EXIT UNFILLED for ${position.optionSymbol} (${fill.status}); ${plan.remainder} still held — re-arming SL, will retry`);
+      logAudit({ type: "EXIT_UNFILLED", optionSymbol: position.optionSymbol, reason, exitOrderId: exitOrder.orderId, fillStatus: finalFill.status });
+      console.error(`[AUTO-TRADER] EXIT UNFILLED for ${position.optionSymbol} (${finalFill.status}); ${plan.remainder} still held — re-arming SL, will retry`);
       position.quantity = plan.remainder;
       position.entryQty = plan.remainder;
     }
+    position.pendingExitOrderId = null; // the exit order is confirmed dead (cancelled/rejected)
     position.slOrderId = null; // cancelled/used above; ensureStopLoss places a fresh one on the remainder
     recalcDailyPnL();
     await ensureStopLoss(position, session);
@@ -1297,6 +1380,17 @@ async function processCandles(underlying, session) {
         const rawQty = calculatePositionSize(signal.entryPrice, signal.stopLoss, underlying);
         const qty = roundToLotSize(rawQty, underlying);
         if (qty <= 0) {
+          // Sub-lot risk sizing skips the trade by design — but it must be VISIBLE, or a day of
+          // zero trades from small capital is indistinguishable from a dead bot in the audit trail.
+          logAudit({
+            type: "SIZING_SKIPPED",
+            reason: "SUB_LOT_RISK_SIZE",
+            underlying: underlying.name,
+            strategy,
+            timeframe: tf,
+            rawQty,
+            lotSize: underlying.lotSize,
+          });
           activeAlerts.delete(key);
           continue;
         }
@@ -1678,7 +1772,75 @@ export function setPaperTrading(enabled) {
   return { paperTrading: CONFIG.PAPER_TRADING };
 }
 
+// Bounds for numeric config fields (camelCase, as the UI sends them). Out-of-bounds or
+// non-numeric values are DROPPED — current setting preserved — never clamped: silently
+// trading a "corrected" value the operator didn't type is worse than rejecting the update.
+// A fat-fingered riskPercent of 50 must not 100×-size a live position.
+const CONFIG_NUMERIC_BOUNDS = {
+  riskPercent: { min: 0.05, max: 5 },
+  maxRiskPerDay: { min: 0.5, max: 10 },
+  maxTradesPerDay: { min: 1, max: 100, int: true },
+  fixedLots: { min: 1, max: 100, int: true },
+  paperCapital: { min: 10000, max: 100000000 },
+  limitBufferPct: { min: 0, max: 5 },
+  maxVIX: { min: 5, max: 100 },
+  maxSpreadPct: { min: 0.1, max: 20 },
+  minOI: { min: 0, max: 10000000, int: true },
+  maxTimeEntryHour: { min: 9, max: 15, int: true },
+};
+const ALLOWED_STRATEGIES = ["EMA5", "EMA5_OPTION"];
+const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY"];
+
+/**
+ * Pure validation of a /config payload: numeric fields bounds-checked, enums/lists filtered
+ * to their allowlists, booleans type-checked. Invalid fields are dropped and reported so the
+ * caller can audit them. selectedTimeframes/timeframeMinutes pass through — updateConfig has
+ * its own dedicated sanitizer for those. Exported for unit tests.
+ * @returns {{clean: object, rejected: {key:string,value:any}[]}}
+ */
+export function sanitizeConfigUpdates(updates) {
+  const clean = {};
+  const rejected = [];
+  for (const [key, value] of Object.entries(updates || {})) {
+    if (CONFIG_NUMERIC_BOUNDS[key]) {
+      const b = CONFIG_NUMERIC_BOUNDS[key];
+      const n = Number(value);
+      if (typeof value === "boolean" || !Number.isFinite(n) || n < b.min || n > b.max || (b.int && !Number.isInteger(n))) {
+        rejected.push({ key, value });
+        continue;
+      }
+      clean[key] = n;
+    } else if (key === "positionSizingMode") {
+      if (value === "RISK" || value === "LOTS") clean[key] = value;
+      else rejected.push({ key, value });
+    } else if (key === "allowCorrelatedTrades" || key === "paperTrading") {
+      if (typeof value === "boolean") clean[key] = value;
+      else rejected.push({ key, value });
+    } else if (key === "selectedStrategies") {
+      const arr = (Array.isArray(value) ? value : [value]).filter((s) => ALLOWED_STRATEGIES.includes(s));
+      const deduped = [...new Set(arr)];
+      if (deduped.length) clean[key] = deduped;
+      else rejected.push({ key, value });
+    } else if (key === "selectedInstruments") {
+      const arr = (Array.isArray(value) ? value : [value]).filter((s) => ALLOWED_INSTRUMENT_NAMES.includes(s));
+      const deduped = [...new Set(arr)];
+      if (deduped.length) clean[key] = deduped;
+      else rejected.push({ key, value });
+    } else {
+      clean[key] = value;
+    }
+  }
+  return { clean, rejected };
+}
+
 export function updateConfig(updates) {
+  // Bounds/allowlist validation FIRST: invalid fields are dropped (never clamped) and audited.
+  const { clean, rejected } = sanitizeConfigUpdates(updates);
+  if (rejected.length) {
+    console.error(`[AUTO-TRADER] Rejected invalid config fields: ${rejected.map((r) => r.key).join(", ")}`);
+    logAudit({ type: "CONFIG_REJECTED_FIELDS", fields: rejected });
+  }
+  updates = clean;
   // L3 (audited): the /config route writes PAPER_TRADING via CONFIG_FIELD_MAP just like /paper-trading,
   // so it must apply the SAME guard — never let a non-boolean (0/""/null) silently flip the bot to
   // LIVE money. Drop a malformed paperTrading so the current mode is preserved.
