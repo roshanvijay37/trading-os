@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="#E8620A" role="img" aria-label="Lotus">
-  <path d="M22 70 Q50 88 78 70 Q50 80 22 70 Z"/>
-  <path d="M50 28 C55 43 55 59 50 75 C45 59 45 43 50 28 Z" transform="rotate(-47 50 75)"/>
-  <path d="M50 28 C55 43 55 59 50 75 C45 59 45 43 50 28 Z" transform="rotate(47 50 75)"/>
-  <path d="M50 23 C56 40 56 58 50 75 C44 58 44 40 50 23 Z" transform="rotate(-23 50 75)"/>
-  <path d="M50 23 C56 40 56 58 50 75 C44 58 44 40 50 23 Z" transform="rotate(23 50 75)"/>
-  <path d="M50 18 C57 38 57 58 50 76 C43 58 43 38 50 18 Z"/>
-</svg>
