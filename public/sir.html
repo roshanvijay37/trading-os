@@ -26,8 +26,9 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .hdr{position:sticky;top:0;z-index:50;background:rgba(251,248,244,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
 .hdr-bar{height:4px;background:linear-gradient(90deg,var(--saffron) 0%,var(--saffron) 33%,#fff 33%,#fff 66%,var(--green) 66%,var(--green) 100%)}
 .hdr-in{max-width:900px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-left)) 12px max(16px,env(safe-area-inset-right));display:flex;align-items:center;gap:12px}
-.lotus{width:46px;height:46px;border-radius:13px;flex:0 0 auto;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34)}
-.lotus svg{width:26px;height:26px;color:#fff}
+.lotus{width:46px;height:46px;border-radius:13px;flex:0 0 auto;background:linear-gradient(150deg,var(--saffron),var(--saffron-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(232,93,4,.34);overflow:hidden}
+.lotus img{width:32px;height:32px;object-fit:contain;filter:brightness(0) invert(1)}
+.lotus .fallback{font-size:22px;line-height:1}
 .hdr-txt{min-width:0;flex:1}
 .hdr-txt h1{font-family:'Sora';font-size:15.5px;font-weight:800;letter-spacing:-.01em;line-height:1.15}
 .hdr-txt .sub{font-size:11.5px;color:var(--ink-soft);margin-top:1px}
@@ -180,7 +181,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 <header class="hdr">
   <div class="hdr-bar"></div>
   <div class="hdr-in">
-    <div class="lotus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><rect x="7" y="11" width="3" height="6"></rect><rect x="12" y="7" width="3" height="10"></rect><rect x="17" y="9" width="3" height="8"></rect></svg></div>
+    <div class="lotus"><img src="bjplogo.svg" alt="BJP" onerror="this.style.display='none';this.insertAdjacentHTML('afterend','<span class=fallback>🪷</span>')"></div>
     <div class="hdr-txt">
       <h1>SIR-201 Moodabidre</h1>
       <div class="sub" id="subt">Enumeration Form tracking</div>
