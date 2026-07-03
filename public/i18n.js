@@ -11,6 +11,19 @@
   // Inline dynamic strings: L('English','ಕನ್ನಡ')
   I18N.L = function(en, kn){ return I18N.lang === 'kn' ? kn : en; };
 
+  // "YYYY-MM-DD" -> "2 July 2026" (or Kannada month names in kn mode)
+  var MONTHS_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var MONTHS_KN = ['ಜನವರಿ','ಫೆಬ್ರವರಿ','ಮಾರ್ಚ್','ಏಪ್ರಿಲ್','ಮೇ','ಜೂನ್','ಜುಲೈ','ಆಗಸ್ಟ್','ಸೆಪ್ಟೆಂಬರ್','ಅಕ್ಟೋಬರ್','ನವೆಂಬರ್','ಡಿಸೆಂಬರ್'];
+  I18N.fmtDate = function(d){
+    if(!d) return d;
+    var p = String(d).split('-');
+    if(p.length !== 3) return d;
+    var mi = parseInt(p[1], 10) - 1;
+    var months = I18N.lang === 'kn' ? MONTHS_KN : MONTHS_EN;
+    var mName = months[mi] || p[1];
+    return parseInt(p[2], 10) + ' ' + mName + ' ' + p[0];
+  };
+
   // Static markup: <span data-en="Search" data-kn="ಹುಡುಕಿ">Search</span>
   // <input data-en-ph="Search…" data-kn-ph="ಹುಡುಕಿ…">
   I18N.applyStatic = function(root){

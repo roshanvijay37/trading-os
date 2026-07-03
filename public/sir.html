@@ -387,7 +387,7 @@ function renderInsights(){
   if(!prev){h+='<h3>⚠️ '+I18N.L('Needs a nudge','ಸ್ವಲ್ಪ ಪ್ರಚೋದನೆ ಬೇಕು')+'</h3><p class="isub">'+I18N.L('Pick two days (From → To) to see which booths didn\'t move.','ಯಾವ ಬೂತ್‌ಗಳಲ್ಲಿ ಚಲನೆ ಆಗಿಲ್ಲ ಎಂದು ನೋಡಲು ಎರಡು ದಿನಗಳನ್ನು (From → To) ಆಯ್ಕೆಮಾಡಿ.')+'</p>';}
   else{
     const L=t.rows.filter(r=>((r[D]||0)<(r[E]||0))&&(Math.abs(pd(r,D))+Math.abs(pd(r,V))+Math.abs(pd(r,G))+Math.abs(pd(r,S)))===0).sort((a,b)=>(b[E]||0)-(a[E]||0));
-    h+='<h3>⚠️ '+I18N.L('Needs a nudge','ಸ್ವಲ್ಪ ಪ್ರಚೋದನೆ ಬೇಕು')+' <span class="in">'+L.length+'</span></h3><p class="isub">'+I18N.L('No movement '+esc(STATE.from)+' → '+esc(STATE.to)+', not yet complete — biggest booths first.',esc(STATE.from)+' → '+esc(STATE.to)+' ನಡುವೆ ಚಲನೆ ಇಲ್ಲ, ಇನ್ನೂ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ — ದೊಡ್ಡ ಬೂತ್‌ಗಳು ಮೊದಲು.')+'</p>'+(L.length?insList(L.map(r=>{const pn=r["Part Number"];const m=(r[D]||0)>0?(I18N.L('stalled','ನಿಂತಿದೆ')+' · '+fmt(r[D])+' / '+fmt(r[E])+' '+I18N.L('distributed','ವಿತರಿಸಲಾಗಿದೆ')):'<b class="hot">'+I18N.L('not started','ಪ್ರಾರಂಭವಾಗಿಲ್ಲ')+'</b>';return insRow(pn,kv(pn),m);})):'<p class="isub">'+I18N.L('Every booth moved. 🎉','ಎಲ್ಲಾ ಬೂತ್‌ಗಳಲ್ಲಿ ಚಲನೆ ಆಗಿದೆ. 🎉')+'</p>');
+    h+='<h3>⚠️ '+I18N.L('Needs a nudge','ಸ್ವಲ್ಪ ಪ್ರಚೋದನೆ ಬೇಕು')+' <span class="in">'+L.length+'</span></h3><p class="isub">'+I18N.L('No movement '+esc(I18N.fmtDate(STATE.from))+' → '+esc(I18N.fmtDate(STATE.to))+', not yet complete — biggest booths first.',esc(I18N.fmtDate(STATE.from))+' → '+esc(I18N.fmtDate(STATE.to))+' ನಡುವೆ ಚಲನೆ ಇಲ್ಲ, ಇನ್ನೂ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ — ದೊಡ್ಡ ಬೂತ್‌ಗಳು ಮೊದಲು.')+'</p>'+(L.length?insList(L.map(r=>{const pn=r["Part Number"];const m=(r[D]||0)>0?(I18N.L('stalled','ನಿಂತಿದೆ')+' · '+fmt(r[D])+' / '+fmt(r[E])+' '+I18N.L('distributed','ವಿತರಿಸಲಾಗಿದೆ')):'<b class="hot">'+I18N.L('not started','ಪ್ರಾರಂಭವಾಗಿಲ್ಲ')+'</b>';return insRow(pn,kv(pn),m);})):'<p class="isub">'+I18N.L('Every booth moved. 🎉','ಎಲ್ಲಾ ಬೂತ್‌ಗಳಲ್ಲಿ ಚಲನೆ ಆಗಿದೆ. 🎉')+'</p>');
   }
   h+='</section>';
   // 2) no-mapping hotspots
@@ -395,12 +395,12 @@ function renderInsights(){
   h+='<section class="isec"><h3>📄 '+I18N.L('No-mapping hotspots','ಮ್ಯಾಪಿಂಗ್ ಇಲ್ಲದ ಸ್ಥಳಗಳು')+(NL.length?' <span class="in">'+NL.length+'</span>':'')+'</h3><p class="isub">'+I18N.L('Voters who are neither Self nor Progeny → they\'ll need documents. Most first.','ಸ್ವಂತ ಅಥವಾ ಸಂತತಿ ಎಂದು ಮ್ಯಾಪ್ ಆಗದ ಮತದಾರರು → ಅವರಿಗೆ ದಾಖಲೆಗಳು ಬೇಕಾಗುತ್ತವೆ. ಹೆಚ್ಚು ಇರುವವರು ಮೊದಲು.')+'</p>'+(NL.length?insList(NL.map(r=>{const pn=r["Part Number"];return insRow(pn,kv(pn),'<b class="hot">'+fmt(r[NM])+'</b> '+I18N.L('no-mapping','ಮ್ಯಾಪಿಂಗ್ ಇಲ್ಲ'));})):'<p class="isub">'+I18N.L('None yet.','ಇನ್ನೂ ಇಲ್ಲ.')+'</p>')+'</section>';
   // 3) pace vs deadline
   h+='<section class="isec">';
-  if(!prev){h+='<h3>⏱️ '+I18N.L('Pace vs '+DEADLINE,DEADLINE+' ಗುರಿಗೆ ವೇಗ')+'</h3><p class="isub">'+I18N.L('Pick two days to project the finish date from the daily rate.','ದೈನಂದಿನ ದರದಿಂದ ಮುಗಿಯುವ ದಿನಾಂಕ ಅಂದಾಜಿಸಲು ಎರಡು ದಿನಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.')+'</p>';}
+  if(!prev){h+='<h3>⏱️ '+I18N.L('Pace vs '+I18N.fmtDate(DEADLINE),I18N.fmtDate(DEADLINE)+' ಗುರಿಗೆ ವೇಗ')+'</h3><p class="isub">'+I18N.L('Pick two days to project the finish date from the daily rate.','ದೈನಂದಿನ ದರದಿಂದ ಮುಗಿಯುವ ದಿನಾಂಕ ಅಂದಾಜಿಸಲು ಎರಡು ದಿನಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.')+'</p>';}
   else{
     const days=daysBetween(STATE.from,STATE.to),dl=Math.max(0,Math.round((new Date(DEADLINE)-new Date(STATE.to))/864e5));
     const M=[];t.rows.forEach(r=>{const rem=(r[E]||0)-(r[D]||0);if(rem<=0)return;const vel=pd(r,D)/days,eta=vel>0?rem/vel:Infinity;if(eta===Infinity||eta>dl)M.push({r,rem,eta});});
     M.sort((a,b)=>(b.eta===Infinity?1e9:b.eta)-(a.eta===Infinity?1e9:a.eta));
-    h+='<h3>⏱️ '+I18N.L('Won\'t finish by '+DEADLINE,DEADLINE+' ಒಳಗೆ ಮುಗಿಯುವುದಿಲ್ಲ')+(M.length?' <span class="in">'+M.length+'</span>':'')+'</h3><p class="isub">'+I18N.L(dl+' days left · projected at the '+esc(STATE.from)+' → '+esc(STATE.to)+' distribution rate.',dl+' ದಿನ ಉಳಿದಿದೆ · '+esc(STATE.from)+' → '+esc(STATE.to)+' ವಿತರಣಾ ದರದ ಆಧಾರದಲ್ಲಿ ಅಂದಾಜು.')+'</p>'+(M.length?insList(M.map(o=>{const pn=o.r["Part Number"];const late=o.eta===Infinity?I18N.L('no movement — stalled','ಚಲನೆ ಇಲ್ಲ — ನಿಂತಿದೆ'):(I18N.L('ETA','ಅಂದಾಜು')+' '+addDays(STATE.to,Math.ceil(o.eta))+' · '+Math.ceil(o.eta-dl)+I18N.L('d late','ದಿನ ತಡ'));return insRow(pn,kv(pn),'<b class="hot">'+esc(late)+'</b> · '+fmt(o.rem)+' '+I18N.L('left','ಬಾಕಿ'));})):'<p class="isub">'+I18N.L('On track. 🎉','ಸರಿಯಾದ ದಾರಿಯಲ್ಲಿದೆ. 🎉')+'</p>');
+    h+='<h3>⏱️ '+I18N.L('Won\'t finish by '+I18N.fmtDate(DEADLINE),I18N.fmtDate(DEADLINE)+' ಒಳಗೆ ಮುಗಿಯುವುದಿಲ್ಲ')+(M.length?' <span class="in">'+M.length+'</span>':'')+'</h3><p class="isub">'+I18N.L(dl+' days left · projected at the '+esc(I18N.fmtDate(STATE.from))+' → '+esc(I18N.fmtDate(STATE.to))+' distribution rate.',dl+' ದಿನ ಉಳಿದಿದೆ · '+esc(I18N.fmtDate(STATE.from))+' → '+esc(I18N.fmtDate(STATE.to))+' ವಿತರಣಾ ದರದ ಆಧಾರದಲ್ಲಿ ಅಂದಾಜು.')+'</p>'+(M.length?insList(M.map(o=>{const pn=o.r["Part Number"];const late=o.eta===Infinity?I18N.L('no movement — stalled','ಚಲನೆ ಇಲ್ಲ — ನಿಂತಿದೆ'):(I18N.L('ETA','ಅಂದಾಜು')+' '+I18N.fmtDate(addDays(STATE.to,Math.ceil(o.eta)))+' · '+Math.ceil(o.eta-dl)+I18N.L('d late','ದಿನ ತಡ'));return insRow(pn,kv(pn),'<b class="hot">'+esc(late)+'</b> · '+fmt(o.rem)+' '+I18N.L('left','ಬಾಕಿ'));})):'<p class="isub">'+I18N.L('On track. 🎉','ಸರಿಯಾದ ದಾರಿಯಲ್ಲಿದೆ. 🎉')+'</p>');
   }
   h+='</section></div>';
   el.list.innerHTML=h;
@@ -521,7 +521,7 @@ const prevDate=()=>STATE.dates.length>1?STATE.dates[STATE.dates.length-2]:latest
 
 function optionsHTML(sel){
   const L=latestDate();
-  return STATE.dates.slice().reverse().map(d=>'<option value="'+d+'"'+(d===sel?' selected':'')+'>'+esc(d)+(d===L?' '+I18N.L('(latest)','(ಇತ್ತೀಚಿನ)'):'')+'</option>').join('');
+  return STATE.dates.slice().reverse().map(d=>'<option value="'+d+'"'+(d===sel?' selected':'')+'>'+esc(I18N.fmtDate(d))+(d===L?' '+I18N.L('(latest)','(ಇತ್ತೀಚಿನ)'):'')+'</option>').join('');
 }
 function buildControls(){
   const multi=STATE.dates.length>1;
@@ -552,9 +552,9 @@ function refreshControls(){
 
 function paintHeader(){
   const single=STATE.from===STATE.to;
-  el.hdate.innerHTML='<div class="d">'+esc(STATE.to)+'</div><div class="v">'+(single?I18N.L('single day','ಒಂದೇ ದಿನ'):I18N.L('vs ','ಹೋಲಿಕೆ ')+esc(STATE.from))+'</div>';
+  el.hdate.innerHTML='<div class="d">'+esc(I18N.fmtDate(STATE.to))+'</div><div class="v">'+(single?I18N.L('single day','ಒಂದೇ ದಿನ'):I18N.L('vs ','ಹೋಲಿಕೆ ')+esc(I18N.fmtDate(STATE.from)))+'</div>';
   el.note.innerHTML=single
-    ? '<div class="note">'+I18N.L('Showing ','')+'<b>'+esc(STATE.to)+'</b>'+I18N.L(' — snapshot totals',' — ಸ್ನ್ಯಾಪ್‌ಶಾಟ್ ಒಟ್ಟು ಮೊತ್ತ')+(STATE.dates.length>1?I18N.L('. Pick a different “From” day to see the difference.','. ವ್ಯತ್ಯಾಸ ನೋಡಲು ಬೇರೆ "From" ದಿನಾಂಕ ಆಯ್ಕೆಮಾಡಿ.'):I18N.L(' (first snapshot; the diff appears once a second day exists).',' (ಮೊದಲ ಸ್ನ್ಯಾಪ್‌ಶಾಟ್; ಎರಡನೇ ದಿನ ಬಂದ ನಂತರ ವ್ಯತ್ಯಾಸ ಕಾಣಿಸುತ್ತದೆ).'))+'</div>'
+    ? '<div class="note">'+I18N.L('Showing ','')+'<b>'+esc(I18N.fmtDate(STATE.to))+'</b>'+I18N.L(' — snapshot totals',' — ಸ್ನ್ಯಾಪ್‌ಶಾಟ್ ಒಟ್ಟು ಮೊತ್ತ')+(STATE.dates.length>1?I18N.L('. Pick a different “From” day to see the difference.','. ವ್ಯತ್ಯಾಸ ನೋಡಲು ಬೇರೆ "From" ದಿನಾಂಕ ಆಯ್ಕೆಮಾಡಿ.'):I18N.L(' (first snapshot; the diff appears once a second day exists).',' (ಮೊದಲ ಸ್ನ್ಯಾಪ್‌ಶಾಟ್; ಎರಡನೇ ದಿನ ಬಂದ ನಂತರ ವ್ಯತ್ಯಾಸ ಕಾಣಿಸುತ್ತದೆ).'))+'</div>'
     : '';
 }
 

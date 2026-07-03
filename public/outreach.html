@@ -635,7 +635,7 @@ async function loadContacts(){
 }
 function refreshHsub(){
   el.hsub.textContent=sirOK
-    ?I18N.L('Live SIR status','ಲೈವ್ SIR ಸ್ಥಿತಿ')+' · '+sirDate
+    ?I18N.L('Live SIR status','ಲೈವ್ SIR ಸ್ಥಿತಿ')+' · '+I18N.fmtDate(sirDate)
     :I18N.L('Message every booth BLA-2 — one tap each','ಪ್ರತಿ ಬೂತ್ BLA-2 ಗೆ ಸಂದೇಶ — ಒಂದೇ ಟ್ಯಾಪ್‌ನಲ್ಲಿ');
 }
 async function loadSIR(){
