@@ -146,6 +146,20 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .mfab.call{background:linear-gradient(150deg,#1aa608,var(--green-deep))}
 .mfab.wa{background:linear-gradient(150deg,#25D366,#128C7E)}
 
+/* kendra rollup */
+.ksec{background:var(--card);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);overflow:hidden}
+.ksec>summary{list-style:none;cursor:pointer;padding:13px}
+.ksec>summary::-webkit-details-marker{display:none}
+.ksrow{display:flex;align-items:center;gap:8px}
+.ksname{font-family:'Sora';font-weight:800;font-size:14.5px;letter-spacing:-.01em;flex:1;min-width:0}
+.ksname .ksn{display:block;font-family:'Inter';font-weight:500;font-size:11px;color:var(--ink-soft);margin-top:1px}
+.ksec>summary .ic{width:16px;height:16px;flex:0 0 auto;color:var(--ink-soft);transition:transform .2s}
+.ksec[open]>summary .ic{transform:rotate(90deg)}
+.ksbar{margin-top:10px}
+.kspct{margin-top:7px;font-family:'Sora';font-size:12.5px;font-weight:700;color:var(--ink)}
+.kspct .ksnum{font-family:'Inter';font-weight:500;color:var(--ink-soft);margin-left:5px}
+.klist{padding:0 13px 13px;display:flex;flex-direction:column;gap:8px}
+
 .empty,.loading{text-align:center;padding:50px 20px;color:var(--ink-soft)}
 .empty .ico{font-size:38px;margin-bottom:10px}
 .empty h3{font-family:'Sora';font-size:16px;color:var(--ink);margin-bottom:5px;font-weight:700}
@@ -282,6 +296,8 @@ const SK_CONTACTS=[
 ];
 const PART_CONTACT={};
 SK_CONTACTS.forEach(k=>k.b.split(',').forEach(n=>{const p=parseInt(n,10);if(p)PART_CONTACT[p]={v:k.v,msk:k.msk,pk:k.pk,pr:k.pr};}));
+const MSK_PARTS={};
+SK_CONTACTS.forEach(k=>k.b.split(',').forEach(n=>{const p=parseInt(n,10);if(p)(MSK_PARTS[k.msk]=MSK_PARTS[k.msk]||[]).push(p);}));
 const DEADLINE='2026-07-29';
 const WA_GREETING='ನಮಸ್ಕಾರ 🙏';
 const SVG_CALL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>';
@@ -352,6 +368,33 @@ function renderInsights(){
   el.list.innerHTML=h;
 }
 
+function renderKendra(){
+  const t=STATE.today;
+  const E='Total Elector', D='Total EFs Distributed';
+  const rowByPart={}; t.rows.forEach(r=>{rowByPart[r["Part Number"]]=r;});
+  const pctOf=(d,e)=>e?Math.round(d/e*1000)/10:0;
+  const kendras=Object.keys(MSK_PARTS).map(msk=>{
+    const parts=MSK_PARTS[msk].slice().sort((a,b)=>a-b);
+    let elect=0,dist=0;
+    parts.forEach(p=>{const r=rowByPart[p];if(r){elect+=r[E]||0;dist+=r[D]||0;}});
+    return {msk,parts,elect,dist,pct:pctOf(dist,elect)};
+  }).sort((a,b)=>a.pct-b.pct);
+
+  const h=kendras.map(k=>{
+    const rows=k.parts.map(pn=>{
+      const r=rowByPart[pn], e=r?(r[E]||0):0, d=r?(r[D]||0):0;
+      return insRow(pn,null,'<b>'+pctOf(d,e)+'%</b> · '+fmt(d)+' / '+fmt(e));
+    });
+    return '<details class="ksec"><summary>'
+      +'<div class="ksrow"><div class="ksname">'+esc(k.msk)+'<span class="ksn">'+k.parts.length+' booths</span></div>'
+      +'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></div>'
+      +'<div class="ksbar"><div class="ibar"><i style="width:'+k.pct+'%"></i></div></div>'
+      +'<div class="kspct">'+k.pct+'% distributed<span class="ksnum">'+fmt(k.dist)+' / '+fmt(k.elect)+'</span></div>'
+      +'</summary><div class="klist">'+insList(rows)+'</div></details>';
+  }).join('');
+  el.list.innerHTML='<div class="ins">'+h+'</div>';
+}
+
 function buildDiff(today,prev){
   const k=today.key, M=today.metrics;
   const pMap=prev?new Map(prev.rows.map(r=>[keyOf(r,k),r])):new Map();
@@ -383,7 +426,7 @@ function renderStats(){
 }
 
 function renderTabs(){
-  const defs=[['insights','⚡ Insights',null],['all','All parts',STATE.today.rows.length]];
+  const defs=[['insights','⚡ Insights',null],['kendra','🏛️ Kendra',null],['all','All parts',STATE.today.rows.length]];
   el.tabs.innerHTML=defs.map(([id,lab,n])=>'<button class="tab" type="button" data-tab="'+id+'" aria-pressed="'+(STATE.tab===id)+'">'+lab+(n!=null?'<span class="n">'+n+'</span>':'')+'</button>').join('');
 }
 
@@ -423,6 +466,7 @@ function currentList(){
 }
 function render(){
   if(STATE.tab==='insights'){ el.count.innerHTML=''; renderInsights(); return; }
+  if(STATE.tab==='kendra'){ el.count.innerHTML=''; renderKendra(); return; }
   const items=currentList();
   el.count.innerHTML='<b>'+items.length+'</b> '+(items.length===1?'part':'parts');
   if(!items.length){ el.list.innerHTML='<div class="empty"><div class="ico">🔍</div><h3>Nothing here</h3><p>No part matches your search.</p></div>'; return; }
