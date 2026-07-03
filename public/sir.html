@@ -239,7 +239,7 @@ const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'
 const el={note:'note',stats:'stats',search:'search',clear:'clear',tabs:'tabs',count:'count',list:'list',subt:'subt',hdate:'hdate',ctrl:'ctrl'};
 for(const k in el) el[k]=document.getElementById(el[k]);
 
-let STATE={today:null,prev:null,diff:null,metrics:[],key:[],headline:[],summary:[],tab:'all',q:'',dates:[],snaps:{},from:null,to:null};
+let STATE={today:null,prev:null,diff:null,metrics:[],key:[],headline:[],summary:[],tab:'kendra',q:'',dates:[],snaps:{},from:null,to:null};
 
 const keyOf=(r,k)=>k.map(c=>r[c]).join('|');
 const sum=(rows,m)=>rows.reduce((a,r)=>a+(typeof r[m]==='number'?r[m]:0),0);
@@ -434,7 +434,7 @@ function renderStats(){
 }
 
 function renderTabs(){
-  const defs=[['insights','⚡ Insights',null],['kendra','🏛️ Kendra',null],['all','All parts',STATE.today.rows.length]];
+  const defs=[['kendra','🏛️ Kendra',null],['insights','⚡ Insights',null],['all','All parts',STATE.today.rows.length]];
   el.tabs.innerHTML=defs.map(([id,lab,n])=>'<button class="tab" type="button" data-tab="'+id+'" aria-pressed="'+(STATE.tab===id)+'">'+lab+(n!=null?'<span class="n">'+n+'</span>':'')+'</button>').join('');
 }
 
@@ -534,8 +534,8 @@ async function loadView(){
     el.hdate.innerHTML='<div class="d">'+esc(STATE.to)+'</div><div class="v">'+(single?'single day':'vs '+esc(STATE.from))+'</div>';
     el.note.innerHTML=single
       ? '<div class="note">Showing <b>'+esc(STATE.to)+'</b> — snapshot totals'+(STATE.dates.length>1?'. Pick a different “From” day to see the difference.':' (first snapshot; the diff appears once a second day exists).')+'</div>'
-      : '<div class="note"><b>'+esc(STATE.from)+' → '+esc(STATE.to)+':</b> '+STATE.diff.changed.length+' of '+STATE.today.rows.length+' parts moved. Tap a part for field-level from → to.</div>';
-    refreshControls(); renderStats(); renderTabs(); setTab('all');
+      : '';
+    refreshControls(); renderStats(); renderTabs(); setTab('kendra');
   }catch(e){
     el.list.innerHTML='<div class="empty"><div class="ico">⚠️</div><h3>Could not load data</h3><p>'+esc(e.message)+'</p></div>'; el.stats.innerHTML='';
   }
