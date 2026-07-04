@@ -1,0 +1,12 @@
+{
+  "name": "Booth Contacts – Mulki–Moodbidri Mandal",
+  "short_name": "Booth Contacts",
+  "start_url": "maha.html",
+  "display": "standalone",
+  "background_color": "#FBF8F4",
+  "theme_color": "#FF6A00",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
