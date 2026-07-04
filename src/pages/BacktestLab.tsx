@@ -22,7 +22,6 @@ interface Trade {
   barsHeld: number;
   sl?: number; // index level of the stop-loss (for the candle-chart overlay)
   target?: number; // index level of the target
-  indexEntry?: number; // BS mode: the index level at entry (entryPrice is the option premium there)
 }
 
 interface EquityPoint {
@@ -43,6 +42,8 @@ interface Candle {
 interface BacktestResult {
   success: boolean;
   symbol: string;
+  instrumentSource?: "INDEX" | "FUTURES";
+  tradedSymbol?: string; // exact symbol candles were fetched for (differs from `symbol` in FUTURES mode)
   summary: {
     totalTrades: number;
     wins: number;
@@ -55,57 +56,32 @@ interface BacktestResult {
     avgWin: number;
     avgLoss: number;
     finalCapital: number;
-    pricingModel?: "INDEX" | "BLACK_SCHOLES";
   };
-  optionModel?: {
-    iv: number;
-    strikeInterval: number;
-    lotSize: number;
-    riskFreeRate: number;
-    expiryWeekday: number;
-    spreadPct: number;
-    brokeragePerOrder: number;
-    ivSource?: "FLAT" | "INDIA_VIX";
-    ivMultiplier?: number;
-    vixPoints?: number;
-  } | null;
   trades: Trade[];
   equityCurve: EquityPoint[];
   candles?: Candle[];
 }
 
-const strategies = [
-  { value: "EMA5", label: "5 EMA Trend" },
-  { value: "EMA5_OPTION", label: "5 EMA Option" },
-];
-
 export function BacktestLab() {
   const [symbol, setSymbol] = useState("NSE:NIFTYBANK-INDEX");
-  const [resolution, setResolution] = useState("5");
+  const [resolution, setResolution] = useState("15");
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1825);
     return d.toISOString().split("T")[0];
   });
   const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [strategy, setStrategy] = useState("EMA5");
   const [capital, setCapital] = useState(1000000);
   const [riskPercent, setRiskPercent] = useState(1);
   const [targetMult, setTargetMult] = useState(2);
   const [slippage, setSlippage] = useState(0.02);
   const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
-  // Pricing model: INDEX (trade the index, P&L in points) vs BLACK_SCHOLES (trade ATM
-  // options on the same signals — P&L in option premium with delta capture, theta decay,
-  // spread and statutory costs). IV in % (0 = use the per-symbol default on the server).
-  const [pricingModel, setPricingModel] = useState<"INDEX" | "BLACK_SCHOLES">("INDEX");
-  const [ivPct, setIvPct] = useState(0);
-  const [optionSpreadPct, setOptionSpreadPct] = useState(1.0);
-  // IV source: FLAT uses the IV % above; INDIA_VIX uses the historical India VIX at each bar
-  // (ivMultiplier scales it — BankNifty IV runs above India VIX).
-  const [ivSource, setIvSource] = useState<"FLAT" | "INDIA_VIX">("FLAT");
-  const [ivMultiplier, setIvMultiplier] = useState(1.0);
+  // EMA5T only: INDEX has years of history but isn't the literal traded instrument; FUTURES is
+  // the actual live contract but FYERS only has a few weeks of history for it (see backend note).
+  const [instrumentSource, setInstrumentSource] = useState<"INDEX" | "FUTURES">("INDEX");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"both" | "table" | "chart" | "candles">("both");
   const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
 
@@ -117,33 +93,28 @@ export function BacktestLab() {
   const runBacktest = async () => {
     if (!fromDate || !toDate) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await backtestApi.run({
         symbol,
         resolution,
         fromDate,
         toDate,
-        strategy,
+        strategy: "EMA5T",
         capital,
         riskPercent,
         targetMultiplier: targetMult,
-        // "Slippage %" → the decimal fraction the engine expects (e.g. 0.02% → 0.0002). Only used in
-        // INDEX pricing mode; Black-Scholes mode models cost via the option bid/ask spread instead.
+        // "Slippage %" → the decimal fraction the engine expects (e.g. 0.02% → 0.0002).
         slippage: slippage / 100,
         capitalMode,
-        pricingModel,
-        ...(pricingModel === "BLACK_SCHOLES"
-          ? {
-              annualizedIV: ivPct > 0 ? ivPct / 100 : undefined,
-              optionSpreadPct,
-              ivSource,
-              ...(ivSource === "INDIA_VIX" ? { ivMultiplier } : {}),
-            }
-          : {}),
+        pricingModel: "INDEX",
+        instrumentSource,
       });
       setResult(res);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err?.message || "Backtest failed");
+      setResult(null);
     } finally {
       setLoading(false);
     }
@@ -362,14 +333,17 @@ export function BacktestLab() {
             <select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
               <option value="NSE:NIFTY50-INDEX">NIFTY 50</option>
               <option value="NSE:NIFTYBANK-INDEX">BANKNIFTY</option>
-              <option value="NSE:FINNIFTY-INDEX">FINNIFTY</option>
-              <option value="BSE:SENSEX-INDEX">SENSEX</option>
             </select>
           </div>
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Strategy</label>
-            <select value={strategy} onChange={(e) => setStrategy(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
-              {strategies.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            <div className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-400">5 EMA Trend (EMA5T)</div>
+          </div>
+          <div>
+            <label className="mb-1 block text-2xs text-zinc-600">Data Source</label>
+            <select value={instrumentSource} onChange={(e) => setInstrumentSource(e.target.value as "INDEX" | "FUTURES")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
+              <option value="INDEX">Index (full history)</option>
+              <option value="FUTURES">Futures (current contract only)</option>
             </select>
           </div>
           <div>
@@ -380,15 +354,17 @@ export function BacktestLab() {
             <label className="mb-1 block text-2xs text-zinc-600">To</label>
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
+          {instrumentSource === "FUTURES" && (
+            <div className="sm:col-span-2 lg:col-span-4 -mt-1 rounded-panel border border-border-subtle bg-surface px-3 py-2 text-3xs text-zinc-500">
+              Futures history only exists for the current contract's lifetime (a few weeks since listing) — set From to a recent date, or this run will fail.
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Resolution</label>
             <select value={resolution} onChange={(e) => setResolution(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
-              <option value="1">1 minute</option>
-              <option value="5">5 minutes</option>
               <option value="15">15 minutes</option>
               <option value="30">30 minutes</option>
               <option value="60">1 hour</option>
-              <option value="D">Daily</option>
             </select>
           </div>
           <div>
@@ -403,14 +379,10 @@ export function BacktestLab() {
             <label className="mb-1 block text-2xs text-zinc-600">Target R:R</label>
             <input type="number" step="0.1" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
-          {/* Slippage only affects INDEX pricing (fill = price × (1 ± slippage)). Black-Scholes mode
-              ignores it and models cost via the option spread, so hide it there to avoid a no-op knob. */}
-          {pricingModel === "INDEX" && (
-            <div>
-              <label className="mb-1 block text-2xs text-zinc-600">Slippage %</label>
-              <input type="number" step="0.01" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
-            </div>
-          )}
+          <div>
+            <label className="mb-1 block text-2xs text-zinc-600">Slippage %</label>
+            <input type="number" step="0.01" value={slippage} onChange={(e) => setSlippage(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+          </div>
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Capital Mode</label>
             <select value={capitalMode} onChange={(e) => setCapitalMode(e.target.value as "COMPOUND" | "FIXED")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
@@ -418,48 +390,20 @@ export function BacktestLab() {
               <option value="FIXED">Fixed</option>
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-2xs text-zinc-600">Pricing Model</label>
-            <select value={pricingModel} onChange={(e) => setPricingModel(e.target.value as "INDEX" | "BLACK_SCHOLES")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
-              <option value="INDEX">Index (points)</option>
-              <option value="BLACK_SCHOLES">Black-Scholes (options)</option>
-            </select>
-          </div>
-          {pricingModel === "BLACK_SCHOLES" && (
-            <>
-              <div>
-                <label className="mb-1 block text-2xs text-zinc-600">IV Source</label>
-                <select value={ivSource} onChange={(e) => setIvSource(e.target.value as "FLAT" | "INDIA_VIX")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
-                  <option value="FLAT">Flat IV</option>
-                  <option value="INDIA_VIX">India VIX (historical)</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-2xs text-zinc-600">{ivSource === "INDIA_VIX" ? "IV % (fallback)" : "IV % (0 = auto)"}</label>
-                <input type="number" step="0.5" value={ivPct} onChange={(e) => setIvPct(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
-              </div>
-              {ivSource === "INDIA_VIX" && (
-                <div>
-                  <label className="mb-1 block text-2xs text-zinc-600">VIX Multiplier</label>
-                  <input type="number" step="0.05" value={ivMultiplier} onChange={(e) => setIvMultiplier(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
-                </div>
-              )}
-              <div>
-                <label className="mb-1 block text-2xs text-zinc-600">Option Spread %</label>
-                <input type="number" step="0.1" value={optionSpreadPct} onChange={(e) => setOptionSpreadPct(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
-              </div>
-            </>
-          )}
           <div className="flex items-end gap-2 sm:col-span-2">
             <button onClick={runBacktest} disabled={loading} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">
               {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run</span>}
             </button>
-            <button onClick={() => setResult(null)} className="rounded-panel border border-border-subtle bg-surface p-2 text-zinc-500 hover:text-zinc-300">
+            <button onClick={() => { setResult(null); setError(null); }} className="rounded-panel border border-border-subtle bg-surface p-2 text-zinc-500 hover:text-zinc-300">
               <RotateCcw size={12} />
             </button>
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-panel border border-loss/20 bg-loss-dim px-3 py-2 text-2xs text-loss">{error}</div>
+      )}
 
       {/* View Toggle */}
       {result && (
@@ -486,24 +430,17 @@ export function BacktestLab() {
       {/* Results */}
       {result && sum && (
         <>
-          {sum.pricingModel === "BLACK_SCHOLES" ? (
-            <div className="rounded-panel border border-gain/20 bg-gain-dim px-3 py-2 text-2xs text-zinc-300">
-              <span className="font-semibold text-gain">Black-Scholes option model.</span> Entry/Exit prices are option <span className="font-semibold">premiums</span> (incl. delta, theta, spread &amp; charges).
-              {result.optionModel && (
-                <span className="text-zinc-500">
-                  {" "}
-                  {result.optionModel.ivSource === "INDIA_VIX"
-                    ? `IV India VIX ×${(result.optionModel.ivMultiplier ?? 1).toFixed(2)} (${result.optionModel.vixPoints ?? 0} bars)`
-                    : `IV ${(result.optionModel.iv * 100).toFixed(1)}%`}
-                  {" "}· strike step {result.optionModel.strikeInterval} · lot {result.optionModel.lotSize} · spread {result.optionModel.spreadPct.toFixed(1)}%
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-500">
-              <span className="font-semibold text-zinc-300">Index model.</span> P&amp;L is on the index in points — not what an option buyer would realise. Switch Pricing Model to Black-Scholes to simulate the actual option trade.
-            </div>
-          )}
+          <div className="rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-500">
+            {result.instrumentSource === "FUTURES" ? (
+              <>
+                <span className="font-semibold text-zinc-300">Futures model.</span> Traded on the actual contract <span className="font-mono text-zinc-300">{result.tradedSymbol}</span> — the literal live instrument, but only a short recent window (FYERS has no expired-contract history).
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-zinc-300">Index model.</span> P&amp;L is on the index in points — not the same as the futures contract's P&amp;L (contract point value &amp; basis differ). Switch Data Source to Futures for the exact instrument (short history only).
+              </>
+            )}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryCard label="Total Trades" value={sum.totalTrades} icon={BarChart3} />
             <SummaryCard label="Win Rate" value={`${sum.winRate.toFixed(1)}%`} icon={sum.winRate >= 50 ? TrendingUp : TrendingDown} color={sum.winRate >= 50 ? "gain" : "loss"} />
@@ -526,7 +463,6 @@ export function BacktestLab() {
               <div ref={candleContainerRef} className="w-full" />
               <p className="mt-2 text-3xs text-zinc-600">
                 Click a trade row below to highlight its stop-loss &amp; target on the chart.
-                {sum?.pricingModel === "BLACK_SCHOLES" ? " Markers sit on the index; the Entry/Exit prices in the table are option premiums." : ""}
               </p>
             </div>
           )}

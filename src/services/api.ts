@@ -187,6 +187,10 @@ export const backtestApi = {
     // level at each bar). ivMultiplier scales VIX → instrument IV (BankNifty runs above VIX).
     ivSource?: "FLAT" | "INDIA_VIX";
     ivMultiplier?: number;
+    // EMA5T only: "INDEX" (default, years of history) trades the index directly; "FUTURES"
+    // resolves and trades the actual current-month contract (the literal live instrument),
+    // which FYERS only has a few weeks of history for.
+    instrumentSource?: "INDEX" | "FUTURES";
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",

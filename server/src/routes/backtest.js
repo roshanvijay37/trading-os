@@ -130,6 +130,43 @@ async function fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs,
   }
 }
 
+// ─── Futures symbol resolution (EMA5T) ────────────────────────────
+// EMA5T trades the futures contract directly, not the index (see autoTrader.js). FYERS's
+// history API rejects EXPIRED contract symbols ("Invalid symbol provided"), so only the
+// CURRENT (or next, near rollover) month's contract has any backtestable history at all —
+// typically a few weeks since listing. buildFuturesSymbol mirrors autoTrader.js's helper of
+// the same name (duplicated, not imported — importing autoTrader.js would pull the entire
+// live order-execution/WebSocket module graph into the backtest route for one string template).
+const FUT_MONTH_CODES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const EMA5T_UNDERLYINGS = {
+  "NSE:NIFTYBANK-INDEX": "BANKNIFTY",
+  "NSE:NIFTY50-INDEX": "NIFTY",
+};
+
+function buildFuturesSymbol(underlyingName, year, monthIdx) {
+  return `NSE:${underlyingName}${String(year % 100).padStart(2, "0")}${FUT_MONTH_CODES[monthIdx]}FUT`;
+}
+
+// Probe the current + next 2 months for a live quote — same approach autoTrader.js uses to
+// find the tradable front-month contract (FYERS has no "list active contracts" endpoint).
+async function resolveCurrentFuturesSymbol(underlyingName, accessToken) {
+  const now = new Date();
+  for (let k = 0; k < 3; k++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + k, 1));
+    const sym = buildFuturesSymbol(underlyingName, d.getUTCFullYear(), d.getUTCMonth());
+    try {
+      const response = await fetch(`${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(sym)}`, {
+        headers: { Authorization: `${appId}:${accessToken}` },
+      });
+      const data = await response.json();
+      if ((data.d?.[0]?.v?.lp || 0) > 0) return sym;
+    } catch {
+      /* try the next month */
+    }
+  }
+  return null;
+}
+
 // IST wall-clock parts from an epoch-ms timestamp (India has no DST, so a fixed +5:30 is exact).
 export function istClock(tsMs) {
   const istMin = (((Math.floor(tsMs / 60000) % 1440) + 1440) % 1440 + 330) % 1440;
@@ -250,6 +287,10 @@ export function runBacktest(candles, config) {
   const closes = candles.map((c) => c.close);
   const emaValues = calculateEMA(closes, emaPeriod);
   const emaOffset = candles.length - emaValues.length;
+  // EMA5T's no-lookahead trend gate: a 20-EMA on the SAME timeframe, read AT the alert bar
+  // (never beyond it) — identical to emaStrategy.js's detectAlertCandle (live parity).
+  const trendEmaValues = calculateEMA(closes, 20);
+  const trendEmaOffset = candles.length - trendEmaValues.length;
 
   const trades = [];
   const equityCurve = [{ date: candles[0].datetime, equity: capital }];
@@ -384,7 +425,7 @@ export function runBacktest(candles, config) {
   // C3: align warmup with the live bot, which signals as soon as it has enough candles (6 for EMA5;
   // 20 for EMA5_OPTION's trend EMA). The old flat 50-bar warmup made the backtest skip the first ~4h
   // that the live bot trades. Keep 50 only when live filters are off (legacy raw mode).
-  const liveWarmup = strategy === "EMA5_OPTION" ? 20 : Math.max(emaPeriod + 1, 6);
+  const liveWarmup = (strategy === "EMA5_OPTION" || strategy === "EMA5T") ? 20 : Math.max(emaPeriod + 1, 6);
   const warmup = Math.max(emaOffset, applyLiveFilters ? liveWarmup : 50);
 
   for (let i = warmup; i < candles.length; i++) {
@@ -397,7 +438,12 @@ export function runBacktest(candles, config) {
     // consecutive-loss breaker is an INTRADAY stop, not a lifetime kill switch. Without this reset a
     // strategy that hit 3 straight losses stayed permanently blocked (blocked ⇒ no wins ⇒ counter never
     // cleared), silently freezing it for the rest of the run and diverging from live.
-    if (clk.dayKey !== curDay) { curDay = clk.dayKey; dayTrades = 0; dayPnL = 0; currentConsecutiveLosses = 0; }
+    if (clk.dayKey !== curDay) {
+      curDay = clk.dayKey; dayTrades = 0; dayPnL = 0; currentConsecutiveLosses = 0;
+      // EMA5T parity: resting stop entries never carry across days (autoTrader.js clears
+      // pendingEntries every new IST day) — a stale alert must not fire on a later session.
+      if (strategy === "EMA5T") alertCandle = null;
+    }
 
     if (currentCapital > peakEquity) peakEquity = currentCapital;
     const drawdown = ((peakEquity - currentCapital) / peakEquity) * 100;
@@ -533,6 +579,21 @@ export function runBacktest(candles, config) {
       }
       tryEnterFromAlert(candle, i, clk); // C3: gated entry
     }
+
+    // ── EMA5T: trend-gated futures strategy (the only LIVE/paper strategy) ───────
+    else if (strategy === "EMA5T" && ema !== null) {
+      // Trend gate read AT the alert bar (i-1), never beyond it — matches emaStrategy.js's
+      // detectAlertCandle exactly (no-lookahead: live sees only what this backtest saw).
+      const trendBarIndex = i - 1;
+      const trendEma = trendBarIndex >= trendEmaOffset ? trendEmaValues[trendBarIndex - trendEmaOffset] : null;
+      if (trendEma !== null) {
+        const at = detectAlert({ close: prevCandle.close, high: prevCandle.high, low: prevCandle.low, ema, trendEma });
+        if (at) {
+          alertCandle = { candle: prevCandle, type: at, index: i - 1 };
+        }
+      }
+      tryEnterFromAlert(candle, i, clk); // same resting-breakout entry as live's manageFuturesPending
+    }
   }
 
 
@@ -660,6 +721,10 @@ router.post("/run", async (req, res) => {
     brokeragePerOrder,
     ivSource = "FLAT",
     ivMultiplier,
+    // EMA5T only: "INDEX" (default, full history) trades the index candles directly under the
+    // trend-gated rules; "FUTURES" resolves and trades the actual current-month futures contract
+    // (the literal live instrument), which FYERS only has a few weeks of history for.
+    instrumentSource = "INDEX",
   } = req.body;
 
   if (!fromDate || !toDate) {
@@ -680,11 +745,27 @@ router.post("/run", async (req, res) => {
     const fromTs = Math.floor(new Date(fromDate).getTime() / 1000);
     const toTs = Math.floor(new Date(toDate).getTime() / 1000) + 86400;
 
-    const rawCandles = await fetchHistoricalData(symbol, resolution, fromTs, toTs, session.accessToken);
+    let fetchSymbol = symbol;
+    if (strategy === "EMA5T" && instrumentSource === "FUTURES") {
+      const underlyingName = EMA5T_UNDERLYINGS[symbol];
+      if (!underlyingName) {
+        return res.status(400).json({ error: `EMA5T futures backtesting only supports Bank Nifty / Nifty 50 (got ${symbol}).` });
+      }
+      const resolved = await resolveCurrentFuturesSymbol(underlyingName, session.accessToken);
+      if (!resolved) {
+        return res.status(400).json({ error: `Could not resolve a tradable ${underlyingName} futures contract right now (FYERS returned no valid quote for the current or next 2 months). Try Index mode instead.` });
+      }
+      fetchSymbol = resolved;
+    }
+
+    const rawCandles = await fetchHistoricalData(fetchSymbol, resolution, fromTs, toTs, session.accessToken);
     const candles = parseCandles(rawCandles);
 
     if (candles.length < 20) {
-      return res.status(400).json({ error: `Insufficient data for backtest (${candles.length} candles). FYERS returned no data for ${symbol} between ${fromDate} and ${toDate}. Try a different date range or symbol.` });
+      const hint = instrumentSource === "FUTURES"
+        ? " Futures history only exists for the current contract's lifetime (a few weeks since listing) — try a more recent date range, or use Index mode for deep history."
+        : "";
+      return res.status(400).json({ error: `Insufficient data for backtest (${candles.length} candles). FYERS returned no data for ${fetchSymbol} between ${fromDate} and ${toDate}.${hint}` });
     }
 
     const ivSeries = await fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs, accessToken: session.accessToken });
@@ -730,6 +811,8 @@ router.post("/run", async (req, res) => {
       toDate,
       totalCandles: candles.length,
       candles, // Include raw candles for chart rendering
+      instrumentSource,
+      tradedSymbol: fetchSymbol, // the exact symbol candles were fetched for (== symbol unless FUTURES)
       ...result,
     });
   } catch (error) {
@@ -988,6 +1071,7 @@ router.get("/symbols", (_req, res) => {
     strategies: [
       { value: "EMA5", label: "5 EMA (Subhasish Pani)" },
       { value: "EMA5_OPTION", label: "5 EMA Option Buying" },
+      { value: "EMA5T", label: "5 EMA Trend (EMA5T, live/paper strategy)" },
     ],
   });
 });
