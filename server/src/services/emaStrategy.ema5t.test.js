@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { detectAlertCandle } from "./emaStrategy.js";
 import { calculateEMA } from "./signalCore.js";
 
@@ -22,7 +22,7 @@ describe("detectAlertCandle EMA5T (strict trend gate)", () => {
     const closes = candles.map((c) => c[4]);
     const ema5 = calculateEMA([...closes, 130.5], 5); // EMA at the would-be latest close
     // Alert candidate: entirely below EMA5 (pullback) but still above the uptrend's EMA20.
-    const alertBar = bar(ema5 - 2, ema5 - 1.2, ema5 - 3);
+    const alertBar = bar(ema5 - 6, ema5 - 5, ema5 - 7);
     const latestBar = bar(130.5, 131, 129.5);
     const series = [...candles, alertBar, latestBar];
     const alert = detectAlertCandle(series, "EMA5T");
@@ -35,10 +35,10 @@ describe("detectAlertCandle EMA5T (strict trend gate)", () => {
     const candles = trendingSeries(30, 200, -1); // closes 200..171
     const closes = candles.map((c) => c[4]);
     const ema5 = calculateEMA([...closes, 170], 5);
-    const alertBar = bar(ema5 - 2, ema5 - 1.2, ema5 - 3); // entirely below EMA5 (bullish shape)
+    const alertBar = bar(ema5 - 6, ema5 - 5, ema5 - 7); // entirely below EMA5 (bullish shape)
     const latestBar = bar(170, 170.5, 169.5);
     const alert = detectAlertCandle([...candles, alertBar, latestBar], "EMA5T");
-    // close is far below the falling EMA20 → BULLISH gated out; and it is not a bearish
+    // close is far below the falling EMA20 â†’ BULLISH gated out; and it is not a bearish
     // alert either (bar is below EMA5, not above), so no alert at all.
     expect(alert).toBeNull();
   });
@@ -47,7 +47,7 @@ describe("detectAlertCandle EMA5T (strict trend gate)", () => {
     const candles = trendingSeries(30, 200, -1);
     const closes = candles.map((c) => c[4]);
     const ema5 = calculateEMA([...closes, 170], 5);
-    const alertBar = bar(ema5 - 2, ema5 - 1.2, ema5 - 3);
+    const alertBar = bar(ema5 - 6, ema5 - 5, ema5 - 7);
     const latestBar = bar(170, 170.5, 169.5);
     const alert = detectAlertCandle([...candles, alertBar, latestBar], "EMA5");
     expect(alert).not.toBeNull();
