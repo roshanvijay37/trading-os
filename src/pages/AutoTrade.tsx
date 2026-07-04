@@ -29,6 +29,7 @@ export function AutoTrade() {
   const [configForm, setConfigForm] = useState<BotConfig>({
     riskPercent: 0.5,
     maxTradesPerDay: 10,
+    maxRiskPerDay: 2,
     // Fail-SAFE: never initialize the form to live money. Before the first /status sync
     // resolves, a Save must not be able to flip a paper bot live.
     paperTrading: true,
@@ -90,6 +91,7 @@ export function AutoTrade() {
         ...prev,
         riskPercent: status.riskPercent ?? prev.riskPercent,
         maxTradesPerDay: status.maxTrades ?? prev.maxTradesPerDay,
+        maxRiskPerDay: status.maxRiskPerDay ?? prev.maxRiskPerDay,
         paperTrading: status.paperTrading ?? prev.paperTrading,
         positionSizingMode: status.positionSizingMode ?? prev.positionSizingMode,
         fixedLots: status.fixedLots ?? prev.fixedLots,
@@ -349,6 +351,21 @@ export function AutoTrade() {
                 onChange={(e) => {
                   const n = parseInt(e.target.value, 10);
                   setConfigForm({ ...configForm, maxTradesPerDay: Number.isFinite(n) ? n : 1 });
+                }}
+                className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+              />
+            </div>
+            <div>
+              <label className="text-2xs text-zinc-600">Daily Loss Limit (%)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.5"
+                max="10"
+                value={configForm.maxRiskPerDay}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  setConfigForm({ ...configForm, maxRiskPerDay: Number.isFinite(n) ? n : 2 });
                 }}
                 className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
               />

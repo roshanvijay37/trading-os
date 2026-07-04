@@ -1,13 +1,6 @@
 ﻿export type TradeSide = "LONG" | "SHORT";
 export type TradeOutcome = "OPEN" | "WIN" | "LOSS" | "BREAKEVEN";
 
-export interface Settings {
-  capital: number;
-  riskPercent: number;
-  dailyLossLimitPercent: number;
-  maxTradesPerDay: number;
-}
-
 export interface RiskCalculation {
   riskAmount: number;
   stopDistance: number;
@@ -123,6 +116,7 @@ export interface BotSignal {
 export interface BotConfig {
   riskPercent: number;
   maxTradesPerDay: number;
+  maxRiskPerDay: number;
   paperTrading: boolean;
   positionSizingMode: string;
   fixedLots: number;
@@ -142,6 +136,7 @@ export interface BotStatus {
   recentSignals: BotSignal[];
   capital: number;
   riskPercent: number;
+  maxRiskPerDay?: number;
   paperTrading: boolean;
   emergencyStop: boolean;
   positionSizingMode?: string;
