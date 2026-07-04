@@ -10,7 +10,9 @@ Backend server that connects TradingOS to your real FYERS account via FYERS API 
 2. Go to [myaccount.fyers.in](https://myaccount.fyers.in/) → API
 3. Create a new app:
    - **App Name**: `TradingOS`
-   - **Redirect URL**: `http://localhost:5173/live-trade`
+   - **Redirect URL**: must exactly match `FYERS_REDIRECT_URL` below (production uses
+     `https://roshanvijay.com` — the frontend root, not a sub-path; the OAuth callback is
+     handled server-side via `POST /api/auth/callback`, not a dedicated frontend route)
    - **App Type**: `Trading`
 4. Note down your **App ID** and **Secret ID**
 
@@ -26,7 +28,7 @@ Edit `.env`:
 ```env
 FYERS_APP_ID=your_actual_app_id
 FYERS_SECRET_ID=your_actual_secret_id
-FYERS_REDIRECT_URL=http://localhost:5173/live-trade
+FYERS_REDIRECT_URL=http://localhost:5173
 
 PORT=3001
 FRONTEND_URL=http://localhost:5173
@@ -50,17 +52,53 @@ Server will start on `http://localhost:3001`
 | GET | `/api/auth/login` | Get FYERS OAuth login URL |
 | POST | `/api/auth/callback` | Exchange auth_code for access token |
 | GET | `/api/auth/session/:id` | Check if session is valid |
+| POST | `/api/auth/session/refresh` | Refresh an access token |
 | POST | `/api/auth/logout` | Invalidate session |
 
-### Orders
+### Orders (read-only audit — see Options below for real order placement)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/orders/place` | Place a real order |
-| DELETE | `/api/orders/cancel/:id` | Cancel an order |
-| PUT | `/api/orders/modify/:id` | Modify an order |
 | GET | `/api/orders/history` | Get order history |
-| GET | `/api/orders/:id` | Get order details |
 | GET | `/api/orders/trades/today` | Get today's trades |
+
+> Generic manual order placement (`POST /place`, cancel, modify) was removed from here.
+> The only place a human can place a **real broker order** now is the Options workspace
+> (`/api/options/*`, below), scoped to that one page. The autonomous bot places its own
+> orders internally via `services/orderExecution.js`, not through this route.
+
+### Auto Trading — the bot (`/api/auto-trade`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auto-trade/start` | Start the bot |
+| POST | `/api/auto-trade/stop` | Stop the bot |
+| POST | `/api/auto-trade/emergency-stop` | Halt all trading, flatten open positions |
+| POST | `/api/auto-trade/reset-emergency` | Clear the emergency halt |
+| GET | `/api/auto-trade/status` | Bot status, positions, signals, config, health |
+| GET | `/api/auto-trade/performance` | Performance summary |
+| POST | `/api/auto-trade/paper-trading` | Toggle paper/live (only while stopped) |
+| POST | `/api/auto-trade/config` | Update risk/strategy/instrument/timeframe config (bounds-validated; invalid fields dropped, never clamped) |
+| GET | `/api/auto-trade/audit` | Audit log |
+
+### Options workspace — manual live trading (`/api/options`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/options/place-order` | Place a **real** broker order |
+| POST | `/api/options/basket-order` | Place a basket of real orders |
+| PATCH | `/api/options/modify-order` | Modify a real order |
+| POST | `/api/options/cancel-order` | Cancel a real order |
+| POST | `/api/options/margin` | Broker margin simulator |
+| GET | `/api/options/history` | OHLCV candles for any symbol |
+
+### Backtest (`/api/backtest`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/backtest/run` | Run a backtest (EMA5T, or legacy EMA5/EMA5_OPTION) |
+| POST | `/api/backtest/run-multi` | Run multiple strategies over the same candles |
+| POST | `/api/backtest/data` | Raw historical candles |
+| POST | `/api/backtest/futures-range` | Resolve the current futures contract + its real available date range |
+| GET | `/api/backtest/symbols` | Available symbols/strategies/timeframes |
+| GET | `/api/backtest/holidays` | NSE trading holidays |
+| POST | `/api/backtest/holidays/refresh` | Refresh holidays from NSE |
 
 ### Account
 | Method | Endpoint | Description |
@@ -83,6 +121,10 @@ Server will start on `http://localhost:3001`
 | GET | `/api/market/fii-dii` | FII/DII end-of-day cash flow (NSE) |
 
 ## FYERS Order Parameters
+
+Used both by the Options workspace's manual order placement and internally by the
+autonomous bot's own order execution (`services/orderExecution.js`) — confirmed against
+`ORDER_TYPE`/`ORDER_SIDE` there.
 
 | Parameter | Values | Description |
 |-----------|--------|-------------|
@@ -108,7 +150,8 @@ Server will start on `http://localhost:3001`
 - The server uses in-memory session storage. For production, use **Redis** or a database
 - Access tokens expire and need daily reconnection (typical for broker APIs)
 - The frontend never sees your Secret ID — all FYERS API calls go through the backend
-- All routes (except `/api/auth/login`) require a valid `x-session-id` header
+- Most routes require a valid `x-session-id` header; the `/api/market/*` routes above and
+  `/api/auth/login` are deliberately public (no broker session needed)
 
 ## Production Deployment
 

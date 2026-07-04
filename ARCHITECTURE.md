@@ -1,26 +1,27 @@
-﻿# TradingOS — Institutional Grade Autonomous Trading Platform
-
-## Architecture Overview
+# TradingOS — Architecture Overview
 
 > **"I do not trade. I supervise."**
 
-This document explains the institutional-grade architecture of TradingOS.
+This document explains the current architecture of TradingOS: a focused, single-strategy
+autonomous futures trading bot (EMA5T) plus a separate, manual options-trading workspace,
+backtesting tooling, and market-intelligence dashboards — all sitting on one FYERS-backed
+Express API.
+
+Earlier drafts of this document described a much larger "AI CIO" / multi-strategy /
+trade-grading platform. That vision was never the shipped reality and has since been
+actively removed (AI CIO, Kimi/Moonshot chat, per-trade AI reasoning reports, the
+Command Center/Risk Dashboard/Settings/Strategy Manager pages). This document now
+describes what actually exists and runs in production.
 
 ---
 
 ## Philosophy
 
-The system is **completely automation-first**. The human never buys or sells manually.
-
-- ❌ No Manual Buy
-- ❌ No Manual Sell
-- ❌ No Manual Exit
-- ❌ No Manual Quantity Selection
-- ❌ No Manual Order Placement
-- ❌ No Manual Symbol Trading
-- ❌ No Manual Price Entry
-
-The bot does everything. The user only supervises.
+The **autonomous bot** (EMA5T) is fully automation-first — it places, manages, and exits
+its own positions with no manual intervention. The **Options workspace** is a deliberate
+exception to that rule: it is a separate, manual trading terminal where a human places
+real orders directly (see below) — this is not a bug or leftover, it is a distinct,
+intentional feature.
 
 ---
 
@@ -30,262 +31,191 @@ The bot does everything. The user only supervises.
 ┌─────────────────────────────────────────────────────────────┐
 │                    TRADINGOS PLATFORM                        │
 ├─────────────────────────────────────────────────────────────┤
-│  UI Layer (React + Tailwind)                                │
-│  ├── Command Center         Dashboard + AI CIO merged       │
-│  ├── Strategy Manager       Enable/disable/configure (2)    │
-│  ├── Risk Dashboard         Portfolio risk monitoring       │
-│  ├── Market Intelligence    PCR, OI, IV, Flow, Gamma        │
-│  ├── Trading Bot            Start/stop, emergency, logs     │
-│  ├── Live Chart             SVG candlestick analysis        │
-│  ├── Backtest Lab           Table/chart toggle view         │
-│  ├── Journal                Automatic trade audit           │
-│  ├── Reports                Performance analytics           │
-│  └── Settings               Platform configuration          │
+│  UI Layer (React 19 + TypeScript + Tailwind), route "/"…    │
+│  ├── Trading Bot ("/")      Start/stop, config, positions,  │
+│  │                          signals, logs — the home page   │
+│  ├── Live Chart             SVG/lightweight-charts candles  │
+│  ├── Options ("/options")   Manual options trading terminal │
+│  │                          (25 panels, real order placement)│
+│  ├── Backtest Lab           EMA5T backtest, Index/Futures    │
+│  ├── Market Intelligence    PCR, Max Pain, VIX/IV, breadth,  │
+│  │                          GEX (model), FII/DII (EOD)       │
+│  └── Journal                Trade audit trail                │
 ├─────────────────────────────────────────────────────────────┤
-│  State Management (React Context + useReducer)              │
+│  State Management (React Context + useReducer)               │
 │  ├── InstitutionalProvider   Central state container         │
-│  └── useInstitutionalStore   Hook for all components         │
+│  └── useInstitutionalStore   Hook for components             │
+│  (dashboard/portfolioRisk slices are real, fed every 7s by   │
+│   useLiveDataSync from the bot's /status; several other      │
+│   slices — e.g. a "settings" slice, CIO state — are legacy   │
+│   and unread/unwritten; don't assume something here is live  │
+│   without checking who actually dispatches into it)          │
 ├─────────────────────────────────────────────────────────────┤
-│  Core Engine (TypeScript - Single Source of Truth)          │
-│  ├── Strategy Registry       Both 5 EMA strategies defined       │
-│  ├── Strategy Engine         Unified backtest + live logic   │
-│  ├── AI Reasoning Engine     Trade grade generation          │
-│  └── Indicator Library       EMA, RSI, VWAP, ATR, BB, ST    │
-├─────────────────────────────────────────────────────────────┤
-│  Type System (institutional.ts)                             │
-│  ├── Strategy System         Configs, states, positions      │
-│  ├── AI Decision Engine      Reasoning reports, grades       │
-│  ├── AI CIO                  Regime detection, adjustments   │
-│  ├── Portfolio Risk          Exposure, limits, breaches      │
-│  ├── Market Intelligence     PCR, OI, IV, Flow, Gamma        │
-│  ├── Execution Engine        Orders, retry, health           │
-│  ├── Bot Health              System metrics, components       │
-│  ├── Trade Review            Post-trade analysis             │
-│  ├── Reporting               Performance analytics            │
-│  ├── Replay & Simulation     Historical playback             │
-│  └── Settings                Complete platform config         │
+│  Signal core (JS, server-side — the REAL single source of   │
+│  truth for trading logic)                                    │
+│  ├── signalCore.js           5-EMA + alert-candle rule,       │
+│  │                           shared by live AND backtest      │
+│  ├── emaStrategy.js          EMA5T: adds the no-lookahead     │
+│  │                           EMA20 trend gate                 │
+│  ├── autoTrader.js           Live/paper resting stop-entry     │
+│  │                           lifecycle, risk gates, monitoring│
+│  └── routes/backtest.js      Same EMA5T rules replayed over   │
+│                              historical candles (Index or the │
+│                              real current-month futures       │
+│                              contract)                        │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+There is also a TypeScript mirror at `src/lib/strategies/engine.ts` — see
+[CLAUDE.md](CLAUDE.md) for why it exists and its relationship to `signalCore.js`.
 
 ---
 
 ## Key Design Decisions
 
-### 1. Single Source of Truth for Strategies
+### 1. One real strategy, one real source of truth
 
-**Problem**: Original codebase had duplicate strategy logic — one for backtest, one for live trading.
+**EMA5T** — a 5-EMA alert-candle breakout, gated by a no-lookahead 20-EMA trend filter,
+trading Bank Nifty / Nifty **futures** via a resting stop-entry order — is the only
+strategy the live/paper bot runs (`CONFIG.SELECTED_STRATEGIES` is hard-limited to
+`["EMA5T"]`). It is defined directly in `emaStrategy.js`/`autoTrader.js`, **not** in
+`src/lib/strategies/registry.ts` — that registry still only lists two older strategies
+(`EMA5`, `EMA5_OPTION`) that are backtest-only now (kept for historical comparison,
+no longer live-tradable). Don't assume "adding a strategy = a registry entry" — EMA5T
+itself is proof that isn't how the current live strategy was actually built.
 
-**Solution**: `src/lib/strategies/engine.ts`
+**As of this session**, the live bot and the backtest engine run the *exact same*
+resting-entry design end to end: paper mode calls the same `placeStopEntry` order
+placement the live path uses (paper-mode order placement is simulated, not skipped),
+so a paper trading day is a real rehearsal of the live code path, not a separate
+simulation. See `manageFuturesPending`'s doc comment in `autoTrader.js` for the
+detailed design.
 
-Every strategy is implemented ONCE. Both backtest and live trading use the exact same code:
-- `runStrategy()` — generates signals from candles
-- `runBacktestEngine()` — runs backtest using same signals
-- Live trading calls `runStrategy()` on each new candle
+### 2. Honest data, no fabricated numbers
 
-**Strategies Implemented**:
-- EMA5 (Subhasish Pani)
-- EMA5 Option Buying
+`src/pages/MarketIntelligence.tsx` sets the pattern the rest of the app follows: every
+metric is explicitly one of **live** (FYERS), **model-derived** (badged "Model", e.g.
+Black-Scholes gamma), **end-of-day** (NSE, labelled with an as-of date), or an explicit
+**unavailable** state — never a fabricated zero presented as real. `ivHistory.js`,
+`marketBreadth.js`, and `fiiDii.js` all implement this. The Options workspace
+(`src/options/`) follows the same discipline with an explicit badge system (Live /
+Computed / Proxy / EOD / No feed) — see `src/options/IMPLEMENTATION_REPORT.md`.
 
-> **Where the canonical logic lives:** the live bot (`server/src/services/autoTrader.js`) and the
-> server-side backtest (`server/src/routes/backtest.js`) both share the 5-EMA + alert rule in
-> **`server/src/services/signalCore.js`** — that is the real single source of truth. The TypeScript
-> `src/lib/strategies/engine.ts` (unit-tested) mirrors the same math for the frontend; keep the two
-> definitions identical so live and backtest never diverge.
+### 3. Manual trading exists — scoped to one page
 
-### 2. AI Reasoning Engine
+There is no generic "place an order" surface anymore (`POST /api/orders/place` and
+friends were removed). The Options workspace (`/options`) is the one deliberate
+exception: it places real broker orders (`POST /api/options/place-order`,
+`/basket-order`, `PATCH /modify-order`, `POST /cancel-order`) directly from user
+action, with a confirmation modal and margin preview but no server-side risk gate of
+its own — the safety model there is "the human is the risk gate," not automation.
+Treat any change here as touching a live-money surface.
 
-Every trade signal contains an `AIReasoningReport`:
-- **Confidence Score** — weighted factor analysis
-- **Trade Grade** — A+, A, B, C, REJECT
-- **Factor Breakdown** — Trend, Volume, ATR, R:R, Time, Structure
-- **Warnings** — Failed factor explanations
+### 4. Risk gates live in config, not in code
 
-Factors analyzed:
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| Trend Alignment | 20% | Price vs EMA20 alignment |
-| Volume Confirmation | 15% | Volume > 1.2x average |
-| ATR Validation | 15% | Stop loss > 0.5 ATR |
-| Risk Reward | 20% | Minimum 1:1.5 R:R |
-| Time Filter | 10% | Within optimal hours |
-| Market Structure | 20% | Structure aligns with signal |
+The bot's own risk limits (max trades/day, daily loss %, position sizing mode/lots,
+paper vs. live, which strategies/instruments/timeframes are active) are all editable
+via the Trading Bot page's config panel, backed by `POST /api/auto-trade/config` →
+`autoTrader.js`'s `CONFIG` object (bounds-validated by `sanitizeConfigUpdates`, dropped
+rather than clamped if out of range). A VIX filter and a consecutive-loss circuit
+breaker existed at one point in both the live bot and the backtest's live-parity
+gating; both were deliberately removed (not needed, per explicit product decision) —
+if you see either mentioned elsewhere, that's now historical.
 
-### 3. AI Chief Investment Officer
+### 5. Backtest mirrors live, not the other way around
 
-Monitors market regime and makes portfolio adjustments:
-- **Regime Detection**: Trending Up/Down, Sideways, Volatile, Low Vol, Gap Day, Expiry Day, Event Day
-- **Market Context**: VIX, PCR, OI Buildup, A/D Ratio
-- **Performance Forecast**: Expected return, volatility, win probability
-- **Recommendations**: Auto-generated with urgency levels (LOW → CRITICAL)
-- **Adjustments**: Applied changes tracked with before/after values
-
-### 4. Portfolio Risk Engine
-
-Institutional-grade risk monitoring:
-- Total Exposure & Portfolio Drawdown
-- Daily/Weekly/Monthly Risk Limits
-- VaR (95%, 99%)
-- Directional, Delta, Gamma, Theta, Vega Exposure
-- Strategy Concentration Limits
-- Circuit Breakers with automatic halt
-- Stress Test Results
-
-### 5. Strategy Manager
-
-Professional strategy configuration:
-- **Enable/Disable** with checkboxes
-- **Capital Allocation** — percentage of portfolio
-- **Risk Per Trade** — % of capital
-- **Max Trades/Day**
-- **Max Consecutive Losses**
-- **Confidence Threshold**
-- **Cooldown After Loss**
-- **Strategy-specific Parameters** — dynamically generated from registry
-- **Trading Session** — FULL, MORNING, AFTERNOON, CUSTOM
-- **Allowed Symbols** — per strategy instrument list
-
-### 6. Multi-Strategy Engine
-
-Support running multiple strategies simultaneously:
-- Each strategy maintains independent positions
-- Each strategy has independent P&L tracking
-- Capital allocation enforces portfolio-level limits
-- Over-allocation warnings when total > 100%
+`routes/backtest.js`'s EMA5T branch reuses the identical alert/trend-gate rule
+`emaStrategy.js` uses live, plus the same day-boundary resets, entry-cutoff, and
+resting-breakout entry shape. It can run against either the index (years of history,
+not the literal traded instrument) or the actual current-month futures contract
+(the literal instrument, but FYERS only serves a real window of history for it —
+resolved and auto-filled by `POST /api/backtest/futures-range`). Max trades/day and
+daily-loss-limit % are operator-configurable in the Backtest Lab UI, not hardcoded.
 
 ---
 
-## File Structure
+## File Structure (trading-relevant subset)
 
 ```
 src/
 ├── types/
-│   └── institutional.ts          # Complete type system
+│   └── index.ts, institutional.ts   # Type definitions (institutional.ts predates
+│                                     # much of the current app; not everything in it
+│                                     # is still wired up — verify before trusting a field)
 ├── lib/
 │   └── strategies/
-│       ├── registry.ts            # Strategy definitions (2 strategies)
-│       └── engine.ts              # Unified backtest + live engine
+│       ├── registry.ts              # EMA5/EMA5_OPTION only — backtest-only, legacy
+│       └── engine.ts                # TS mirror of signalCore.js's math (unused by any page)
 ├── store/
-│   └── InstitutionalProvider.tsx  # React Context state management
+│   ├── InstitutionalProvider.tsx    # React Context state management
+│   └── useLiveDataSync.ts           # Polls the bot's /status every 7s, feeds dashboard/
+│                                     # portfolioRisk into the store
 ├── pages/
-│   ├── CommandCenter.tsx          # Dashboard + AI CIO merged
-│   ├── AutoTrade.tsx              # Bot control + positions + logs
-│   ├── StrategyManager.tsx        # Strategy configuration UI
-│   ├── RiskDashboard.tsx          # Portfolio risk monitoring
-│   ├── MarketIntelligence.tsx     # Market analytics
-│   ├── BacktestLab.tsx            # Backtest + visual chart
-│   ├── Chart.tsx                  # Live SVG candlestick
-│   ├── Dashboard.tsx              # Legacy dashboard (redirects)
-│   ├── Journal.tsx                # Trade audit trail
-│   ├── Reports.tsx                # Performance analytics
-│   └── Settings.tsx               # Platform configuration
+│   ├── AutoTrade.tsx                 # Bot control + config + positions + logs — now "/"
+│   ├── MarketIntelligence.tsx        # Market analytics (honest-data pattern)
+│   ├── BacktestLab.tsx               # EMA5T backtest, Index/Futures toggle
+│   ├── Chart.tsx                     # Live candlestick
+│   └── Journal.tsx                   # Trade audit trail
+├── options/                          # Manual options trading terminal (see its own
+│                                     # IMPLEMENTATION_REPORT.md) — 25 panels, one
+│                                     # polling provider, real order placement
 ├── components/
-│   ├── Card.tsx                   # Institutional panel card
-│   ├── Layout.tsx                 # Sidebar + status bar + header
-│   ├── MetricCard.tsx             # Metric display component
-│   └── FyersConnect.tsx           # Broker connection badge
-├── styles.css                     # Global dark theme + utilities
-├── tailwind.config.js             # Institutional color tokens
-└── App.tsx                        # Routes
+│   ├── ui/                           # Shared UI kit (Panel, Stat, Tabs, toast, etc.)
+│   ├── navigation.ts                 # Single source of truth for the page list —
+│                                     # if a page isn't in here, it likely isn't routed
+│   └── Layout.tsx                    # Sidebar + status bar + header
+└── App.tsx                           # Routes — old bookmarks (/trading-bot,
+                                      # /risk-dashboard, /reports) redirect to "/" or
+                                      # "/journal" rather than 404ing
+
+server/src/
+├── services/
+│   ├── signalCore.js                # 5-EMA + alert rule (single source of truth)
+│   ├── emaStrategy.js               # EMA5T trend gate on top of signalCore.js
+│   ├── autoTrader.js                # The bot: config, risk gates, resting entry
+│   │                                 # lifecycle, position monitoring, reconciliation
+│   ├── orderExecution.js            # Broker order placement/polling/cancel + retry
+│   └── futuresCosts.js              # Futures STT/exchange/stamp/GST cost model
+└── routes/
+    ├── autoTrade.js                  # Bot control API
+    ├── backtest.js                   # EMA5T + legacy EMA5/EMA5_OPTION backtest
+    ├── options.js                    # Manual options order placement API
+    ├── account.js, market.js, orders.js, auth.js, ticks.js
 ```
+
+Some files still exist on disk without being wired into the app at all (e.g.
+`src/pages/StrategyManager.tsx` has no route, no nav entry, and nothing imports it) —
+their presence in the repo doesn't mean they're part of the live product. Check
+`src/App.tsx` and `src/components/navigation.ts` before trusting that a page is real.
 
 ---
 
 ## Why This Architecture?
 
-### Institutional Use Case
-
-| Feature | Institutional Need |
-|---------|-------------------|
-| Single Source of Truth | Prevents strategy drift between backtest and live |
-| AI Reasoning | Regulatory compliance, audit trails |
-| Risk Engine | Prevents catastrophic losses |
-| CIO | Adapts to changing market conditions |
-| Strategy Manager | Portfolio-level allocation control |
-| Market Intelligence | Informed decision making |
-
-### Scalability
-
-- **Modular Design**: Each engine is independent
-- **Type Safety**: Full TypeScript coverage
-- **State Management**: Centralized with predictable updates
-- **Extensibility**: New strategies added via registry only
+| Decision | Reason |
+|---|---|
+| Single strategy, hard-limited in config | The validated edge is EMA5T specifically; the code refuses (`ALLOWED_STRATEGIES`) to silently run anything else |
+| Signal logic lives once, server-side | Prevents the exact live/backtest divergence bug this codebase has hit before (see `signalCore.js`'s header) |
+| Manual trading scoped to one page | Keeps the automated bot's "never touched by a human" guarantee intact while still allowing deliberate manual execution where wanted |
+| Config-driven risk limits | An operator can tune risk without a code change or redeploy |
+| Honest-data badging | A model estimate or a stale value must never be visually indistinguishable from a live broker number |
 
 ### Testing
 
-- Strategy engine is pure functions — easily unit testable
-- Backtest results are deterministic
-- AI reasoning is inspectable and auditable
-- Risk engine validates all decisions
+- `signalCore.js`, `autoTrader.js`'s pure decision helpers (`planReconciliation`,
+  `classifyExit`, `futuresOrderSide`, `computeCommittedMargin`, staleness checks, etc.),
+  and the backtest engine are unit-tested with vitest, run from the repo root
+  (`npm test` — see [CLAUDE.md](CLAUDE.md)).
+- Impure orchestration (`closePosition`, the live order-placement lifecycle) is tested
+  sparingly and carefully, mocking only the broker layer — see
+  `autoTrader.reentrancy.test.js` for the pattern.
 
 ---
 
-## Future Extensibility
+## Documentation
 
-The architecture supports:
-
-1. **Strategy Versioning** — version field in registry + state
-2. **Replay Mode** — use backtest engine with recorded data
-3. **Simulation Lab** — stress test using modified market data
-4. **NL Command Center** — query state with natural language
-5. **Advanced Reporting** — metrics already calculated in backtest
-6. **Execution Engine** — hook into `runStrategy()` output
-7. **Bot Health** — monitor component added to state
-
----
-
-## Integration with Existing Application
-
-The new institutional architecture wraps the existing application:
-
-- `App.tsx` uses `InstitutionalProvider`
-- All existing pages continue to work
-- New pages are additive (Strategy Manager, Risk, CIO, Intelligence)
-- Backtest page uses `runBacktestEngine()` from unified engine
-- AutoTrade page uses `runStrategy()` for live signals
-
----
-
-## API Design
-
-The state management exposes:
-
-```typescript
-// Strategy Actions
-toggleStrategy(id)
-enableStrategy(id)
-disableStrategy(id)
-pauseStrategy(id)
-resumeStrategy(id)
-setStrategyConfig(id, config)
-
-// Risk Actions
-setPortfolioRisk(risk)
-addRiskBreach(breach)
-resolveRiskBreach(id)
-
-// CIO Actions
-setCIOState(cio)
-applyCIORecommendation(id)
-
-// Platform Actions
-setRunning(running)
-emergencyStopAll()
-resetEmergencyStop()
-startAllStrategies()
-stopAllStrategies()
-```
-
----
-
-## Conclusion
-
-TradingOS has been transformed from a single-strategy bot into a multi-strategy institutional platform with:
-
-- **2 trading strategies** (5 EMA trend + 5 EMA option) with unified implementation
-- **AI reasoning** on every trade
-- **AI CIO** for market regime management
-- **Portfolio risk engine** with circuit breakers
-- **Market intelligence** dashboard
-- **Professional strategy manager** with allocation controls
-
-The architecture is production-ready, modular, and designed for institutional use.
+- [README.md](README.md) — overview, quick start, deployment runbook
+- [FEATURES.md](FEATURES.md) — feature-by-feature detail
+- [CLAUDE.md](CLAUDE.md) — guidance for AI coding assistants working in this repo
+- [src/options/IMPLEMENTATION_REPORT.md](src/options/IMPLEMENTATION_REPORT.md) — the
+  Options workspace in detail

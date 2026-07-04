@@ -1,311 +1,196 @@
-﻿# TradingOS — Institutional Grade Autonomous Trading Platform
+# TradingOS — Features
 
-> **"I do not trade. I supervise."**
+> **"I do not trade. I supervise."** — for the autonomous bot. The Options workspace is a
+> deliberate, separate exception where a human places real orders manually (see below).
 
-TradingOS is an institutional-grade autonomous trading platform designed for hedge funds, quantitative firms, and proprietary trading desks. The system is **completely automation-first** — no manual order placement is supported.
+TradingOS runs one autonomous futures strategy (EMA5T) plus a manual options-trading
+workspace, backtesting tooling, and honest-data market dashboards, on a FYERS-backed
+Express API.
 
 ---
 
 ## Philosophy
 
-- **Operator, not Trader**: Configure strategies, monitor execution, review performance
-- **Bot-Only Execution**: Only the trading bot can place, manage, and exit positions
-- **Read-Only Market Data**: Market surveillance without execution capability
-- **Risk-First Design**: All guardrails are enforced programmatically
-- **Single Source of Truth**: Backtest and live trading use identical strategy code
-- **AI Supervision**: Every trade contains an AI reasoning report
+- **Bot-only execution for EMA5T**: the automated strategy places, manages, and exits its
+  own positions — no manual buy/sell/exit for it.
+- **Manual execution, scoped**: the Options workspace is a separate, intentional
+  exception — see its own section below.
+- **Read-only surveillance elsewhere**: Market Intelligence and Live Chart are
+  observation-only.
+- **Risk-first, config-driven**: risk limits are operator-configurable (bot config panel,
+  Backtest Lab), not hardcoded assumptions baked into code.
+- **Single source of truth**: the live bot and the backtest replay the identical EMA5T
+  rule set (`server/src/services/signalCore.js` + `emaStrategy.js`).
+- **Honest data**: every number is labelled live, model-derived, end-of-day, or
+  unavailable — never a fabricated placeholder shown as real.
 
 ---
 
 ## Pages
 
-### Command Center
-Merged **Dashboard** + **AI CIO** with two tabs:
+*(current routes — see `src/App.tsx` / `src/components/navigation.ts`, the single source
+of truth for what's actually live)*
 
-**Overview Tab:**
-- Bot status indicator (Running / Stopped / Emergency)
-- Today's P&L with real-time updates
-- Current positions managed by bot
-- Trade count vs daily limit
-- Bot health, broker status, market status
-- Daily risk used vs limit
-- **Running Strategies** count with status
-- **Paused Strategies** count
-- System logs stream
-- Last executed trade summary
-- Strategy status with scan state
-- **Health Score** and **Execution Score**
-- Active alerts and warnings
+### Trading Bot (`/` — the home page)
+- Start/Stop the bot, Emergency Stop / Reset E-Stop
+- Config panel: sizing mode (risk % or fixed lots), risk per trade %, max trades/day,
+  **daily loss limit %**, paper/live toggle, active strategies (EMA5T only), active
+  instruments (NIFTY/BANKNIFTY), timeframes
+- Active positions with live P&L, SL, fill price
+- Recent signals, execution logs, data-source visibility (websocket vs. REST fallback)
+- Daily P&L, risk-system status (ACTIVE/HALTED), execution mode (PAPER/LIVE), tick-feed status
 
-**AI CIO Tab:**
-- **Current Market Regime** display with confidence
-- Regime types: Trending Up/Down, Sideways, Volatile, Low Volatility, Gap Day, Expiry Day, Event Day
-- **Market Context**: VIX, PCR, OI Buildup, A/D Ratio
-- **Performance Forecast**: Expected Return, Volatility, Win Probability
-- **AI Recommendations** with urgency levels (LOW, MEDIUM, HIGH, CRITICAL)
-- Apply recommendation action
-- **Applied Adjustments** history with before/after values
-- **Natural Language Chat** powered by Kimi K2.6
+The strategy itself: a 5-EMA alert-candle breakout, gated by a no-lookahead 20-EMA trend
+filter, trading Bank Nifty/Nifty **futures** via a resting stop-entry order (not a market
+order on signal). Paper mode runs the *same* order-placement code path as live (simulated
+at the broker layer, not skipped) — see `autoTrader.js`'s `manageFuturesPending`.
 
-### Strategy Manager
-- **2 Strategies** with enable/disable checkboxes
-- Capital Allocation % per strategy
-- Risk % per strategy
-- Max Trades per strategy
-- Max Consecutive Losses
-- Trading Session selection (FULL, MORNING, AFTERNOON, CUSTOM)
-- Allowed Symbols per strategy
-- Allowed Expiry (WEEKLY, MONTHLY, BOTH)
-- Allowed Days
-- Max Drawdown limit
-- Daily Loss Limit
-- Cooldown After Loss (minutes)
-- Confidence Threshold
-- Priority and Execution Weight
-- **Strategy-specific Parameters** dynamically loaded from registry
-- Category filtering (Trend Following, Mean Reversion, Momentum, Breakout, Option, Custom)
-- Real-time allocation tracker with over-allocation warnings
-- Individual strategy status (ACTIVE, PAUSED, COOLDOWN, HALTED, DISABLED)
+**Removed circuit breakers** (deliberate product decision, not a bug): there is no VIX
+filter and no consecutive-loss breaker on new entries anymore. What remains: max
+trades/day, daily loss limit (flattens open positions too, not just blocks new entries),
+a 14:00 IST entry cutoff, a 15:15 IST forced square-off, margin tracking across every
+concurrently-open position, and a price-feed staleness check.
 
-### Trading Bot
-- **Start Bot** — Begin automated scanning and execution
-- **Stop Bot** — Halt new signal generation
-- **Emergency Stop** — Immediately kill all positions and halt
-- **Reset E-Stop** — Clear emergency state and resume readiness
-- Paper trading toggle
-- Strategy configuration (risk %, lot sizing, max trades)
-- Active positions with live P&L
-- Recent signals with execution status
-- Real-time execution logs
-- Daily P&L tracking
-- Risk system status
-- Execution mode (LIVE / PAPER)
-
-### Risk Dashboard
-- **Total Exposure** monitoring
-- **Portfolio Drawdown** with limits
-- **Daily Risk Used** vs limit
-- **Capital Utilized** percentage
-- **Strategy Exposure** breakdown
-- **Directional Exposure** (net long/short)
-- **Delta, Gamma, Theta, Vega Exposure**
-- **Net Premium Risk**
-- **VaR (95%, 99%)**
-- **Risk Limits** configuration
-- **Active Risk Breaches** with severity
-- **Stress Test Results** (PASS/FAIL)
-- Circuit breaker status
-
-### Market Intelligence
-Merged **Market Monitor** + **Market Intelligence**:
-
-**Live Tab:**
-- Live option chain for NIFTY and BANKNIFTY
-- Real-time spot price with OHLC
-- ATM strike highlighting
-- Put/Call Ratio (PCR)
-- Total OI for CE and PE
-- Auto-refreshing read-only data
-- **No trading actions — surveillance only**
-
-**Analytics Tab** (honest sourcing — never fabricated zeros):
-- **Put/Call Ratio (PCR)** — live from the NIFTY option chain
-- **Max Pain** strike and **Expected Move**
-- **India VIX** + **IV Rank / Percentile** — from a persisted VIX series (shows "building history" until enough samples accrue)
-- **Market Breadth (NIFTY 50)** — advance/decline derived live from constituent quotes (FYERS has no breadth endpoint)
-- **Dealer Gamma Exposure (GEX)** — Black-Scholes model estimate, badged "Model"
-- **Institutional Flow (FII/DII)** — NSE end-of-day cash-market participant data (labelled EOD; shows an "unreachable" state if NSE blocks the fetch)
-
-### Live Chart
-- SVG candlestick chart with volume bars
-- Symbol selector: BANKNIFTY, NIFTY 50, FINNIFTY, SENSEX
-- Timeframe selector: 1m, 5m, 15m, 30m, 1h, Daily
-- Auto-refresh every 5 seconds when market is open
-- OHLC bar for latest candle
-- Shows historical data when market is closed
+### Live Chart (`/chart`)
+- Candlestick chart with volume
+- Symbol selector, timeframe selector
+- Auto-refresh while the market is open; shows historical data when closed
 - Market status indicator (Open / Closed / Holiday)
 
-### Backtest Lab
-Merged **Backtest** + **Visual Backtest**:
+### Options (`/options`)
+A **separate, manual** options trading terminal — 25 panels (chain, Greeks, IV
+smile/skew, OI analytics, max pain, probability, strategy builder, payoff analyzer,
+screener, positions, margin, alerts, watchlist, a **live order ticket**, and more) fed by
+one polling provider. This is where **real, human-initiated broker orders** get placed —
+market/limit/SL/SL-M, single or basket — with a margin preview and confirmation modal,
+no separate server-side risk gate. See `src/options/IMPLEMENTATION_REPORT.md` for the
+full panel-by-panel breakdown and its honest-data badge system (Live / Computed / Proxy
+/ EOD / No feed).
 
-- Strategy backtesting using **unified engine** (same signal core as live trading)
-- **2 strategies** available
-- Configurable parameters
-- Default date range: **5 years ago → today**
-- **View Toggle**: Both | Table | Chart
-- **Table View**: Trade log with entry/exit/P&L details
-- **Chart View**: Equity curve with trade markers (lightweight-charts)
-- **AI Reasoning Reports** on every simulated trade
-- **Trade Grades** (A+, A, B, C, REJECT)
-- **Capital Mode**: Compounding vs Fixed
+### Backtest Lab (`/backtest`)
+- Runs the **actual EMA5T rules** — not a separate/simplified approximation — over
+  historical candles
+- **Data source toggle**: Index (years of history, not the literal traded instrument) or
+  Futures (the real current-month contract, auto-resolved; From/To auto-fill to
+  whatever window FYERS actually has for it)
+- Configurable: capital, risk %, target R:R, slippage %, capital mode (compounding/fixed),
+  **max trades/day**, **daily loss limit %** — all operator-set, not hardcoded
+- View toggle: Both / Candles (with entry/exit/SL/target markers) / Table (trade log) /
+  Equity chart
+- The backend also still supports two older, backtest-only strategies (`EMA5` on the
+  index, `EMA5_OPTION` with Black-Scholes option-premium pricing) for historical
+  comparison — the UI only exposes EMA5T
 
-### Journal
+### Market Intelligence (`/market-intelligence`)
+Honest-sourcing analytics — nothing here is a fabricated zero shown as real:
+- **Live option chain** (NIFTY/BANKNIFTY), spot OHLC, ATM strike, PCR, total OI
+- **Put/Call Ratio**, **Max Pain**, **Expected Move**
+- **India VIX** + **IV Rank/Percentile** from a persisted series (shows "building
+  history" until enough samples accrue, never a misleading number)
+- **Market Breadth (NIFTY 50)** — advance/decline derived live from constituent quotes
+  (FYERS has no breadth endpoint)
+- **Dealer Gamma Exposure (GEX)** — Black-Scholes model estimate, explicitly badged "Model"
+- **FII/DII flow** — NSE end-of-day participant data, labelled EOD; degrades to an
+  explicit "unavailable" state if NSE blocks the scrape (can happen on the deployed host)
+
+### Journal (`/journal`)
 - Automated trade audit trail
-- Bot-execution tagging
-- P&L review
-- **AI Comments** on each trade
-- **Trade Grade** record
-- Screenshot and chart capture
 
-### Reports
-- Performance analytics
-- **Sharpe Ratio**, **Sortino Ratio**, **Calmar Ratio**
-- **Profit Factor**, **SQN**, **Expectancy**
-- Equity curve visualization
-- Hourly/Weekday/Monthly performance breakdown
-- Strategy comparison
-- Export PDF / Excel
-
-### Settings
-- Broker configuration
-- Risk parameters
-- Capital allocation
-- Daily limits
-- Strategy defaults
-- Trading sessions
-- Notifications
-- Paper trading
-- Emergency stop
-- Execution engine
-- AI engine
-- Logging
-- Reports
-- Backup and audit
+*(`/reports`, `/risk-dashboard`, and `/trading-bot` are old bookmarks that redirect to
+`/journal` or `/` — those pages were removed, see "What Was Removed" below.)*
 
 ---
 
 ## Backend API
 
-### Authentication
-- `GET /api/auth/login` — FYERS OAuth URL
-- `POST /api/auth/callback` — Token exchange
-- `POST /api/auth/logout` — Session termination
+*(verified against the actual mounted routes in `server/src/index.js` — not aspirational)*
 
-### Account (Read-Only Market Data)
-- `GET /api/account/profile`
-- `GET /api/account/funds`
-- `GET /api/account/holdings`
-- `GET /api/account/positions`
-- `POST /api/account/quote` — Live quotes
-- `GET /api/account/option-chain` — Options data (+ India VIX)
-- `GET /api/account/breadth` — NIFTY-50 advance/decline breadth
+### Authentication (`/api/auth`)
+- `GET /login` — FYERS OAuth URL
+- `POST /callback` — exchange `auth_code` for an access token
+- `GET /session/:id`, `POST /session/refresh`, `POST /logout`
 
-### Market (Public — no broker session)
-- `GET /api/market/status` — NSE market open/closed/holiday status
-- `GET /api/market/iv-history` — India VIX rank/percentile from the persisted series
-- `GET /api/market/fii-dii` — FII/DII end-of-day cash flow (NSE participant data)
+### Auto Trading — the bot (`/api/auto-trade`)
+- `POST /start`, `POST /stop`
+- `POST /emergency-stop`, `POST /reset-emergency`
+- `GET /status`, `GET /performance`, `GET /audit`
+- `POST /paper-trading` — toggle paper/live (only while stopped)
+- `POST /config` — update risk/strategy/instrument/timeframe config (bounds-validated;
+  invalid fields are dropped, never clamped)
 
-### Orders (Read-Only Audit)
-- `GET /api/orders/history` — Order book
-- `GET /api/orders/trades/today` — Today's trades
+### Backtest (`/api/backtest`)
+- `POST /run`, `POST /run-multi`, `POST /data`
+- `POST /futures-range` — resolve the current futures contract + its real available date range
+- `GET /symbols`, `GET /holidays`, `POST /holidays/refresh`
 
-### Auto Trading (Bot Control)
-- `POST /api/auto-trade/start`
-- `POST /api/auto-trade/stop`
-- `POST /api/auto-trade/emergency-stop`
-- `POST /api/auto-trade/reset-emergency` — Clear emergency halt
-- `GET /api/auto-trade/status`
-- `GET /api/auto-trade/performance`
-- `POST /api/auto-trade/paper-trading`
-- `POST /api/auto-trade/config`
-- `GET /api/auto-trade/audit`
+### Options workspace — manual live trading (`/api/options`)
+- `POST /place-order`, `POST /basket-order`, `PATCH /modify-order`, `POST /cancel-order`
+  — **real broker orders**
+- `POST /margin` — broker margin simulator
+- `GET /history` — OHLCV candles for any symbol
 
-### Backtest
-- `GET /api/backtest/symbols`
-- `POST /api/backtest/run`
-- `POST /api/backtest/run-multi`
-- `GET /api/backtest/holidays` — NSE trading holidays
-- `POST /api/backtest/holidays/refresh` — Refresh from NSE
+### Account (`/api/account`, read-only market data + broker state)
+- `GET /profile`, `GET /funds`, `GET /holdings`, `GET /positions`
+- `POST /quote`, `POST /depth`, `GET /search`
+- `GET /option-chain` (+ India VIX), `GET /breadth`
 
-### AI CIO (Kimi Integration)
-- `GET /api/ai/status` — Check AI connection health
-- `POST /api/ai/cio/query` — Natural language query with context
-- `POST /api/ai/cio/regime` — LLM-powered regime detection
-- `POST /api/ai/trade/review` — AI trade review with grading
+### Orders — read-only audit (`/api/orders`)
+- `GET /history`, `GET /trades/today`
+- (Manual order *placement* was removed from here — it lives only under
+  `/api/options/*` now, scoped to the Options workspace.)
 
-**Environment Variables:**
-```
-KIMI_API_KEY=sk-your-key
-KIMI_MODEL=kimi-k2.6
-KIMI_BASE_URL=https://api.moonshot.ai/v1
-```
+### Market — public, no session required (`/api/market`)
+- `GET /status` — NSE open/closed/holiday
+- `GET /iv-history` — India VIX rank/percentile from the persisted series
+- `GET /fii-dii` — FII/DII end-of-day cash flow
 
 ---
 
 ## What Was Removed
 
-All manual trading features have been eliminated:
-
-- ❌ Manual Buy/Sell buttons
-- ❌ Order placement forms
-- ❌ Quantity/Price/Order type inputs
-- ❌ MIS/CNC/BO/CO selectors
-- ❌ Manual order confirmation dialogs
-- ❌ Manual position closing
-- ❌ Manual symbol search for trading
-- ❌ Emotion evaluation engine
-- ❌ Daily constitution/affirmations
-- ❌ Manual trade validation UI
-- ❌ `POST /api/orders/place`
-- ❌ `DELETE /api/orders/cancel`
+- ❌ Generic manual order placement (`POST /api/orders/place`, `DELETE /api/orders/cancel`,
+  `PUT /api/orders/modify`) — manual trading now exists only in the Options workspace
+- ❌ AI CIO, natural-language chat, LLM-powered regime detection (Kimi/Moonshot
+  integration — fully removed, `KIMI_*` env vars are no longer read)
+- ❌ Per-trade AI reasoning reports / trade grades (A+ through REJECT)
+- ❌ Command Center, Risk Dashboard, and Settings pages — deleted; Settings in
+  particular was fully disconnected (wrote to `localStorage`, nothing ever read it back,
+  never touched the backend)
+- ❌ VIX filter and consecutive-loss circuit breaker on new entries (both the live bot
+  and the backtest's live-parity gate)
+- ❌ Emotion evaluation engine, daily constitution/affirmations, MIS/CNC/BO/CO product
+  selectors on the old manual-trading UI
 
 ---
 
-## AI Decision Engine
+## Strategies
 
-Every trade signal contains an `AIReasoningReport`:
-
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| Trend Alignment | 20% | Price vs EMA20 alignment |
-| Volume Confirmation | 15% | Volume > 1.2x average |
-| ATR Validation | 15% | Stop loss > 0.5 ATR |
-| Risk Reward | 20% | Minimum 1:1.5 R:R |
-| Time Filter | 10% | Within optimal hours |
-| Market Structure | 20% | Structure aligns with signal |
-
-**Trade Grades**: A+ | A | B | C | REJECT
-
----
-
-## Strategies (2)
-
-| # | Strategy | Category | Author |
-|---|----------|----------|--------|
-| 1 | 5 EMA Trend | Trend Following | Subhasish Pani |
-| 2 | 5 EMA Option Buying | Option | Subhasish Pani |
+| Strategy | Where it lives | Status |
+|---|---|---|
+| **EMA5T** | `server/src/services/emaStrategy.js` / `autoTrader.js` (not in the frontend registry) | The only live/paper strategy — Bank Nifty/Nifty **futures**, 5-EMA + no-lookahead 20-EMA trend gate, resting stop-entry |
+| EMA5 | `src/lib/strategies/registry.ts`, `server/src/routes/backtest.js` | Backtest-only now — trades the index directly, no trend gate |
+| EMA5_OPTION | `src/lib/strategies/registry.ts`, `server/src/routes/backtest.js` | Backtest-only now — Black-Scholes option-premium pricing on the same signal |
 
 ---
 
 ## Market Holidays
 
-NSE trading holidays are handled dynamically:
-
-- **Backend** fetches from NSE API (`nseindia.com/api/holiday-master`) on startup
-- **Fallback**: Cached list stored in `data/holidays.json`
+- **Backend** fetches from the NSE holiday API on startup
+- **Fallback**: cached list on disk if the fetch fails
 - **Manual refresh**: `POST /api/backtest/holidays/refresh`
-- **Frontend** Chart and Bot both respect holidays
-- Shows holiday name (e.g., "Holiday — Republic Day") instead of "Market Open"
+- Frontend Chart and Bot both respect holidays; shows the holiday name instead of "Market Open"
 
 ---
 
 ## UI Philosophy
 
-Every page reinforces:
-
-> **"I do not trade. I supervise."**
-
-No UI encourages discretionary intervention. The interface resembles a professional automated trading system — Bloomberg Terminal meets QuantConnect meets Jane Street internal tools.
+> **"I do not trade. I supervise."** — for everything except the Options workspace,
+> which is deliberately, transparently a manual trading terminal.
 
 ---
 
 ## Documentation
 
-- [README.md](README.md) — Overview and quick start
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Architecture deep dive
-
----
-
-## License
-
-Proprietary — Institutional Trading Platform
+- [README.md](README.md) — overview and quick start
+- [ARCHITECTURE.md](ARCHITECTURE.md) — architecture deep dive
+- [src/options/IMPLEMENTATION_REPORT.md](src/options/IMPLEMENTATION_REPORT.md) — Options workspace detail
