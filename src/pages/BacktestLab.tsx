@@ -77,8 +77,10 @@ export function BacktestLab() {
   const [slippage, setSlippage] = useState(0.02);
   const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
   // EMA5T only: INDEX has years of history but isn't the literal traded instrument; FUTURES is
-  // the actual live contract but FYERS only has a few weeks of history for it (see backend note).
+  // the actual live contract, with real availability that varies by contract (see resolveFuturesRange).
   const [instrumentSource, setInstrumentSource] = useState<"INDEX" | "FUTURES">("INDEX");
+  const [resolvingRange, setResolvingRange] = useState(false);
+  const [resolvedFuturesSymbol, setResolvedFuturesSymbol] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +91,45 @@ export function BacktestLab() {
   const chartRef = useRef<IChartApi | null>(null);
   const candleContainerRef = useRef<HTMLDivElement>(null);
   const candleChartRef = useRef<IChartApi | null>(null);
+  const prevInstrumentSourceRef = useRef(instrumentSource);
+
+  // Futures mode: auto-fill From/To to the contract's REAL available window (resolved server-side —
+  // FYERS has no "list active contracts" or date-range endpoint, so guessing dates wastes a run).
+  // Switching back to Index restores the full-history default rather than leaving a short window set.
+  useEffect(() => {
+    const prev = prevInstrumentSourceRef.current;
+    prevInstrumentSourceRef.current = instrumentSource;
+
+    if (instrumentSource === "FUTURES") {
+      let cancelled = false;
+      setResolvingRange(true);
+      setError(null);
+      backtestApi.resolveFuturesRange(symbol)
+        .then((res) => {
+          if (cancelled) return;
+          setFromDate(res.earliestDate);
+          setToDate(res.latestDate);
+          setResolvedFuturesSymbol(res.tradedSymbol);
+        })
+        .catch((err: any) => {
+          if (cancelled) return;
+          setError(err?.message || "Could not resolve futures date range");
+          setResolvedFuturesSymbol(null);
+        })
+        .finally(() => {
+          if (!cancelled) setResolvingRange(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    } else if (prev === "FUTURES") {
+      const d = new Date();
+      d.setDate(d.getDate() - 1825);
+      setFromDate(d.toISOString().split("T")[0]);
+      setToDate(new Date().toISOString().split("T")[0]);
+      setResolvedFuturesSymbol(null);
+    }
+  }, [instrumentSource, symbol]);
 
   const runBacktest = async () => {
     if (!fromDate || !toDate) return;
@@ -356,7 +397,11 @@ export function BacktestLab() {
           </div>
           {instrumentSource === "FUTURES" && (
             <div className="sm:col-span-2 lg:col-span-4 -mt-1 rounded-panel border border-border-subtle bg-surface px-3 py-2 text-3xs text-zinc-500">
-              Futures history only exists for the current contract's lifetime (a few weeks since listing) — set From to a recent date, or this run will fail.
+              {resolvingRange
+                ? "Resolving the current contract and its available date range…"
+                : resolvedFuturesSymbol
+                ? <>From/To auto-set to the real available window for <span className="font-mono text-zinc-300">{resolvedFuturesSymbol}</span> — narrow it further if you want, but it won't go any wider than this.</>
+                : "Futures history is limited to the current contract's lifetime — From/To will auto-fill once resolved."}
             </div>
           )}
           <div>
@@ -391,8 +436,8 @@ export function BacktestLab() {
             </select>
           </div>
           <div className="flex items-end gap-2 sm:col-span-2">
-            <button onClick={runBacktest} disabled={loading} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">
-              {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run</span>}
+            <button onClick={runBacktest} disabled={loading || resolvingRange} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">
+              {loading ? "Running..." : resolvingRange ? "Resolving..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run</span>}
             </button>
             <button onClick={() => { setResult(null); setError(null); }} className="rounded-panel border border-border-subtle bg-surface p-2 text-zinc-500 hover:text-zinc-300">
               <RotateCcw size={12} />

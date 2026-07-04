@@ -821,6 +821,50 @@ router.post("/run", async (req, res) => {
   }
 });
 
+// ─── API Endpoint: Resolve the current EMA5T futures contract + its real date range ──
+// Lightweight — resolves the symbol and reads its actual earliest/latest candle at DAILY
+// resolution (not subject to the 100-day intraday chunk limit, so one request), without
+// running the backtest engine. Lets the UI auto-fill From/To to the true available window
+// instead of the user guessing (FYERS has no "list active contracts" or date-range endpoint).
+router.post("/futures-range", async (req, res) => {
+  const { symbol } = req.body;
+  const underlyingName = EMA5T_UNDERLYINGS[symbol];
+  if (!underlyingName) {
+    return res.status(400).json({ error: `Futures backtesting only supports Bank Nifty / Nifty 50 (got ${symbol}).` });
+  }
+
+  const sessionId = req.headers["x-session-id"];
+  if (!sessionId) {
+    return res.status(401).json({ error: "FYERS session required" });
+  }
+  const session = getSession(sessionId);
+  if (!session) {
+    return res.status(401).json({ error: "Invalid or expired FYERS session" });
+  }
+
+  try {
+    const tradedSymbol = await resolveCurrentFuturesSymbol(underlyingName, session.accessToken);
+    if (!tradedSymbol) {
+      return res.status(400).json({ error: `Could not resolve a tradable ${underlyingName} futures contract right now (FYERS returned no valid quote for the current or next 2 months).` });
+    }
+    const toTs = Math.floor(Date.now() / 1000);
+    const fromTs = toTs - 730 * DAY_IN_SECONDS; // 2 years of headroom; cont_flag=1 can splice in more than this contract's own listing window
+    const rawCandles = await fetchSingleRange(tradedSymbol, "D", fromTs, toTs, session.accessToken);
+    if (!rawCandles.length) {
+      return res.status(400).json({ error: `No historical data available yet for ${tradedSymbol}.` });
+    }
+    res.json({
+      success: true,
+      tradedSymbol,
+      earliestDate: new Date(rawCandles[0][0] * 1000).toISOString().slice(0, 10),
+      latestDate: new Date(rawCandles[rawCandles.length - 1][0] * 1000).toISOString().slice(0, 10),
+    });
+  } catch (error) {
+    console.error("Futures-range error:", error);
+    res.status(500).json({ error: error.message || "Failed to resolve futures date range" });
+  }
+});
+
 // ─── API Endpoint: Get raw historical data ────────────────────────
 router.post("/data", async (req, res) => {
   const { symbol, resolution, fromDate, toDate } = req.body;

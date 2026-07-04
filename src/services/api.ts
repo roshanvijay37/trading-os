@@ -188,13 +188,21 @@ export const backtestApi = {
     ivSource?: "FLAT" | "INDIA_VIX";
     ivMultiplier?: number;
     // EMA5T only: "INDEX" (default, years of history) trades the index directly; "FUTURES"
-    // resolves and trades the actual current-month contract (the literal live instrument),
-    // which FYERS only has a few weeks of history for.
+    // resolves and trades the actual current-month contract (the literal live instrument) —
+    // real availability varies (a few weeks to a few months depending on FYERS' cont_flag
+    // behaviour), so let the UI ask /futures-range rather than assuming a fixed window.
     instrumentSource?: "INDEX" | "FUTURES";
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",
       body: JSON.stringify(params),
+    }),
+  // EMA5T FUTURES only: resolves the current tradable contract and its real earliest/latest
+  // available candle date, so the UI can auto-fill From/To instead of the user guessing.
+  resolveFuturesRange: (symbol: string): Promise<{ success: boolean; tradedSymbol: string; earliestDate: string; latestDate: string }> =>
+    fetchWithAuth("/backtest/futures-range", {
+      method: "POST",
+      body: JSON.stringify({ symbol }),
     }),
   runMulti: (params: {
     symbol: string;
