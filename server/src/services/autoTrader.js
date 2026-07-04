@@ -1073,11 +1073,20 @@ function checkMaxTrades() {
 
 async function processCandles(underlying, session) {
   try {
-    // Scan EACH selected timeframe independently — a 5m and a 15m setup on the same underlying
-    // are separate signals that each trade on their own. Global risk limits (max trades/day,
-    // daily-loss cap, capital, correlation filter) are SHARED across all timeframes.
+    // EMA5T trades FUTURES, so signals MUST come from the futures contract's own candles.
+    // The futures basis runs tens of points away from the index; index-derived alert levels
+    // checked against futures quotes would skew every entry/SL/target by the basis. This
+    // also matches the 6-year validation exactly (it was run on futures candles).
+    const futSymbol = await resolveFuturesSymbol(underlying, session);
+    if (!futSymbol) {
+      logAudit({ type: "EMA5T_NO_CONTRACT", underlying: underlying.name });
+      return;
+    }
+    // Scan EACH selected timeframe independently — a 15m and a 30m setup on the same
+    // underlying are separate signals that each trade on their own. Global risk limits
+    // (max trades/day, daily-loss cap, capital, correlation filter) are SHARED.
     for (const tf of getTimeframes()) {
-      const candles = await fetchCandlesWithTickFallback(underlying.symbol, session, tf);
+      const candles = await fetchCandlesWithTickFallback(futSymbol, session, tf);
       if (candles.length < 6) continue;
       latestData[underlying.name] = {
         candles,
@@ -1103,7 +1112,7 @@ async function processCandles(underlying, session) {
         // EMA5T (the only strategy) trades futures via resting stop entries. The legacy
         // option/breakout entry flow was removed with EMA5/EMA5_OPTION.
         if (strategy === "EMA5T") {
-          await manageFuturesPending({ key, underlying, tf, candles, alert: activeAlerts.get(key), session });
+          await manageFuturesPending({ key, underlying, tf, candles, futSymbol, alert: activeAlerts.get(key), session });
         }
       }
     }
@@ -1170,7 +1179,7 @@ async function resolveFuturesSymbol(underlying, session) {
  * deliberately NOT wired: running EMA5T in live mode refuses loudly instead of silently
  * degrading to market fills (which the validation showed destroys the edge).
  */
-async function manageFuturesPending({ key, underlying, tf, candles, alert, session }) {
+async function manageFuturesPending({ key, underlying, tf, candles, futSymbol, alert, session }) {
   if (!CONFIG.PAPER_TRADING) {
     const today = new Date().toDateString();
     if (ema5tLiveWarnedDate !== today) {
@@ -1244,13 +1253,6 @@ async function manageFuturesPending({ key, underlying, tf, candles, alert, sessi
   }
   processedSignals.add(signalId);
   pendingEntries.delete(key);
-
-  const futSymbol = await resolveFuturesSymbol(underlying, session);
-  if (!futSymbol) {
-    logAudit({ type: "EMA5T_NO_CONTRACT", key, underlying: underlying.name });
-    saveState();
-    return;
-  }
 
   const slip = 0.0005; // same stop-fill slippage the 6-year validation charged
   const entry = p.dir === "LONG" ? p.level * (1 + slip) : p.level * (1 - slip);
