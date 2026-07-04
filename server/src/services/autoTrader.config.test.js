@@ -49,14 +49,14 @@ describe("sanitizeConfigUpdates (config bounds validation)", () => {
     expect(rejected.map((r) => r.key).sort()).toEqual(["fixedLots", "maxTradesPerDay"]);
   });
 
-  it("filters selectedStrategies to the registry allowlist and drops empty results", () => {
-    expect(sanitizeConfigUpdates({ selectedStrategies: ["EMA5", "EMA9", "EMA5"] }).clean.selectedStrategies).toEqual(["EMA5"]);
+  it("filters selectedStrategies to the allowlist (EMA5T only) and drops empty results", () => {
+    expect(sanitizeConfigUpdates({ selectedStrategies: ["EMA5T", "EMA9", "EMA5T"] }).clean.selectedStrategies).toEqual(["EMA5T"]);
     const bad = sanitizeConfigUpdates({ selectedStrategies: ["EMA9"] });
     expect(bad.clean.selectedStrategies).toBeUndefined();
     expect(bad.rejected[0].key).toBe("selectedStrategies");
     // A non-array string must never survive to be iterated character-by-character.
-    expect(sanitizeConfigUpdates({ selectedStrategies: "EMA5" }).clean.selectedStrategies).toEqual(["EMA5"]);
-    expect(sanitizeConfigUpdates({ selectedStrategies: "garbage" }).clean.selectedStrategies).toBeUndefined();
+    expect(sanitizeConfigUpdates({ selectedStrategies: "EMA5T" }).clean.selectedStrategies).toEqual(["EMA5T"]);
+    expect(sanitizeConfigUpdates({ selectedStrategies: "EMA5" }).clean.selectedStrategies).toBeUndefined();
   });
 
   it("filters selectedInstruments to NIFTY/BANKNIFTY", () => {
