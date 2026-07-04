@@ -369,6 +369,7 @@ export function AutoTrade() {
               {[
                 { id: "EMA5", label: "5 EMA Trend" },
                 { id: "EMA5_OPTION", label: "5 EMA Option Buying" },
+                { id: "EMA5T", label: "EMA5-Trend Futures (paper only)" },
               ].map((strategy) => (
                 <label key={strategy.id} className="flex items-center gap-2 text-2xs text-zinc-400">
                   <input

@@ -178,6 +178,13 @@ let auditLog = [];
 // trigger a naked exit and we never trade on an unverified picture of what we hold.
 let reconcileOk = false;
 
+// EMA5T (futures): resting stop-entry orders, keyed like activeAlerts. Phase A simulates
+// them in PAPER mode only (fill at the alert level ± slippage when a completed candle
+// crosses it — the exact fill model the 6-year validation used). Persisted so a mid-day
+// restart keeps them. The LIVE broker-side stop-entry path is not built yet and is blocked.
+let pendingEntries = new Map();
+let ema5tLiveWarnedDate = null;
+
 
 // ΓöÇΓöÇΓöÇ PERSISTENCE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const STATE_FILE = path.join(process.cwd(), "auto-trade-state.json");
@@ -195,6 +202,7 @@ function saveState() {
           todayTrades,
           lastTradeDate,
           processedSignals: Array.from(processedSignals),
+          pendingEntries: Array.from(pendingEntries.entries()),
           dailyPnL,
           dailyRealizedPnL,
           consecutiveLosses,
@@ -223,6 +231,7 @@ function loadState() {
       todayTrades = s.todayTrades || 0;
       lastTradeDate = s.lastTradeDate || null;
       processedSignals = new Set(s.processedSignals || []);
+      pendingEntries = new Map(s.pendingEntries || []);
       dailyPnL = s.dailyPnL || 0;
       dailyRealizedPnL = s.dailyRealizedPnL || 0;
       consecutiveLosses = s.consecutiveLosses || 0;
@@ -805,7 +814,9 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
   // dashboard/audit isn't optimistic. Paper mode has no real costs. The round-trip cost is charged
   // ONCE for the whole position (on the original entry qty), so a multi-leg exit — where earlier
   // legs were realized GROSS via settleLeg — never double-counts brokerage / buy-side charges.
-  const gross = (exitPrice - position.avgFillPrice) * exitQty;
+  // Direction-aware: SHORT futures profit when exit < entry (options have no side → long math).
+  const dirMult = position.side === "SHORT" ? -1 : 1;
+  const gross = (exitPrice - position.avgFillPrice) * exitQty * dirMult;
   const costQty = position.origEntryQty || exitQty;
   const costs = CONFIG.PAPER_TRADING ? 0 : computeOptionCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER });
   const pnl = gross - costs;
@@ -851,13 +862,14 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
 function settleLeg(position, exitPrice, qty, source) {
   const q = Math.min(Math.max(0, Number(qty) || 0), position.quantity || 0);
   if (q <= 0) return position.quantity || 0;
-  const gross = (exitPrice - position.avgFillPrice) * q;
+  const dirMult = position.side === "SHORT" ? -1 : 1;
+  const gross = (exitPrice - position.avgFillPrice) * q * dirMult;
   position.realizedPnl = (position.realizedPnl || 0) + gross;
   position.pnl = position.realizedPnl;
   dailyRealizedPnL += gross;
   position.quantity = (position.quantity || 0) - q;
   position.entryQty = position.quantity;
-  position.unrealizedPnl = position.currentLTP ? (position.currentLTP - position.avgFillPrice) * position.quantity : 0;
+  position.unrealizedPnl = position.currentLTP ? (position.currentLTP - position.avgFillPrice) * position.quantity * dirMult : 0;
   logAudit({ type: "PARTIAL_EXIT", optionSymbol: position.optionSymbol, source, exitPrice, qty: q, remainder: position.quantity, gross });
   console.error(`[AUTO-TRADER] PARTIAL EXIT ${position.optionSymbol} [${source}]: ${q} @ ₹${Number(exitPrice).toFixed(2)} — ${position.quantity} still held`);
   return position.quantity;
@@ -1233,13 +1245,16 @@ async function monitorPositions(session) {
       if (ltp <= 0) continue;
 
       position.currentLTP = ltp;
-      position.unrealizedPnl = (ltp - position.avgFillPrice) * position.quantity;
+      // Direction-aware P&L: options positions are always long (no `side` field → mult 1);
+      // EMA5T futures positions can be SHORT, where price down = profit and the SL sits ABOVE.
+      const dirMult = position.side === "SHORT" ? -1 : 1;
+      position.unrealizedPnl = (ltp - position.avgFillPrice) * position.quantity * dirMult;
 
       // Local backstop. In paper mode this is the only stop. In live mode the broker SL-M order is
       // primary (reconciled above first); this catches a broker SL stuck PENDING through a fast
       // move/gap. closePosition verifies the broker SL isn't already filled before placing an exit.
-      const slHit = ltp <= position.currentSL;
-      const targetHit = ltp >= position.target;
+      const slHit = dirMult === 1 ? ltp <= position.currentSL : ltp >= position.currentSL;
+      const targetHit = dirMult === 1 ? ltp >= position.target : ltp <= position.target;
 
       if (slHit) {
         await closePosition(position, session, "STOPLOSS");
@@ -1340,6 +1355,12 @@ async function processCandles(underlying, session) {
             timeframe: tf,
             detectedAt: new Date().toISOString(),
           });
+        }
+        // EMA5T (futures) uses resting stop entries managed separately — never the
+        // option/breakout flow below.
+        if (strategy === "EMA5T") {
+          await manageFuturesPending({ key, underlying, tf, candles, alert: activeAlerts.get(key), session });
+          continue;
         }
         const currentAlert = activeAlerts.get(key);
         if (!currentAlert) continue;
@@ -1449,6 +1470,179 @@ async function fetchOptionChain(symbol, session) {
   return data.data?.optionsChain || [];
 }
 
+// ─── EMA5T FUTURES (Phase A: paper only) ─────────────────────────────
+const MONTH_CODES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/** FYERS futures symbol, e.g. NSE:BANKNIFTY26JULFUT. Pure/exported for unit tests. */
+export function buildFuturesSymbol(underlyingName, year, monthIdx) {
+  return `NSE:${underlyingName}${String(year % 100).padStart(2, "0")}${MONTH_CODES[monthIdx]}FUT`;
+}
+
+// Resolve the tradable (current-month, else next) futures contract by asking FYERS for a
+// live quote rather than hardcoding expiry rules — expiry weekdays have changed repeatedly.
+// Cached per day.
+const futSymbolCache = { date: null, symbols: {} };
+async function resolveFuturesSymbol(underlying, session) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (futSymbolCache.date !== today) {
+    futSymbolCache.date = today;
+    futSymbolCache.symbols = {};
+  }
+  if (futSymbolCache.symbols[underlying.name]) return futSymbolCache.symbols[underlying.name];
+  const now = new Date();
+  for (let k = 0; k < 3; k++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + k, 1));
+    const sym = buildFuturesSymbol(underlying.name, d.getUTCFullYear(), d.getUTCMonth());
+    try {
+      const data = await fyersDataFetch(`${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(sym)}`, session);
+      if ((data.d?.[0]?.v?.lp || 0) > 0) {
+        futSymbolCache.symbols[underlying.name] = sym;
+        return sym;
+      }
+    } catch {
+      /* try the next month */
+    }
+  }
+  return null;
+}
+
+/**
+ * EMA5T resting stop-entry lifecycle (called once per underlying+timeframe per cycle,
+ * INSTEAD of the option/breakout flow). PAPER ONLY in Phase A — fills are simulated at
+ * the alert level ± slippage when a completed candle crosses it, with the same worst-case
+ * same-candle SL rule the 6-year validation used. The live broker-side stop-order path is
+ * deliberately NOT wired: running EMA5T in live mode refuses loudly instead of silently
+ * degrading to market fills (which the validation showed destroys the edge).
+ */
+async function manageFuturesPending({ key, underlying, tf, candles, alert, session }) {
+  if (!CONFIG.PAPER_TRADING) {
+    const today = new Date().toDateString();
+    if (ema5tLiveWarnedDate !== today) {
+      ema5tLiveWarnedDate = today;
+      console.error("[AUTO-TRADER] EMA5T is PAPER-ONLY until the live stop-entry path is built — skipping live signals.");
+      logAudit({ type: "EMA5T_LIVE_BLOCKED", key });
+    }
+    return;
+  }
+
+  const latest = candles[candles.length - 1]; // last COMPLETED candle (in-progress dropped upstream)
+
+  // A fresh alert (re)arms the resting stop at its level, replacing any previous pending.
+  if (alert) {
+    const existing = pendingEntries.get(key);
+    if (!existing || existing.alertTimestamp !== alert.timestamp) {
+      const dir = alert.type === "BULLISH_ALERT" ? "LONG" : "SHORT";
+      const level = dir === "LONG" ? alert.high : alert.low;
+      const sl = dir === "LONG" ? alert.low : alert.high;
+      const risk = Math.abs(level - sl);
+      if (risk > 0) {
+        pendingEntries.set(key, {
+          key,
+          strategy: "EMA5T",
+          underlying: underlying.name,
+          timeframe: tf,
+          dir,
+          level,
+          stopLoss: sl,
+          target: dir === "LONG" ? level + 2 * risk : level - 2 * risk,
+          alertTimestamp: alert.timestamp,
+          createdAt: new Date().toISOString(),
+        });
+        saveState();
+        logAudit({ type: "EMA5T_PENDING_ARMED", key, dir, level, stopLoss: sl, timeframe: tf });
+      }
+    }
+  }
+
+  const p = pendingEntries.get(key);
+  if (!p) return;
+
+  // Entry window: same 14:00 IST cutoff the validation used. Expired pendings are dropped.
+  if (!checkTimeFilter()) {
+    pendingEntries.delete(key);
+    saveState();
+    logAudit({ type: "EMA5T_PENDING_EXPIRED", key });
+    return;
+  }
+
+  // Fill check: has a completed candle crossed the resting level?
+  const crossed = p.dir === "LONG" ? latest[2] >= p.level : latest[3] <= p.level;
+  if (!crossed) return;
+
+  const signalId = `${key}-${p.alertTimestamp}-${p.dir}`;
+  if (processedSignals.has(signalId)) {
+    pendingEntries.delete(key);
+    saveState();
+    return;
+  }
+  if (!canTakeTrade(underlying.name)) {
+    pendingEntries.delete(key);
+    saveState();
+    return;
+  }
+  processedSignals.add(signalId);
+  pendingEntries.delete(key);
+
+  const futSymbol = await resolveFuturesSymbol(underlying, session);
+  if (!futSymbol) {
+    logAudit({ type: "EMA5T_NO_CONTRACT", key, underlying: underlying.name });
+    saveState();
+    return;
+  }
+
+  const slip = 0.0005; // same stop-fill slippage the 6-year validation charged
+  const entry = p.dir === "LONG" ? p.level * (1 + slip) : p.level * (1 - slip);
+  const qty = underlying.lotSize; // Phase A: fixed 1 lot
+  const marginReq = entry * qty * 0.14; // SPAN+exposure approximation with headroom
+  if (marginReq > CONFIG.CAPITAL) {
+    logAudit({ type: "EMA5T_MARGIN_SKIP", key, marginReq, capital: CONFIG.CAPITAL });
+    saveState();
+    return;
+  }
+
+  const position = {
+    id: `PAPER-FUT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    entryOrderId: null,
+    slOrderId: null,
+    kind: "FUT",
+    side: p.dir,
+    optionSymbol: futSymbol, // symbol field shared with the monitor/quote/audit plumbing
+    quantity: qty,
+    entryQty: qty,
+    origEntryQty: qty,
+    avgFillPrice: entry,
+    entryPrice: p.level,
+    stopLoss: p.stopLoss,
+    target: p.target,
+    currentSL: p.stopLoss,
+    unrealizedPnl: 0,
+    realizedPnl: 0,
+    pnl: 0,
+    status: "OPEN",
+    entryTime: new Date().toISOString(),
+    signal: { type: p.dir, strategy: "EMA5T", timeframe: tf, entryPrice: p.level, stopLoss: p.stopLoss, target: p.target, underlying: underlying.name },
+    underlying: underlying.name,
+  };
+  openPositions.push(position);
+  todayTrades++;
+  try {
+    subscribeToSymbols([futSymbol]);
+  } catch {
+    /* best-effort */
+  }
+  storeSignal({ ...position.signal, quantity: qty, optionSymbol: futSymbol, timestamp: p.alertTimestamp });
+  logAudit({ type: "POSITION_OPENED", kind: "FUT", strategy: "EMA5T", orderId: position.id, optionSymbol: futSymbol, side: p.dir, qty, entry, stopLoss: p.stopLoss, target: p.target, timeframe: tf });
+  console.log(`[AUTO-TRADER] EMA5T PAPER ${p.dir} ${futSymbol} @ ${entry.toFixed(2)} (SL ${p.stopLoss}, target ${p.target.toFixed(2)}, ${tf}m)`);
+
+  // Worst-case same-candle stop — backtest parity (SL is checked before target within a bar).
+  const sameBarSl = p.dir === "LONG" ? latest[3] <= p.stopLoss : latest[2] >= p.stopLoss;
+  if (sameBarSl) {
+    finalizeClose(position, { exitPrice: p.stopLoss, exitQty: qty, reason: "STOPLOSS", exitOrderId: position.id });
+  }
+  recalcDailyPnL();
+  saveState();
+}
+
 // ΓöÇΓöÇΓöÇ MARKET STATUS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 import { getNseMarketStatus } from "../utils/marketHolidays.js";
 
@@ -1488,6 +1682,8 @@ async function tradingLoop(session) {
       activeAlerts.clear();
       openPositions = openPositions.filter((p) => p.status !== "CLOSED");
       processedSignals.clear();
+      pendingEntries.clear(); // resting stop entries never carry across days
+      ema5tLiveWarnedDate = null;
       console.log(`[AUTO-TRADER] New day - all counters reset`);
       saveState();
     }
@@ -1788,7 +1984,7 @@ const CONFIG_NUMERIC_BOUNDS = {
   minOI: { min: 0, max: 10000000, int: true },
   maxTimeEntryHour: { min: 9, max: 15, int: true },
 };
-const ALLOWED_STRATEGIES = ["EMA5", "EMA5_OPTION"];
+const ALLOWED_STRATEGIES = ["EMA5", "EMA5_OPTION", "EMA5T"];
 const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY"];
 
 /**

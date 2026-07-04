@@ -71,6 +71,14 @@ export function detectAlertCandle(candles, strategy = "EMA5") {
     const ema20Series = emaSeries(closes, 20);
     if (ema20Series.length === 0) return null;
     trendEma = ema20Series[ema20Series.length - 1];
+  } else if (strategy === "EMA5T") {
+    // EMA5T (futures, 2026-07 validation): STRICT trend gate — EMA20 computed over closes
+    // EXCLUDING the latest bar, compared against the ALERT bar's close. The alert bar and
+    // everything the gate reads were fully closed before any entry could trigger, so live
+    // and backtest see identical information (the backtest's "no-lookahead" filter).
+    const ema20Series = emaSeries(closes.slice(0, -1), 20);
+    if (ema20Series.length === 0) return null;
+    trendEma = ema20Series[ema20Series.length - 1];
   }
 
   const type = detectAlert({ close, high, low, ema: ema5, trendEma });
