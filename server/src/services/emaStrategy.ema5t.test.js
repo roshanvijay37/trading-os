@@ -1,6 +1,7 @@
 ﻿import { describe, it, expect } from "vitest";
-import { detectAlertCandle } from "./emaStrategy.js";
-import { calculateEMA } from "./signalCore.js";
+// emaStrategy.calculateEMA returns the LAST EMA value; signalCore.calculateEMA returns the
+// full series (an array — subtracting from it yields NaN, which silently voided the fixtures).
+import { detectAlertCandle, calculateEMA } from "./emaStrategy.js";
 
 // EMA5T = the user's EMA5 alert + the STRICT trend gate validated in the 2026-07 research:
 // EMA20 computed over closes EXCLUDING the latest bar, compared against the ALERT bar's
