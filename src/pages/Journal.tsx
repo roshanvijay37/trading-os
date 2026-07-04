@@ -1,11 +1,19 @@
 import { BookOpen, Bot } from "lucide-react";
-import { Badge, Panel } from "../components/ui";
+import { Badge, Panel, Stat } from "../components/ui";
+import { calculateDiscipline } from "../rules/discipline";
 import { useTradingStore } from "../store/useTradingStore";
 import { formatDate } from "../utils/date";
 import { formatCurrency } from "../utils/format";
 
 export function Journal() {
   const { trades } = useTradingStore();
+
+  // Performance summary (formerly the Reports page — merged here, same data source).
+  const closed = trades.filter((trade) => trade.outcome !== "OPEN");
+  const wins = closed.filter((trade) => trade.outcome === "WIN").length;
+  const pnl = closed.reduce((total, trade) => total + trade.pnl, 0);
+  const discipline = calculateDiscipline(trades);
+  const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
 
   return (
     <div>
@@ -14,6 +22,13 @@ export function Journal() {
           <Bot size={10} />
           Bot-executed only
         </span>
+      </div>
+
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Discipline" value={`${discipline.score}%`} tone={discipline.score === 100 ? "green" : "amber"} />
+        <Stat label="Rule-following trades" value={`${discipline.ruleFollowingTrades}/${trades.length}`} />
+        <Stat label="Win rate" value={`${winRate}%`} tone={winRate >= 50 ? "green" : "zinc"} />
+        <Stat label="Realized P&L" value={formatCurrency(pnl)} tone={pnl > 0 ? "green" : pnl < 0 ? "rose" : "zinc"} />
       </div>
 
       {trades.length === 0 ? (

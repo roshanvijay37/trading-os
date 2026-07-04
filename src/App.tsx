@@ -5,11 +5,8 @@ import { AutoTrade } from "./pages/AutoTrade";
 import { CommandCenter } from "./pages/CommandCenter";
 import { Journal } from "./pages/Journal";
 import { Chart } from "./pages/Chart";
-import { Reports } from "./pages/Reports";
 import { Settings } from "./pages/Settings";
 import { BacktestLab } from "./pages/BacktestLab";
-import { StrategyManager } from "./pages/StrategyManager";
-import { RiskDashboard } from "./pages/RiskDashboard";
 import { MarketIntelligencePage } from "./pages/MarketIntelligence";
 import { OptionsTerminal } from "./options/OptionsTerminal";
 
@@ -21,12 +18,12 @@ export default function App() {
           <Route index element={<CommandCenter />} />
           <Route path="/chart" element={<Chart />} />
           <Route path="/trading-bot" element={<AutoTrade />} />
-          <Route path="/strategy-manager" element={<StrategyManager />} />
-          <Route path="/risk-dashboard" element={<RiskDashboard />} />
+          {/* Old bookmarks: risk lives in Command Center's Risk tab; reports merged into Journal. */}
+          <Route path="/risk-dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/reports" element={<Navigate to="/journal" replace />} />
           <Route path="/market-intelligence" element={<MarketIntelligencePage />} />
           <Route path="/options" element={<OptionsTerminal />} />
           <Route path="/journal" element={<Journal />} />
-          <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/backtest" element={<BacktestLab />} />
         </Route>

@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { Flash, Stat, Tabs } from "../components/ui";
+import { RiskDashboard } from "./RiskDashboard";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import {
   Brain,
@@ -40,7 +41,7 @@ export function CommandCenter() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "ai-cio">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "risk" | "ai-cio">("overview");
 
   useEffect(() => {
     getAIStatus().then(setAiStatus).catch(() => setAiStatus({
@@ -120,10 +121,11 @@ export function CommandCenter() {
       <Tabs
         tabs={[
           { id: "overview", label: "Overview", icon: LayoutDashboard },
+          { id: "risk", label: "Risk", icon: Shield },
           { id: "ai-cio", label: "AI CIO", icon: Brain },
         ]}
         value={activeTab}
-        onChange={(id) => setActiveTab(id as "overview" | "ai-cio")}
+        onChange={(id) => setActiveTab(id as "overview" | "risk" | "ai-cio")}
       />
 
       {activeTab === "overview" ? (
@@ -229,6 +231,8 @@ export function CommandCenter() {
             </div>
           )}
         </div>
+      ) : activeTab === "risk" ? (
+        <RiskDashboard />
       ) : (
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="space-y-5">
