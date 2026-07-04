@@ -9,7 +9,6 @@ import { navigation } from "./navigation";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import { useLiveDataSync } from "../store/useLiveDataSync";
 import { pingApi, isFyersConnected } from "../services/api";
-import { getAIStatus } from "../services/aiCio";
 import type { DashboardState } from "../types/institutional";
 
 function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
@@ -63,7 +62,6 @@ function computeMarketStatusIST(): DashboardState["marketStatus"] {
 function StatusBar() {
   const { state } = useInstitutionalStore();
   const [latency, setLatency] = useState<number | null>(null);
-  const [aiReachable, setAiReachable] = useState<boolean | null>(null);
   const [, setClock] = useState(0);
 
   // Live round-trip latency + reachability against our API.
@@ -75,25 +73,6 @@ function StatusBar() {
     }
     ping();
     const id = setInterval(ping, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
-
-  // AI CIO reachability.
-  useEffect(() => {
-    let cancelled = false;
-    async function check() {
-      try {
-        const s = await getAIStatus();
-        if (!cancelled) setAiReachable(!!(s.configured && s.reachable));
-      } catch {
-        if (!cancelled) setAiReachable(false);
-      }
-    }
-    check();
-    const id = setInterval(check, 60000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -122,11 +101,6 @@ function StatusBar() {
           <Activity size={10} className="text-zinc-600" />
           <span className="text-zinc-500">Latency</span>
           <span className={`font-mono ${latencyTone}`}>{latency === null ? "—" : `${latency}ms`}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${aiReachable ? "bg-gain animate-pulse" : "bg-zinc-600"}`} />
-          <span className="text-zinc-500">AI CIO</span>
-          <span className="text-zinc-400">{aiReachable === null ? "…" : aiReachable ? "Active" : "Rule-based"}</span>
         </div>
         <div className="ml-auto flex items-center gap-6">
           <span className={market.tone}>{market.text}</span>

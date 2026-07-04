@@ -80,12 +80,9 @@ The backend writes JSON state to **`process.cwd()`** (so it depends on where PM2
 ### Real-time ticks
 The server runs a WebSocket server at `/ws/ticks` (`server/src/index.js` + `server/src/services/tickService.js`); the FYERS data socket lives in `fyersDataSocketV3.js`. The frontend consumes it via `src/store/useLiveDataSync.ts`.
 
-### AI CIO (Kimi / Moonshot)
-`/api/ai` routes (`server/src/routes/ai.js`) call the Kimi (Moonshot) LLM for regime detection and the natural-language CIO chat; the frontend client is `src/services/aiCio.ts`. It falls back to rule-based behavior when no `KIMI_API_KEY` is set.
-
 ## Environment variables (server/.env)
 
-See `server/.env.example`. Required for broker features: `FYERS_APP_ID`, `FYERS_SECRET_ID`, `FYERS_REDIRECT_URL` (must exactly match the FYERS app config), `JWT_SECRET`. Server: `PORT` (default 3001), `FRONTEND_URL` (CORS). AI: `KIMI_API_KEY`, optional `KIMI_MODEL` / `KIMI_BASE_URL`.
+See `server/.env.example`. Required for broker features: `FYERS_APP_ID`, `FYERS_SECRET_ID`, `FYERS_REDIRECT_URL` (must exactly match the FYERS app config), `JWT_SECRET`. Server: `PORT` (default 3001), `FRONTEND_URL` (CORS). (The AI CIO / Kimi integration was removed in July 2026; `KIMI_*` vars are no longer read.)
 
 ## Deployment
 

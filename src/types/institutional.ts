@@ -948,7 +948,6 @@ export interface DashboardState {
   healthScore: number;
   executionScore: number;
   currentMarketRegime: MarketRegime;
-  aiCioRecommendation: string;
   alerts: DashboardAlert[];
   warnings: DashboardAlert[];
   recentLogs: string[];

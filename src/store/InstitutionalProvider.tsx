@@ -101,7 +101,7 @@ const defaultDashboard: DashboardState = {
   brokerStatus: defaultExecutionState.brokerHealth, exchangeStatus: defaultExecutionState.exchangeHealth,
   marketStatus: "CLOSED", signalQueue: 0, executionQueue: 0, runningStrategies: 0, pausedStrategies: 0,
   healthScore: 100, executionScore: 100, currentMarketRegime: "TRENDING_UP",
-  aiCioRecommendation: "System initialized. No active recommendations.", alerts: [], warnings: [], recentLogs: [],
+  alerts: [], warnings: [], recentLogs: [],
 };
 
 const defaultMarketIntel: MarketIntelligence = {
