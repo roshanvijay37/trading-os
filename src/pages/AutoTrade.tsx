@@ -367,8 +367,6 @@ export function AutoTrade() {
             <label className="text-2xs text-zinc-600">Active Strategies</label>
             <div className="mt-1.5 flex flex-wrap gap-3">
               {[
-                { id: "EMA5", label: "5 EMA Trend" },
-                { id: "EMA5_OPTION", label: "5 EMA Option Buying" },
                 { id: "EMA5T", label: "EMA5-Trend Futures (paper only)" },
               ].map((strategy) => (
                 <label key={strategy.id} className="flex items-center gap-2 text-2xs text-zinc-400">

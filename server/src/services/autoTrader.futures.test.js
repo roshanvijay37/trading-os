@@ -13,9 +13,11 @@ describe("buildFuturesSymbol (EMA5T futures contract naming)", () => {
   });
 });
 
-describe("EMA5T in the strategy allowlist", () => {
-  it("accepts EMA5T via /config and still rejects unknown ids", () => {
-    expect(sanitizeConfigUpdates({ selectedStrategies: ["EMA5", "EMA5T"] }).clean.selectedStrategies).toEqual(["EMA5", "EMA5T"]);
+describe("EMA5T is the only allowed strategy", () => {
+  it("accepts EMA5T and filters out everything else (legacy ids included)", () => {
+    expect(sanitizeConfigUpdates({ selectedStrategies: ["EMA5T"] }).clean.selectedStrategies).toEqual(["EMA5T"]);
+    expect(sanitizeConfigUpdates({ selectedStrategies: ["EMA5", "EMA5T"] }).clean.selectedStrategies).toEqual(["EMA5T"]);
+    expect(sanitizeConfigUpdates({ selectedStrategies: ["EMA5", "EMA5_OPTION"] }).clean.selectedStrategies).toBeUndefined();
     expect(sanitizeConfigUpdates({ selectedStrategies: ["EMA9"] }).clean.selectedStrategies).toBeUndefined();
   });
 });

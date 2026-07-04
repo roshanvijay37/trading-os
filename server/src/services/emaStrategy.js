@@ -1,17 +1,18 @@
 /**
- * Subhasish Pani's 5 EMA Strategy Engine
- * 
- * Rules (as actually enforced by the code — kept in sync with the audit):
- * 1. Timeframe: configurable (CONFIG.SELECTED_TIMEFRAMES, default 5m); each selected timeframe is
- *    scanned independently.
- * 2. Alert candle: a candle ENTIRELY beyond the 5 EMA (Subhasish Pani's rule; see signalCore.js) —
- *    NOT a simple cross.
- * 3. Entry: the next COMPLETED candle breaks the alert candle high/low (bullish/bearish).
- * 4. Stop Loss: alert candle low/high.
- * 5. Risk per trade: CONFIG.RISK_PERCENT (default 0.5%) of capital.
- * 6. No NEW entries after CONFIG.MAX_TIME_ENTRY_HOUR (default 14:00 IST) — EARLIER than Pani's 3 PM;
- *    isValidTradingTime also blocks new entries after 15:00 IST.
- * 7. Square off open positions at 15:15 IST (isSquareOffTime).
+ * EMA5T Strategy Engine — Subhasish Pani's 5-EMA rule + the strict trend gate validated
+ * over 6 years of FYERS data (2026-07 research; see strategy-research memory/audit).
+ *
+ * Rules (as actually enforced by the code):
+ * 1. Timeframes: CONFIG.SELECTED_TIMEFRAMES (validated set: 15/30/60m), each scanned independently.
+ * 2. Alert candle: a candle ENTIRELY beyond the 5 EMA (see signalCore.js) — NOT a simple cross.
+ * 3. Trend gate (EMA5T): the alert only arms when its close sits on the trend side of the
+ *    15m EMA20 computed WITHOUT the latest bar — no lookahead; live sees what the backtest saw.
+ * 4. Entry: resting stop order AT the alert high/low (managed in autoTrader.manageFuturesPending).
+ * 5. Stop Loss: alert candle low/high; target 1:2.
+ * 6. No NEW entries after CONFIG.MAX_TIME_ENTRY_HOUR (14:00 IST); square-off 15:15 IST.
+ *
+ * The legacy EMA5/EMA5_OPTION option-buying flow was removed 2026-07-04 (user request);
+ * git history retains it, and the Backtest Lab still backtests options separately.
  */
 
 import { randomUUID } from "crypto";
@@ -66,12 +67,7 @@ export function detectAlertCandle(candles, strategy = "EMA5") {
   const open = alertBar[1];
 
   let trendEma = null;
-  if (strategy === "EMA5_OPTION") {
-    // 5 EMA option buying needs the 20-EMA higher-timeframe trend filter.
-    const ema20Series = emaSeries(closes, 20);
-    if (ema20Series.length === 0) return null;
-    trendEma = ema20Series[ema20Series.length - 1];
-  } else if (strategy === "EMA5T") {
+  if (strategy === "EMA5T") {
     // EMA5T (futures, 2026-07 validation): STRICT trend gate — EMA20 computed over closes
     // EXCLUDING the latest bar, compared against the ALERT bar's close. The alert bar and
     // everything the gate reads were fully closed before any entry could trigger, so live
@@ -95,58 +91,6 @@ export function detectAlertCandle(candles, strategy = "EMA5") {
     close,
     open,
   };
-}
-
-/**
- * Detect breakout from alert candle
- * @param {Object[]} candles - Array of candles
- * @param {Object} alertCandle - The alert candle to check against
- * @returns {Object|null} Breakout signal or null
- */
-export function detectBreakout(candles, alertCandle) {
-  if (!alertCandle || candles.length < 2) return null;
-  
-  const latest = candles[candles.length - 1]; // Current forming candle
-  const previous = candles[candles.length - 2]; // Just completed candle
-  
-  const latestHigh = latest[2];
-  const latestLow = latest[3];
-  const latestClose = latest[4];
-  const latestTimestamp = latest[0];
-  
-  // Bullish breakout: Current candle breaks above alert candle high
-  if (alertCandle.type === "BULLISH_ALERT") {
-    if (latestHigh > alertCandle.high) {
-      return {
-        type: "LONG",
-        entryPrice: alertCandle.high,
-        stopLoss: alertCandle.low,
-        target: alertCandle.high + (alertCandle.high - alertCandle.low) * 2, // 1:2 R:R
-        alertCandle: alertCandle,
-        breakoutCandle: latest,
-        timestamp: latestTimestamp,
-        risk: alertCandle.high - alertCandle.low,
-      };
-    }
-  }
-  
-  // Bearish breakout: Current candle breaks below alert candle low
-  if (alertCandle.type === "BEARISH_ALERT") {
-    if (latestLow < alertCandle.low) {
-      return {
-        type: "SHORT",
-        entryPrice: alertCandle.low,
-        stopLoss: alertCandle.high,
-        target: alertCandle.low - (alertCandle.high - alertCandle.low) * 2, // 1:2 R:R
-        alertCandle: alertCandle,
-        breakoutCandle: latest,
-        timestamp: latestTimestamp,
-        risk: alertCandle.high - alertCandle.low,
-      };
-    }
-  }
-  
-  return null;
 }
 
 /**
@@ -178,40 +122,6 @@ export function isSquareOffTime() {
   const minutes = istMinutes % 60;
 
   return hours === 15 && minutes >= 15;
-}
-
-/**
- * Get ATM (At The Money) option symbol
- * @param {string} underlying - NIFTY50-INDEX or NIFTYBANK-INDEX
- * @param {number} spotPrice - Current spot price
- * @param {string} type - CE or PE
- * @param {Object} optionChain - Option chain data
- * @returns {string|null} Option symbol
- */
-export function getATMOption(underlying, spotPrice, type, optionChain) {
-  if (!optionChain || optionChain.length === 0) return null;
-  
-  // Filter options of the right type (CE/PE)
-  const options = optionChain.filter(opt => 
-    opt.option_type === type || opt.optionType === type
-  );
-  
-  if (options.length === 0) return null;
-  
-  // Find closest strike to spot price
-  let closest = options[0];
-  let minDiff = Math.abs((closest.strike_price || closest.strike) - spotPrice);
-  
-  for (const opt of options) {
-    const strike = opt.strike_price || opt.strike;
-    const diff = Math.abs(strike - spotPrice);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = opt;
-    }
-  }
-  
-  return closest.symbol || closest.tradingSymbol || closest.ts || null;
 }
 
 /**

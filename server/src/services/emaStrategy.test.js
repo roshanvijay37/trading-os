@@ -2,10 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   calculateEMA,
   detectAlertCandle,
-  detectBreakout,
   isValidTradingTime,
   isSquareOffTime,
-  getATMOption,
   storeSignal,
   getRecentSignals,
   clearSignals,
@@ -76,43 +74,9 @@ describe("detectAlertCandle (EMA5 — 'entirely beyond EMA' rule, unified with b
     expect(detectAlertCandle(candles, "EMA5")).toBeNull();
   });
 
-  it("returns null for EMA5_OPTION without the 20-candle warmup", () => {
+  it("returns null for EMA5T without the 20-candle trend-gate warmup", () => {
     const candles = Array.from({ length: 8 }, (_, i) => [i, 100, 101, 99, 100, 1000]);
-    expect(detectAlertCandle(candles, "EMA5_OPTION")).toBeNull();
-  });
-});
-
-describe("detectBreakout", () => {
-  const flat = [0, 0, 0, 0, 0, 0];
-
-  it("returns a LONG signal on a break above a bullish alert high", () => {
-    const alert = { type: "BULLISH_ALERT", high: 100, low: 95 };
-    const signal = detectBreakout([flat, [1, 100, 101, 99, 100, 1000]], alert);
-    expect(signal).not.toBeNull();
-    expect(signal.type).toBe("LONG");
-    expect(signal.entryPrice).toBe(100);
-    expect(signal.stopLoss).toBe(95);
-    expect(signal.target).toBe(110); // entry + risk*2
-    expect(signal.risk).toBe(5);
-  });
-
-  it("returns a SHORT signal on a break below a bearish alert low", () => {
-    const alert = { type: "BEARISH_ALERT", high: 100, low: 95 };
-    const signal = detectBreakout([flat, [1, 96, 97, 94, 95, 1000]], alert);
-    expect(signal).not.toBeNull();
-    expect(signal.type).toBe("SHORT");
-    expect(signal.entryPrice).toBe(95);
-    expect(signal.stopLoss).toBe(100);
-    expect(signal.target).toBe(85);
-  });
-
-  it("returns null when there is no breakout", () => {
-    const alert = { type: "BULLISH_ALERT", high: 100, low: 95 };
-    expect(detectBreakout([flat, [1, 98, 99, 97, 98, 1000]], alert)).toBeNull();
-  });
-
-  it("returns null without an alert candle", () => {
-    expect(detectBreakout([flat, [1, 100, 101, 99, 100, 1000]], null)).toBeNull();
+    expect(detectAlertCandle(candles, "EMA5T")).toBeNull();
   });
 });
 
@@ -143,29 +107,6 @@ describe("trading-time guards (IST, derived from UTC)", () => {
     expect(isSquareOffTime()).toBe(true);
     at("2026-06-26T09:44:00Z"); // 15:14 IST
     expect(isSquareOffTime()).toBe(false);
-  });
-});
-
-describe("getATMOption", () => {
-  const chain = [
-    { option_type: "CE", strike_price: 100, symbol: "OPT100CE" },
-    { option_type: "CE", strike_price: 110, symbol: "OPT110CE" },
-    { option_type: "PE", strike_price: 100, symbol: "OPT100PE" },
-  ];
-
-  it("returns null for an empty chain", () => {
-    expect(getATMOption("NIFTY", 103, "CE", [])).toBeNull();
-  });
-
-  it("picks the strike closest to spot for the requested type", () => {
-    expect(getATMOption("NIFTY", 103, "CE", chain)).toBe("OPT100CE");
-    expect(getATMOption("NIFTY", 108, "CE", chain)).toBe("OPT110CE");
-    expect(getATMOption("NIFTY", 103, "PE", chain)).toBe("OPT100PE");
-  });
-
-  it("supports alternate field names (optionType/strike/tradingSymbol)", () => {
-    const alt = [{ optionType: "CE", strike: 200, tradingSymbol: "ALT200CE" }];
-    expect(getATMOption("NIFTY", 199, "CE", alt)).toBe("ALT200CE");
   });
 });
 

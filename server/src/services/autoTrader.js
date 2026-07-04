@@ -8,16 +8,13 @@
 import {
   calculateEMA,
   detectAlertCandle,
-  detectBreakout,
   isValidTradingTime,
   isSquareOffTime,
-  getATMOption,
   storeSignal,
   getRecentSignals,
 } from "./emaStrategy.js";
 
 import {
-  placeLimitEntry,
   placeMarketExit,
   placeStopLossOrder,
   waitForFill,
@@ -96,7 +93,10 @@ const CONFIG = {
   PAPER_TRADING: true,
   BROKERAGE_PER_ORDER: 20,
   EMERGENCY_STOP: false,
-  SELECTED_STRATEGIES: ["EMA5"],
+  // EMA5T is the only live strategy: the trend-gated futures system validated over 6 years
+  // (2026-07). The legacy EMA5/EMA5_OPTION option-buying flow was removed at the user's
+  // request — the Backtest Lab retains options backtesting; git history retains the code.
+  SELECTED_STRATEGIES: ["EMA5T"],
   SELECTED_INSTRUMENTS: ["NIFTY", "BANKNIFTY"],
   // Candle timeframes (in minutes) the strategy scans — each is evaluated INDEPENDENTLY (a 5m
   // and a 15m signal each trade on their own). Subset of ALLOWED_TIMEFRAMES; never empty.
@@ -418,27 +418,6 @@ async function fetchAvailableFunds(session) {
   }
 }
 
-async function checkMargin(optionSymbol, qty, underlying, session, entryPremium = 0) {
-  try {
-    // Buying options costs the premium (premium x qty), not index SPAN margin. Fall back to
-    // the conservative index margin only if the premium is unknown.
-    const required =
-      entryPremium > 0
-        ? entryPremium * qty
-        : qty * (underlying.marginPerLot / underlying.lotSize);
-    // PAPER mode checks affordability against the SIMULATED capital (nothing is actually charged);
-    // the real broker balance can be below one lot and would block every paper trade. LIVE mode uses
-    // the real available funds.
-    const available = CONFIG.PAPER_TRADING ? CONFIG.CAPITAL : await fetchAvailableFunds(session);
-    const safeRequired = required * CONFIG.MARGIN_SAFETY_MULTIPLIER;
-    logAudit({ type: "MARGIN_CHECK", optionSymbol, qty, required, available, safeRequired, pass: available >= safeRequired });
-    return { pass: available >= safeRequired, available, required: safeRequired };
-  } catch (err) {
-    console.error("[AUTO-TRADER] Margin check error:", err.message);
-    return { pass: false, available: 0, required: 0 };
-  }
-}
-
 function checkDailyLossLimit() {
   const limit = -CONFIG.CAPITAL * (CONFIG.MAX_RISK_PER_DAY_PERCENT / 100);
   const hit = dailyPnL <= limit;
@@ -456,13 +435,6 @@ function checkConsecutiveLosses() {
     logAudit({ type: "CIRCUIT_BREAKER", reason: "CONSECUTIVE_LOSSES", consecutiveLosses });
   }
   return !hit;
-}
-
-function roundToLotSize(qty, underlying) {
-  // Floor to a whole number of lots. Do NOT force a minimum of one lot — when the
-  // risk-based size rounds below a lot the caller's `qty <= 0` guard must be allowed
-  // to skip the trade, otherwise the risk model is silently overridden.
-  return Math.floor(qty / underlying.lotSize) * underlying.lotSize;
 }
 
 // ΓöÇΓöÇΓöÇ MARKET FILTERS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -512,32 +484,6 @@ function checkCorrelationFilter(underlyingName) {
   return true;
 }
 
-async function checkLiquidity(optionSymbol, session, oi = 0) {
-  try {
-    const quote = await fetchOptionQuote(optionSymbol, session);
-    if (!quote) return { pass: false, reason: "NO_QUOTE" };
-    // OI is passed in from the option CHAIN. The /data/quotes endpoint this function reads for
-    // bid/ask/spread does NOT return an `oi` field, so sourcing OI from the quote was always 0
-    // and the LOW_OI check below blocked 100% of trades. Fall back to quote.oi only if present.
-    if (!oi) oi = quote.oi || 0;
-    if (!quote.bid || !quote.ask || quote.lp <= 0) {
-      return { pass: false, reason: "INVALID_QUOTE", quote };
-    }
-    const spread = ((quote.ask - quote.bid) / quote.lp) * 100;
-    if (oi < CONFIG.MIN_OI) {
-      logAudit({ type: "FILTER_BLOCKED", reason: "LOW_OI", optionSymbol, oi, minOI: CONFIG.MIN_OI });
-      return { pass: false, reason: "LOW_OI", quote };
-    }
-    if (spread > CONFIG.MAX_SPREAD_PCT) {
-      logAudit({ type: "FILTER_BLOCKED", reason: "HIGH_SPREAD", optionSymbol, spread });
-      return { pass: false, reason: "HIGH_SPREAD", quote };
-    }
-    return { pass: true, oi, spread, quote };
-  } catch (err) {
-    return { pass: false, reason: "ERROR", error: err.message };
-  }
-}
-
 async function fetchOptionQuote(optionSymbol, session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(optionSymbol)}`;
@@ -564,200 +510,12 @@ export function roundToTick(price, dir = "near") {
   return Math.round(n * OPTION_TICK * 100) / 100;
 }
 
-function computeEntryLimitPrice(quote) {
-  const base = quote.ask || quote.lp || 0;
-  if (base <= 0) return 0;
-  // Round the buffered price UP to the tick grid so the limit stays marketable AND is a valid tick.
-  return roundToTick(base * (1 + CONFIG.LIMIT_BUFFER_PCT / 100), "up");
-}
-
-function computeOptionSLAndTarget(avgFillPrice, signal) {
-  // C5 (residual, audited): this uses a fixed delta (OPTION_DELTA_ESTIMATE=0.5) to convert the
-  // underlying-point stop/target into OPTION-PREMIUM levels, and the live SL/target then trigger on
-  // the option PREMIUM. The backtest instead triggers on the INDEX level and prices the option via
-  // Black-Scholes. Backtest filters/warmup/costs/square-off are now aligned (C3), but this premium-vs-
-  // index trigger model is a deeper divergence; aligning it changes live position sizing/stops, so it
-  // is deferred to a separately paper-validated change rather than rushed here. Tracked in the audit.
-  // An option premium moves ~delta rupees per 1 rupee move in the underlying. Convert the
-  // strategy's underlying-point risk/target into option-premium points and apply them as
-  // absolute rupee distances from the fill price. (The previous version multiplied a
-  // fraction-of-index by delta and applied it as a fraction-of-premium, which put the stop
-  // a fraction of a percent from entry — stopped out instantly on normal noise.)
-  const delta = CONFIG.OPTION_DELTA_ESTIMATE;
-  const underlyingRiskPts = Math.abs(signal.entryPrice - signal.stopLoss);
-  const underlyingTargetPts = Math.abs(signal.target - signal.entryPrice);
-  const optionRiskPts = underlyingRiskPts * delta;
-  const optionTargetPts = underlyingTargetPts * delta;
-  const optionSL = Math.max(0.05, avgFillPrice - optionRiskPts);
-  const optionTarget = avgFillPrice + optionTargetPts;
-  return {
-    // Snap to the ₹0.05 tick grid or FYERS rejects the SL/target order. SL rounds DOWN (valid and
-    // never tighter than intended, floored at the ₹0.05 minimum), target rounds to nearest.
-    optionSL: Math.max(0.05, roundToTick(optionSL, "down")),
-    optionTarget: roundToTick(optionTarget, "near"),
-  };
-}
-
 // ─── ORDER EXECUTION ──────────────────────────────────────────────────
-/**
- * C-LIVE-1: after the entry fill poll, make sure NO working entry order is left resting at the
- * broker, and return the TRUE final fill. On a TIMEOUT/PARTIAL the DAY limit may still be live —
- * cancel it, then re-read the order so a fill that landed between the last poll and the cancel is
- * never abandoned (which would leave an untracked, unprotected position). Terminal states pass
- * through unchanged.
- */
-async function reconcileEntryOrder(orderId, fill, session) {
-  if (fill.status === "FILLED" || ["REJECTED", "CANCELLED", "EXPIRED"].includes(fill.status)) {
-    return fill;
-  }
-  try {
-    await cancelOrder(orderId, session, logAudit);
-  } catch (err) {
-    console.error(`[AUTO-TRADER] Entry cancel failed for ${orderId} (will re-read status):`, err.message);
-  }
-  try {
-    const finalState = await getOrderDetails(orderId, session);
-    return {
-      ...fill,
-      status: finalState.status,
-      filledQty: finalState.filledQty,
-      pendingQty: finalState.pendingQty,
-      avgFillPrice: finalState.avgFillPrice || fill.avgFillPrice,
-    };
-  } catch (err) {
-    console.error(`[AUTO-TRADER] Entry re-read failed for ${orderId}:`, err.message);
-    return fill;
-  }
-}
+// (The options limit-entry flow — computeEntryLimitPrice / computeOptionSLAndTarget /
+// reconcileEntryOrder / openPosition — was removed with the legacy EMA5/EMA5_OPTION
+// strategies. EMA5T enters via resting stop orders in manageFuturesPending; the shared
+// exit/SL/reconcile machinery below is unchanged.)
 
-async function openPosition(tradeSignal, optionSymbol, qty, session, entryQuote) {
-  const entryLimitPrice = computeEntryLimitPrice(entryQuote);
-  if (entryLimitPrice <= 0) {
-    throw new Error("Could not compute valid entry limit price");
-  }
-
-  // Subscribe to live ticks for this option so monitorPositions() can read getLatestTick()
-  // for the traded instrument instead of always falling back to REST quotes. (Safe to call
-  // before the socket is open — the tick service queues it into subscribedSymbols and
-  // (re)subscribes on connect.)
-  try {
-    subscribeToSymbols([optionSymbol]);
-  } catch (err) {
-    console.error(`[AUTO-TRADER] Could not subscribe ticks for ${optionSymbol}:`, err.message);
-  }
-
-  const entryOrder = await placeLimitEntry({
-    symbol: optionSymbol,
-    qty,
-    limitPrice: entryLimitPrice,
-    session,
-    paperTrading: CONFIG.PAPER_TRADING,
-    auditLogger: logAudit,
-  });
-
-  let fill = await waitForFill(entryOrder.orderId, session, {
-    timeoutMs: CONFIG.ORDER_FILL_TIMEOUT_MS,
-    pollMs: CONFIG.ORDER_POLL_INTERVAL_MS,
-    paperTrading: CONFIG.PAPER_TRADING,
-    paperFillPrice: entryLimitPrice,
-    auditLogger: logAudit,
-  });
-
-  // C-LIVE-1: never abandon a working entry order. On any non-FILLED result cancel the resting
-  // remainder and re-read the true fill, so a TIMEOUT (0 filled, order still live) or a partial can't
-  // fill later as an untracked, unprotected position. After this, filledQty is the real held qty and
-  // any remainder has been cancelled — so we gate purely on filledQty, not the raw status.
-  if (!CONFIG.PAPER_TRADING) {
-    fill = await reconcileEntryOrder(entryOrder.orderId, fill, session);
-  }
-
-  const filledQty = CONFIG.PAPER_TRADING ? qty : Number(fill.filledQty) || 0;
-  if (filledQty <= 0) {
-    logAudit({ type: "ENTRY_FAILED", orderId: entryOrder.orderId, status: fill.status, symbol: optionSymbol });
-    return null;
-  }
-
-  const avgFillPrice = fill.avgFillPrice || entryLimitPrice;
-  const { optionSL, optionTarget } = computeOptionSLAndTarget(avgFillPrice, tradeSignal);
-
-  // C-LIVE-2: record the position BEFORE placing the stop-loss so a filled entry is ALWAYS tracked,
-  // even if SL placement throws. An untracked filled position is invisible to reconciliation and
-  // would sit naked; a tracked one is caught by the monitor backstop and the SL re-arm below.
-  const position = {
-    id: entryOrder.orderId,
-    entryOrderId: entryOrder.orderId,
-    slOrderId: null,
-    optionSymbol,
-    quantity: filledQty, // currently-held qty (reduced as legs exit)
-    entryQty: filledQty, // qty going into the current close (synced to quantity across legs)
-    origEntryQty: filledQty, // IMMUTABLE original — used to charge round-trip costs exactly once
-    avgFillPrice,
-    entryPrice: tradeSignal.entryPrice,
-    stopLoss: optionSL,
-    target: optionTarget,
-    currentSL: optionSL,
-    unrealizedPnl: 0,
-    realizedPnl: 0,
-    pnl: 0,
-    status: "OPEN",
-    entryTime: new Date().toISOString(),
-    signal: tradeSignal,
-    underlying: tradeSignal.underlying,
-  };
-
-  openPositions.push(position);
-  todayTrades++;
-  recalcDailyPnL();
-  saveState();
-
-  logAudit({
-    type: "POSITION_OPENED",
-    strategy: tradeSignal.strategy,
-    orderId: entryOrder.orderId,
-    optionSymbol,
-    qty: filledQty,
-    avgFillPrice,
-    entryLimitPrice,
-    optionSL,
-    optionTarget,
-    underlying: tradeSignal.underlying,
-  });
-
-  console.log(
-    `[AUTO-TRADER] POSITION [${tradeSignal.strategy}]: ${optionSymbol} Qty:${filledQty} AvgFill:₹${avgFillPrice.toFixed(2)} SL:₹${optionSL.toFixed(2)} T:₹${optionTarget.toFixed(2)}`
-  );
-
-  // Attach the protective broker stop-loss. If it can't be placed, flatten immediately rather than
-  // hold a naked long; if the flatten also fails, the position stays TRACKED and monitorPositions
-  // re-arms the SL / retries the exit every cycle.
-  if (!CONFIG.PAPER_TRADING) {
-    try {
-      const slOrder = await placeStopLossOrder({
-        symbol: optionSymbol,
-        qty: filledQty,
-        stopPrice: optionSL,
-        session,
-        paperTrading: false,
-        auditLogger: logAudit,
-      });
-      position.slOrderId = slOrder.orderId;
-      logAudit({ type: "SL_PLACED", optionSymbol, slOrderId: position.slOrderId, stopPrice: optionSL });
-      saveState();
-    } catch (err) {
-      console.error(`[AUTO-TRADER] SL placement FAILED for ${optionSymbol} — flattening to avoid a naked position:`, err.message);
-      logAudit({ type: "SL_PLACEMENT_FAILED", optionSymbol, error: err.message });
-      try {
-        await closePosition(position, session, "SL_PLACEMENT_FAILED");
-      } catch (flatErr) {
-        console.error(`[AUTO-TRADER] Flatten after SL failure ALSO failed for ${optionSymbol} — monitor will re-arm/retry:`, flatErr.message);
-        logAudit({ type: "FLATTEN_FAILED", optionSymbol, error: flatErr.message });
-      }
-      return null;
-    }
-  }
-
-  return position;
-}
 
 // ─── POSITION MANAGEMENT ──────────────────────────────────────────────
 /**
@@ -1236,7 +994,7 @@ async function monitorPositions(session) {
     try {
       // A live position must always have a resting broker stop. If it lost its SL (initial placement
       // failed, or the SL order was cancelled/expired), re-arm before anything else — self-heals the
-      // rare naked window from a failed SL placement in openPosition.
+      // rare naked window from a failed SL placement at entry.
       if (!CONFIG.PAPER_TRADING && !position.slOrderId) {
         await ensureStopLoss(position, session);
       }
@@ -1313,20 +1071,6 @@ function checkMaxTrades() {
   return !hit;
 }
 
-function calculatePositionSize(entryPrice, stopLoss, underlying) {
-  if (CONFIG.POSITION_SIZING_MODE === "LOTS") {
-    return CONFIG.FIXED_LOTS * underlying.lotSize;
-  }
-  const riskAmount = CONFIG.CAPITAL * (CONFIG.RISK_PERCENT / 100);
-  // We trade the OPTION, so size against the option-premium risk per unit, not the raw
-  // index points. Option risk per unit ~= underlying point risk x delta (matches the
-  // option stop distance in computeOptionSLAndTarget). Using raw index points here made
-  // qty ~1/delta too small, so the real rupee risk never matched the configured risk %.
-  const optionRiskPerUnit = Math.abs(entryPrice - stopLoss) * CONFIG.OPTION_DELTA_ESTIMATE;
-  if (optionRiskPerUnit <= 0) return 0;
-  return Math.floor(riskAmount / optionRiskPerUnit);
-}
-
 async function processCandles(underlying, session) {
   try {
     // Scan EACH selected timeframe independently — a 5m and a 15m setup on the same underlying
@@ -1356,93 +1100,11 @@ async function processCandles(underlying, session) {
             detectedAt: new Date().toISOString(),
           });
         }
-        // EMA5T (futures) uses resting stop entries managed separately — never the
-        // option/breakout flow below.
+        // EMA5T (the only strategy) trades futures via resting stop entries. The legacy
+        // option/breakout entry flow was removed with EMA5/EMA5_OPTION.
         if (strategy === "EMA5T") {
           await manageFuturesPending({ key, underlying, tf, candles, alert: activeAlerts.get(key), session });
-          continue;
         }
-        const currentAlert = activeAlerts.get(key);
-        if (!currentAlert) continue;
-        const signal = detectBreakout(candles, currentAlert);
-        if (!signal) continue;
-        if (!canTakeTrade(underlying.name)) {
-          activeAlerts.delete(key);
-          continue;
-        }
-        const signalId = `${key}-${signal.timestamp}-${signal.type}`;
-        if (processedSignals.has(signalId)) {
-          activeAlerts.delete(key);
-          continue;
-        }
-        processedSignals.add(signalId);
-        if (!checkVIXFilter()) {
-          activeAlerts.delete(key);
-          continue;
-        }
-        const optionChain = await fetchOptionChain(underlying.symbol, session);
-        const optionType = signal.type === "LONG" ? "CE" : "PE";
-        const optionSymbol = getATMOption(underlying.name, signal.entryPrice, optionType, optionChain);
-        if (!optionSymbol) {
-          activeAlerts.delete(key);
-          continue;
-        }
-        // OI must come from the option CHAIN — the /data/quotes endpoint checkLiquidity uses for
-        // bid/ask does NOT return an `oi` field, so reading it from the quote was always 0 and
-        // LOW_OI blocked every trade. Match the selected symbol back to its chain row.
-        const chainRow = optionChain.find((r) => (r.symbol || r.tradingSymbol || r.ts) === optionSymbol);
-        const optionOi = Number(chainRow?.oi ?? chainRow?.openInterest ?? 0) || 0;
-        const liquidity = await checkLiquidity(optionSymbol, session, optionOi);
-        if (!liquidity.pass) {
-          console.log(`[AUTO-TRADER] Liquidity check failed: ${liquidity.reason}`);
-          activeAlerts.delete(key);
-          continue;
-        }
-        const rawQty = calculatePositionSize(signal.entryPrice, signal.stopLoss, underlying);
-        const qty = roundToLotSize(rawQty, underlying);
-        if (qty <= 0) {
-          // Sub-lot risk sizing skips the trade by design — but it must be VISIBLE, or a day of
-          // zero trades from small capital is indistinguishable from a dead bot in the audit trail.
-          logAudit({
-            type: "SIZING_SKIPPED",
-            reason: "SUB_LOT_RISK_SIZE",
-            underlying: underlying.name,
-            strategy,
-            timeframe: tf,
-            rawQty,
-            lotSize: underlying.lotSize,
-          });
-          activeAlerts.delete(key);
-          continue;
-        }
-        const entryPremium = liquidity.quote?.ask || liquidity.quote?.lp || 0;
-        const margin = await checkMargin(optionSymbol, qty, underlying, session, entryPremium);
-        if (!margin.pass) {
-          console.log(`[AUTO-TRADER] Margin insufficient: need ₹${margin.required.toFixed(2)}, have ₹${margin.available.toFixed(2)}`);
-          activeAlerts.delete(key);
-          continue;
-        }
-        const tradeSignal = {
-          ...signal,
-          strategy,
-          timeframe: tf,
-          quantity: qty,
-          optionSymbol,
-          underlying: underlying.name,
-          underlyingSymbol: underlying.symbol,
-        };
-        storeSignal(tradeSignal);
-        try {
-          const position = await openPosition(tradeSignal, optionSymbol, qty, session, liquidity.quote);
-          if (!position) {
-            activeAlerts.delete(key);
-            continue;
-          }
-        } catch (orderError) {
-          console.error(`[AUTO-TRADER] Order failed:`, orderError.message);
-          logAudit({ type: "ORDER_FAILED", error: orderError.message, signal: tradeSignal });
-        }
-        activeAlerts.delete(key);
       }
     }
   } catch (error) {
@@ -1462,12 +1124,6 @@ async function fetchLatestCandles(symbol, session, timeframeMinutes) {
   const url = `${FYERS_DATA_BASE}/history?symbol=${encodeURIComponent(symbol)}&resolution=${tf}&date_format=0&range_from=${from}&range_to=${now}&cont_flag=1`;
   const data = await fyersDataFetch(url, session);
   return data.candles || [];
-}
-
-async function fetchOptionChain(symbol, session) {
-  const url = `${FYERS_DATA_BASE}/options-chain-v3?symbol=${encodeURIComponent(symbol)}&strikecount=5`;
-  const data = await fyersDataFetch(url, session);
-  return data.data?.optionsChain || [];
 }
 
 // ─── EMA5T FUTURES (Phase A: paper only) ─────────────────────────────
@@ -1576,6 +1232,12 @@ async function manageFuturesPending({ key, underlying, tf, candles, alert, sessi
     return;
   }
   if (!canTakeTrade(underlying.name)) {
+    pendingEntries.delete(key);
+    saveState();
+    return;
+  }
+  // Catastrophe guard only (validated spec has no VIX band): skip fills when VIX > MAX_VIX.
+  if (!checkVIXFilter()) {
     pendingEntries.delete(key);
     saveState();
     return;
@@ -1984,7 +1646,7 @@ const CONFIG_NUMERIC_BOUNDS = {
   minOI: { min: 0, max: 10000000, int: true },
   maxTimeEntryHour: { min: 9, max: 15, int: true },
 };
-const ALLOWED_STRATEGIES = ["EMA5", "EMA5_OPTION", "EMA5T"];
+const ALLOWED_STRATEGIES = ["EMA5T"];
 const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY"];
 
 /**
