@@ -1,0 +1,421 @@
+<style>
+/* ================= FONTS ================= */
+@font-face{font-family:'KSans';src:url({{FONT_SANS_REG}}) format('truetype');font-weight:400;font-display:swap;}
+@font-face{font-family:'KSans';src:url({{FONT_SANS_BOLD}}) format('truetype');font-weight:700;font-display:swap;}
+@font-face{font-family:'KSans';src:url({{FONT_SANS_BLACK}}) format('truetype');font-weight:900;font-display:swap;}
+@font-face{font-family:'KSerif';src:url({{FONT_SERIF_MED}}) format('truetype');font-weight:500;font-display:swap;}
+@font-face{font-family:'KSerif';src:url({{FONT_SERIF_BOLD}}) format('truetype');font-weight:700;font-display:swap;}
+@font-face{font-family:'KSerif';src:url({{FONT_SERIF_BLACK}}) format('truetype');font-weight:900;font-display:swap;}
+@font-face{font-family:'Playfair';src:url({{FONT_PLAYFAIR_SB}}) format('truetype');font-weight:600;font-display:swap;}
+@font-face{font-family:'Playfair';src:url({{FONT_PLAYFAIR_BK}}) format('truetype');font-weight:900;font-display:swap;}
+
+/* ================= THEME ================= */
+:root{
+  --paper:#f7f1e6;
+  --paper2:#fbf7ee;
+  --ink:#2a2119;
+  --ink-soft:#5b4d3d;
+  --maroon:#6d1f2b;
+  --maroon-deep:#4e121c;
+  --crimson:#8f2636;
+  --gold:#b8892b;
+  --gold-lt:#d9b25a;
+  --gold-deep:#8a6414;
+  --line:#d9c9a8;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{background:#4e121c;}
+body{font-family:'KSans',sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+/* ================= PAGE FRAME ================= */
+.page{
+  position:relative;
+  width:210mm;height:297mm;
+  margin:0 auto;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,.5), transparent 60%),
+    var(--paper);
+  overflow:hidden;
+  page-break-after:always;
+  break-after:page;
+}
+.page:last-child{page-break-after:auto;}
+/* screen separation */
+@media screen{ .page{ box-shadow:0 18px 60px rgba(0,0,0,.5); margin:26px auto; } }
+
+/* faint paper texture */
+.page::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.55;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(120,90,40,.020) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(0deg, rgba(120,90,40,.018) 0 2px, transparent 2px 5px);
+}
+/* gold double border */
+.frame{position:absolute;inset:9mm;border:1.4px solid var(--gold);pointer-events:none;}
+.frame::after{content:"";position:absolute;inset:2.4mm;border:.7px solid rgba(184,137,43,.55);}
+/* corner ornaments */
+.corner{position:absolute;width:15mm;height:15mm;pointer-events:none;color:var(--gold);}
+.corner svg{width:100%;height:100%;display:block;}
+.c-tl{top:6mm;left:6mm;}
+.c-tr{top:6mm;right:6mm;transform:scaleX(-1);}
+.c-bl{bottom:6mm;left:6mm;transform:scaleY(-1);}
+.c-br{bottom:6mm;right:6mm;transform:scale(-1,-1);}
+
+.pad{position:absolute;inset:16mm;display:flex;flex-direction:column;}
+
+/* ============ SHARED TYPO ============ */
+.kicker{font-family:'KSerif';font-weight:500;letter-spacing:.32em;text-transform:uppercase;
+  font-size:9.5pt;color:var(--gold-deep);text-align:center;}
+.rule-orn{display:flex;align-items:center;justify-content:center;gap:10px;margin:9px 0;color:var(--gold);}
+.rule-orn::before,.rule-orn::after{content:"";height:1px;width:60px;background:linear-gradient(90deg,transparent,var(--gold));}
+.rule-orn::after{background:linear-gradient(270deg,transparent,var(--gold));}
+.diamond{width:7px;height:7px;background:var(--gold);transform:rotate(45deg);box-shadow:0 0 0 3px rgba(184,137,43,.18);}
+
+.sec-head{margin-bottom:7mm;}
+.sec-num{font-family:'Playfair';font-weight:600;font-size:12pt;color:var(--crimson);letter-spacing:.08em;}
+.sec-title{font-family:'KSerif';font-weight:900;color:var(--maroon);font-size:26pt;line-height:1.24;margin-top:2px;}
+.sec-sub{font-family:'KSerif';font-weight:500;color:var(--gold-deep);font-size:11pt;margin-top:3px;letter-spacing:.02em;}
+
+p.body{font-size:11.6pt;line-height:1.92;color:var(--ink);text-align:justify;text-justify:inter-word;}
+p.body + p.body{margin-top:5mm;}
+.lead::first-letter{
+  font-family:'KSerif';font-weight:900;color:var(--crimson);
+  font-size:46pt;line-height:.8;float:left;margin:6px 10px 0 0;
+}
+
+/* ============ IMAGES ============ */
+.ph{position:relative;background:#000;overflow:hidden;border:1px solid rgba(184,137,43,.5);
+  box-shadow:0 8px 22px rgba(60,20,20,.22);}
+.ph img{width:100%;height:100%;object-fit:cover;display:block;}
+.ph .cap{position:absolute;left:0;right:0;bottom:0;padding:9px 12px 8px;
+  background:linear-gradient(0deg, rgba(30,12,12,.82), rgba(30,12,12,0));
+  color:#f3e6c8;font-size:8.6pt;font-weight:700;letter-spacing:.02em;}
+.ph.gold{padding:5px;background:linear-gradient(135deg,var(--gold-lt),var(--gold-deep));}
+.ph.gold img{border:1px solid rgba(0,0,0,.15);}
+
+/* ============ COVER ============ */
+.cover{background:
+   radial-gradient(130% 90% at 50% 0%, #7d2432 0%, #5c1622 45%, #3f0e18 100%);}
+.cover .frame{border-color:var(--gold-lt);}
+.cover .frame::after{border-color:rgba(217,178,90,.6);}
+.cover .corner{color:var(--gold-lt);}
+.cover-pad{position:absolute;inset:15mm;display:flex;flex-direction:column;align-items:center;text-align:center;color:#f6ead0;}
+.cover-kicker{font-family:'KSerif';font-weight:500;letter-spacing:.4em;text-transform:uppercase;
+  font-size:10pt;color:var(--gold-lt);margin-top:4mm;}
+.cover-name{font-family:'KSerif';font-weight:900;font-size:40pt;line-height:1.16;color:#fff;
+  margin-top:5mm;text-shadow:0 2px 18px rgba(0,0,0,.35);}
+.cover-name .sri{display:block;font-size:17pt;font-weight:500;color:var(--gold-lt);letter-spacing:.08em;margin-bottom:2mm;}
+.cover-roles{font-family:'KSans';font-weight:700;font-size:11.5pt;color:#e9d9b4;letter-spacing:.04em;margin-top:5mm;line-height:1.9;}
+.cover-roles b{color:var(--gold-lt);}
+.hero{width:66mm;height:66mm;border-radius:50%;margin:8mm 0 0;position:relative;
+  padding:5px;background:linear-gradient(140deg,var(--gold-lt),var(--gold-deep));
+  box-shadow:0 14px 40px rgba(0,0,0,.5);}
+.hero img{width:100%;height:100%;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.35);}
+.hero::after{content:"";position:absolute;inset:-7px;border:1px solid rgba(217,178,90,.45);border-radius:50%;}
+.cover-tag{font-family:'KSerif';font-weight:700;font-size:15pt;color:var(--gold-lt);margin-top:7mm;line-height:1.5;}
+.medals{display:flex;gap:6mm;margin-top:auto;padding-top:6mm;width:100%;justify-content:center;}
+.medal{flex:1;max-width:70mm;border:1px solid rgba(217,178,90,.5);background:rgba(0,0,0,.18);
+  padding:5mm 4mm;border-radius:3px;}
+.medal .star{color:var(--gold-lt);font-size:13pt;}
+.medal .mt{font-family:'KSans';font-weight:700;font-size:9.8pt;color:#fff;line-height:1.5;margin-top:3px;}
+.medal .ms{font-size:8pt;color:var(--gold-lt);margin-top:3px;letter-spacing:.03em;}
+
+/* ============ PAGE FOOTER ============ */
+.pfoot{position:absolute;left:16mm;right:16mm;bottom:11mm;display:flex;align-items:center;
+  justify-content:space-between;font-family:'Playfair';font-size:8.5pt;color:var(--gold-deep);
+  letter-spacing:.12em;text-transform:uppercase;}
+.pfoot span{display:flex;align-items:center;gap:7px;}
+.pfoot .dot{width:4px;height:4px;background:var(--gold);transform:rotate(45deg);}
+
+/* ============ PERSONAL DETAILS ============ */
+.dl{margin-top:2mm;border-top:1.4px solid var(--gold);}
+.dl .row{display:flex;padding:4.4mm 0;border-bottom:1px solid var(--line);}
+.dl .k{flex:0 0 46mm;font-family:'KSerif';font-weight:700;color:var(--maroon);font-size:11pt;}
+.dl .v{flex:1;font-size:11.4pt;color:var(--ink);line-height:1.55;font-weight:700;}
+.dl .v small{display:block;font-weight:400;color:var(--ink-soft);font-size:9.6pt;margin-top:2px;letter-spacing:.01em;}
+
+/* quote card */
+.quote{margin-top:auto;background:linear-gradient(135deg,#6d1f2b,#4e121c);color:#f6ead0;
+  padding:9mm 10mm;position:relative;border-radius:3px;box-shadow:0 12px 30px rgba(60,15,20,.3);}
+.quote::before{content:"\201C";font-family:'Playfair';font-size:60pt;color:var(--gold-lt);
+  position:absolute;top:-6mm;left:6mm;opacity:.6;}
+.quote p{font-family:'KSerif';font-weight:500;font-size:15pt;line-height:1.7;text-align:center;}
+.quote .by{text-align:center;margin-top:5mm;color:var(--gold-lt);font-family:'KSans';font-weight:700;
+  font-size:9.5pt;letter-spacing:.18em;text-transform:uppercase;}
+
+/* highlight chips */
+.chips{display:flex;flex-wrap:wrap;gap:3mm;margin-top:5mm;}
+.chip{border:1px solid var(--gold);color:var(--maroon);background:rgba(184,137,43,.09);
+  border-radius:40px;padding:2.4mm 5mm;font-weight:700;font-size:9.6pt;}
+
+/* two column media rows */
+.mediarow{display:flex;gap:6mm;margin-top:6mm;}
+.mediarow .ph{flex:1;}
+
+/* gallery */
+.gallery{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;margin-top:6mm;}
+.gallery .ph{height:44mm;}
+.gallery .ph.tall{grid-row:span 2;height:auto;}
+
+/* pull panel */
+.panel{background:var(--paper2);border:1px solid var(--line);border-left:3px solid var(--gold);
+  padding:6mm 7mm;margin-top:6mm;box-shadow:0 4px 14px rgba(90,60,20,.08);}
+.panel h4{font-family:'KSerif';font-weight:900;color:var(--maroon);font-size:13pt;margin-bottom:3mm;}
+.panel p{font-size:10.8pt;line-height:1.8;color:var(--ink-soft);}
+
+/* award list */
+.awlist{list-style:none;margin-top:2mm;}
+.awlist li{display:flex;gap:10px;padding:3.6mm 0;border-bottom:1px dashed var(--line);align-items:flex-start;}
+.awlist li:last-child{border-bottom:none;}
+.awlist .mk{color:var(--gold);font-size:12pt;line-height:1.4;flex:0 0 auto;}
+.awlist .tx{font-size:11pt;line-height:1.6;}
+.awlist .tx b{color:var(--maroon);font-weight:900;font-family:'KSerif';}
+.awlist .tx small{display:block;color:var(--ink-soft);font-size:9.4pt;margin-top:1px;}
+</style>
+
+<!-- ============ SVG CORNER (reused) ============ -->
+<template id="corner-svg">
+<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="1.6">
+<path d="M4 40 C4 18 18 4 40 4"/>
+<path d="M10 46 C10 26 26 10 46 10" stroke-width="1"/>
+<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+<path d="M22 12 q10 0 10 10 M12 22 q0 10 10 10" stroke-width="1"/>
+</svg>
+</template>
+
+<!-- =================================================================== -->
+<!-- PAGE 1 — COVER -->
+<!-- =================================================================== -->
+<section class="page cover">
+  <div class="frame"></div>
+  {{CORNERS}}
+  <div class="cover-pad">
+    <div class="cover-kicker">ಸಾಧನೆಯ ಶಿಖರ &nbsp;•&nbsp; ಕರಾವಳಿಯ ಹೆಮ್ಮೆ</div>
+    <div class="rule-orn" style="color:var(--gold-lt)"><span class="diamond" style="background:var(--gold-lt)"></span></div>
+    <h1 class="cover-name"><span class="sri">ಶ್ರೀ</span>ಉದಯ ಶೆಟ್ಟಿ<br>ಕಾಂತಾವರ</h1>
+    <div class="hero"><img src="{{IMG_portrait_red}}" alt=""></div>
+    <div class="cover-roles">
+      <b>ಚಲನಚಿತ್ರ ನಿರ್ಮಾಪಕ</b> &nbsp;•&nbsp; <b>ಸಮಾಜ ಸೇವಕ</b><br>
+      <b>ಕಂಬಳ ಸಂಘಟಕ</b> &nbsp;•&nbsp; <b>ಕೊಡುಗೈ ದಾನಿ</b>
+    </div>
+    <div class="cover-tag">“ಮುಟ್ಟಿದ್ದನ್ನೆಲ್ಲಾ ಚಿನ್ನವಾಗಿಸಿದ ಬಹುಮುಖ ಪ್ರತಿಭೆ”</div>
+    <div class="medals">
+      <div class="medal"><div class="star">★ ★ ★</div>
+        <div class="mt">ಅಂತರಾಷ್ಟ್ರೀಯ ಇಂಡಿಯಾ ಪೆಸಿಫಿಕ್ ಗೋಲ್ಡ್ ಅವಾರ್ಡ್</div>
+        <div class="ms">International India Pacific Gold Award</div></div>
+      <div class="medal"><div class="star">★ ★ ★</div>
+        <div class="mt">ಸಾಧನಾ ಶ್ರೀ ಯುವ ಸಾಧಕ ಪ್ರಶಸ್ತಿ</div>
+        <div class="ms">Sadhana Shri Yuva Sadhaka Award</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PAGE 2 — INTRODUCTION -->
+<!-- =================================================================== -->
+<section class="page">
+  <div class="frame"></div>{{CORNERS}}
+  <div class="pad">
+    <div class="kicker">ಪರಿಚಯ</div>
+    <div class="rule-orn"><span class="diamond"></span></div>
+    <h2 class="sec-title" style="text-align:center">ಕರಾವಳಿಯ ಬಹುಮುಖ ಪ್ರತಿಭೆ</h2>
+    <div class="mediarow" style="margin-top:7mm">
+      <div class="ph gold" style="flex:0 0 62mm;height:78mm"><img src="{{IMG_portrait_white_turban}}" alt=""></div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+        <p class="body lead">ಕರಾವಳಿಯ ಮಣ್ಣಿನ ಸಂಸ್ಕೃತಿ, ಸಿನಿಮಾ ರಂಗ ಹಾಗೂ ಸಮಾಜ ಸೇವೆಯಲ್ಲಿ ಸದಾ ಮುಂಚೂಣಿಯಲ್ಲಿ ನಿಲ್ಲುವ ಅಪರೂಪದ ಬಹುಮುಖ ಪ್ರತಿಭೆ ಶ್ರೀ ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ.</p>
+      </div>
+    </div>
+    <p class="body" style="margin-top:6mm">ಪ್ರಸ್ತುತ ಜಿಲ್ಲಾ ಕಂಬಳ ಸಮಿತಿಯ ಉಪಾಧ್ಯಕ್ಷರಾಗಿ ಜವಾಬ್ದಾರಿಯುತವಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಿರುವ ಇವರು, ತಮ್ಮ ನಿಸ್ವಾರ್ಥ ಸೇವೆ ಮತ್ತು ಕಲಾ ಪೋಷಣೆಯಿಂದಾಗಿ ಅಂತರಾಷ್ಟ್ರೀಯ ಮಟ್ಟದಲ್ಲೂ ಗುರುತಿಸಿಕೊಂಡಿದ್ದಾರೆ. ಸಿನಿಮಾ, ಕಂಬಳ, ಸಮಾಜ ಸೇವೆ — ಹೀಗೆ ಮುಟ್ಟಿದ್ದನ್ನೆಲ್ಲಾ ಚಿನ್ನವಾಗಿಸುತ್ತಾ, ಸಮಾಜಕ್ಕೆ ಸದಾ ಸಕಾರಾತ್ಮಕ ಕೊಡುಗೆ ನೀಡುತ್ತಿರುವ ವಿರಳ ವ್ಯಕ್ತಿತ್ವ ಇವರದ್ದು.</p>
+    <div class="panel">
+      <h4>ಒಂದೇ ನೋಟದಲ್ಲಿ</h4>
+      <p>ತುಳುನಾಡಿನ ಸಂಸ್ಕೃತಿಯನ್ನು ಬೆಳ್ಳಿ ಪರದೆಯ ಮೇಲೆ ಬಿಂಬಿಸಿದ ‘ಏಸ’ ಚಿತ್ರದ ನಿರ್ಮಾಪಕ; ದೇಶ–ವಿದೇಶಗಳಲ್ಲಿ ಗೌರವಿಸಲ್ಪಟ್ಟ ಸಾಧಕ; ಬಡವರ ಕಣ್ಣೀರೊರೆಸುವ ಕೊಡುಗೈ ದಾನಿ; ಹಾಗೂ ನಾಡಿನ ಜಾನಪದ ಕ್ರೀಡೆ ಕಂಬಳದ ವೈಭವ ಉಳಿಸುವ ಧೀಮಂತ ಸಂಘಟಕ.</p>
+    </div>
+    <div class="chips">
+      <span class="chip">ಅಂತರಾಷ್ಟ್ರೀಯ ಪ್ರಶಸ್ತಿ ಪುರಸ್ಕೃತ</span>
+      <span class="chip">‘ಏಸ’ ತುಳು ಚಿತ್ರದ ನಿರ್ಮಾಪಕ</span>
+      <span class="chip">ಜಿಲ್ಲಾ ಕಂಬಳ ಸಮಿತಿ ಉಪಾಧ್ಯಕ್ಷ</span>
+      <span class="chip">ಸಮಾಜ ಸೇವಕ</span>
+    </div>
+    <div class="pfoot"><span><i class="dot"></i>ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ</span><span>02</span></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PAGE 3 — PERSONAL PROFILE -->
+<!-- =================================================================== -->
+<section class="page">
+  <div class="frame"></div>{{CORNERS}}
+  <div class="pad">
+    <div class="sec-head">
+      <div class="sec-num">— ವಿವರ —</div>
+      <div class="sec-title">ವೈಯಕ್ತಿಕ ಪರಿಚಯ</div>
+      <div class="sec-sub">Personal Profile</div>
+    </div>
+    <div class="mediarow">
+      <div style="flex:1.3">
+        <div class="dl">
+          <div class="row"><div class="k">ಪೂರ್ಣ ಹೆಸರು</div><div class="v">ಶ್ರೀ ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ<small>ಉದಯ ಕುಮಾರ್ ಶೆಟ್ಟಿ</small></div></div>
+          <div class="row"><div class="k">ತಂದೆ</div><div class="v">ಶ್ರೀ ಅಶ್ವತ್ಥ ಶೆಟ್ಟಿ</div></div>
+          <div class="row"><div class="k">ತಾಯಿ</div><div class="v">ಶ್ರೀಮತಿ ಸುಗುಣ ಶೆಟ್ಟಿ</div></div>
+          <div class="row"><div class="k">ಜನ್ಮ ದಿನಾಂಕ</div><div class="v">22 ಜುಲೈ 1977</div></div>
+          <div class="row"><div class="k">ಮೂಲ ಸ್ಥಳ</div><div class="v">ಕಾಂತಾವರ<small>ದಕ್ಷಿಣ ಕನ್ನಡ ಜಿಲ್ಲೆ, ಕರಾವಳಿ ಕರ್ನಾಟಕ</small></div></div>
+          <div class="row"><div class="k">ಪ್ರಸ್ತುತ ಹುದ್ದೆ</div><div class="v">ಉಪಾಧ್ಯಕ್ಷರು<small>ಜಿಲ್ಲಾ ಕಂಬಳ ಸಮಿತಿ</small></div></div>
+          <div class="row"><div class="k">ಕಾರ್ಯಕ್ಷೇತ್ರ</div><div class="v">ಚಿತ್ರರಂಗ • ಸಮಾಜ ಸೇವೆ • ಕ್ರೀಡೆ • ಸಂಸ್ಕೃತಿ</div></div>
+        </div>
+      </div>
+      <div class="ph gold" style="flex:0 0 55mm;align-self:flex-start;height:70mm"><img src="{{IMG_wedding_car}}" alt=""></div>
+    </div>
+    <div class="quote">
+      <p>“ನುಡಿದಂತೆ ನಡೆಯುವ, ನಾಯಕತ್ವಕ್ಕೆ ಮಾದರಿಯಾದ ವ್ಯಕ್ತಿತ್ವ”</p>
+      <div class="by">— ಕರಾವಳಿಯ ಹೆಮ್ಮೆ, ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ</div>
+    </div>
+    <div class="pfoot"><span><i class="dot"></i>ವೈಯಕ್ತಿಕ ಪರಿಚಯ</span><span>03</span></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PAGE 4 — INTERNATIONAL AWARDS -->
+<!-- =================================================================== -->
+<section class="page">
+  <div class="frame"></div>{{CORNERS}}
+  <div class="pad">
+    <div class="sec-head">
+      <div class="sec-num">01</div>
+      <div class="sec-title">ಅಂತರಾಷ್ಟ್ರೀಯ ಮಟ್ಟದ ಮನ್ನಣೆ<br>ಹಾಗೂ ಪ್ರಶಸ್ತಿಗಳ ಗರಿ</div>
+      <div class="sec-sub">International Recognition & Honours</div>
+    </div>
+    <p class="body">ಇವರ ನಿರಂತರ ಸಾಧನೆ ಮತ್ತು ಸಮಾಜಮುಖಿ ಕಾರ್ಯಗಳನ್ನು ಗುರುತಿಸಿ ದೇಶ–ವಿದೇಶಗಳ ಪ್ರತಿಷ್ಠಿತ ಸಂಸ್ಥೆಗಳು ಗೌರವಿಸಿವೆ. ಇವರ ಸಾಧನೆಯ ಮುಕುಟಕ್ಕೆ ಜಾಗತಿಕ ಮಟ್ಟದ ಹೆಮ್ಮೆಯ ಪ್ರಶಸ್ತಿಗಳು ಸೇರಿರುವುದು ಇಡೀ ಕರಾವಳಿಗೇ ಹೆಮ್ಮೆಯ ಸಂಗತಿ.</p>
+    <ul class="awlist">
+      <li><span class="mk">✦</span><span class="tx"><b>ಅಂತರಾಷ್ಟ್ರೀಯ ಇಂಡಿಯಾ ಪೆಸಿಫಿಕ್ ಗೋಲ್ಡ್ ಅವಾರ್ಡ್</b><small>International India Pacific Gold Award — ನವದೆಹಲಿ, 17 ನವೆಂಬರ್ 2014 · “Outstanding Contribution for Nation & World Peace”</small></span></li>
+      <li><span class="mk">✦</span><span class="tx"><b>ಸಾಧನಾ ಶ್ರೀ ಯುವ ಸಾಧಕ ಪ್ರಶಸ್ತಿ</b><small>ಯುವ ಜನತೆಗೆ ಸ್ಪೂರ್ತಿಯಾದ ಸಾಧನೆಗೆ ನೀಡಲ್ಪಟ್ಟ ಗೌರವ</small></span></li>
+    </ul>
+    <div class="mediarow" style="margin-top:5mm">
+      <div class="ph" style="flex:1.35;height:66mm"><img src="{{IMG_delhi_award}}" alt="">
+        <div class="cap">ನವದೆಹಲಿ · ಅಂತರಾಷ್ಟ್ರೀಯ ಇಂಡಿಯಾ ಪೆಸಿಫಿಕ್ ಗೋಲ್ಡ್ ಅವಾರ್ಡ್ ಸ್ವೀಕಾರ — 2014</div></div>
+      <div class="ph" style="flex:1;height:66mm"><img src="{{IMG_award_stage_shawl}}" alt="">
+        <div class="cap">ಗೌರವ ಸನ್ಮಾನ ಸಮಾರಂಭ</div></div>
+    </div>
+    <div class="panel"><h4>ಗೌರವಕ್ಕೆ ಪಾತ್ರವಾದ ಸೇವೆ</h4>
+      <p>ರಾಷ್ಟ್ರ ಹಾಗೂ ವಿಶ್ವಶಾಂತಿಗೆ ನೀಡಿದ ಅಸಾಧಾರಣ ಕೊಡುಗೆಯನ್ನು ಪರಿಗಣಿಸಿ ರಾಷ್ಟ್ರೀಯ–ಅಂತರಾಷ್ಟ್ರೀಯ ಸಂಸ್ಥೆಗಳು ಇವರನ್ನು ಗೌರವಿಸಿವೆ. ಈ ಮಾನ್ಯತೆ ಕರಾವಳಿಯ ಯುವಜನತೆಗೆ ದೊಡ್ಡ ಸ್ಪೂರ್ತಿ.</p></div>
+    <div class="pfoot"><span><i class="dot"></i>ಅಂತರಾಷ್ಟ್ರೀಯ ಮನ್ನಣೆ</span><span>04</span></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PAGE 5 — CINEMA -->
+<!-- =================================================================== -->
+<section class="page">
+  <div class="frame"></div>{{CORNERS}}
+  <div class="pad">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <div class="sec-title">ಚಲನಚಿತ್ರ ರಂಗದಲ್ಲಿ<br>ಯಶಸ್ವಿ ಹೆಜ್ಜೆ</div>
+      <div class="sec-sub">‘ಏಸ’ ಚಿತ್ರದ ನಿರ್ಮಾಪಕ · Coastalwood</div>
+    </div>
+    <p class="body lead">ಕೇವಲ ಸಮಾಜ ಸೇವೆಯಷ್ಟೇ ಅಲ್ಲದೆ, ತುಳು ಚಿತ್ರರಂಗದ (ಕೋಸ್ಟಲ್‌ವುಡ್) ಏಳಿಗೆಗೂ ಇವರು ದೊಡ್ಡ ಕೊಡುಗೆ ನೀಡಿದ್ದಾರೆ. ತುಳುನಾಡಿನ ಸಂಸ್ಕೃತಿ ಬಿಂಬಿಸುವ ಮತ್ತು ಪ್ರೇಕ್ಷಕರ ಮನಗೆದ್ದ ಸೂಪರ್ ಹಿಟ್ ಸಿನಿಮಾ ‘ಏಸ’ ಚಿತ್ರದ ಯಶಸ್ವಿ ನಿರ್ಮಾಪಕರಾಗಿ ಚಿತ್ರರಂಗದಲ್ಲಿ ಹೊಸ ಅಲೆಯನ್ನು ಸೃಷ್ಟಿಸಿದವರು.</p>
+    <p class="body">ಕರಾವಳಿಯ ಕಲೆ ಮತ್ತು ಪ್ರತಿಭೆಗಳಿಗೆ ಚಿತ್ರರಂಗದ ಮೂಲಕ ದೊಡ್ಡ ವೇದಿಕೆ ಕಲ್ಪಿಸಿಕೊಟ್ಟ ಹೆಗ್ಗಳಿಕೆ ಇವರದ್ದಾಗಿದೆ. ಸ್ಥಳೀಯ ಕಲಾವಿದರಿಗೆ ಅವಕಾಶ, ನಾಡಿನ ಕಥೆಗಳಿಗೆ ತೆರೆಯ ಮನ್ನಣೆ — ಇವರ ನಿರ್ಮಾಣದ ಹಿಂದಿನ ಆಶಯ.</p>
+    <div class="mediarow">
+      <div class="ph" style="flex:1;height:58mm"><img src="{{IMG_concert_stage}}" alt="">
+        <div class="cap">ಸಾಂಸ್ಕೃತಿಕ ವೇದಿಕೆಯಲ್ಲಿ</div></div>
+      <div class="ph" style="flex:1;height:58mm"><img src="{{IMG_concert_gift}}" alt="">
+        <div class="cap">ಅಭಿಮಾನಿಗಳೊಂದಿಗೆ</div></div>
+    </div>
+    <div class="ph" style="height:60mm;margin-top:6mm"><img src="{{IMG_concert_child}}" alt="">
+      <div class="cap">ಸಾರ್ವಜನಿಕ ಕಾರ್ಯಕ್ರಮದಲ್ಲಿ ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ — ಪ್ರೇಕ್ಷಕರ ಮನಗೆದ್ದ ಕ್ಷಣ</div></div>
+    <div class="pfoot"><span><i class="dot"></i>ಚಲನಚಿತ್ರ ರಂಗ</span><span>05</span></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PAGE 6 — SOCIAL SERVICE -->
+<!-- =================================================================== -->
+<section class="page">
+  <div class="frame"></div>{{CORNERS}}
+  <div class="pad">
+    <div class="sec-head">
+      <div class="sec-num">03</div>
+      <div class="sec-title">ಕೊಡುಗೈ ದಾನಿ ಹಾಗೂ<br>ಸಮಾಜ ಸೇವಕ</div>
+      <div class="sec-sub">Philanthropy & Social Service</div>
+    </div>
+    <p class="body">ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ ಎಂದರೆ ಕರುಣೆಯ ಮತ್ತು ಕೊಡುಗೈ ದಾನದ ಪ್ರತೀಕ. ಹಲವಾರು ಸಾಮಾಜಿಕ, ಧಾರ್ಮಿಕ ಮತ್ತು ಸಾಂಸ್ಕೃತಿಕ ಸಂಘ–ಸಂಸ್ಥೆಗಳ ಮುಖಾಂತರ ಸದಾ ಸಕ್ರಿಯರಾಗಿದ್ದು, ಸಂಕಷ್ಟದಲ್ಲಿರುವವರಿಗೆ ಭರಪೂರ ಕೊಡುಗೆದಾನ ನೀಡುತ್ತಾ ಬಂದಿದ್ದಾರೆ.</p>
+    <p class="body">ಶಿಕ್ಷಣ, ಆರೋಗ್ಯ ಮತ್ತು ಬಡವರ ಕಣ್ಣೀರು ಒರೆಸುವ ನಿಟ್ಟಿನಲ್ಲಿ ಇವರ ಸೇವಾ ಚಟುವಟಿಕೆಗಳು ಸದಾ ಮುಂಚೂಣಿಯಲ್ಲಿರುತ್ತವೆ. ನೆರವು ಬೇಕಾದವರ ಬಳಿ ಸದ್ದಿಲ್ಲದೆ ತಲುಪುವುದೇ ಇವರ ಸೇವೆಯ ವಿಶೇಷ.</p>
+    <div class="mediarow">
+      <div class="ph" style="flex:1.4;height:56mm"><img src="{{IMG_children_outing}}" alt="">
+        <div class="cap">ವಿದ್ಯಾರ್ಥಿಗಳೊಂದಿಗೆ — ಶಿಕ್ಷಣ ಪ್ರೋತ್ಸಾಹ</div></div>
+      <div class="ph" style="flex:1;height:56mm"><img src="{{IMG_concert_gift}}" alt="">
+        <div class="cap">ಸಮುದಾಯದ ನಡುವೆ</div></div>
+    </div>
+    <div class="panel"><h4>ಸೇವೆಯೇ ಸಿದ್ಧಾಂತ</h4>
+      <p>“ಇರುವುದನ್ನು ಹಂಚಿ ಬಾಳುವುದೇ ಶ್ರೀಮಂತಿಕೆ” — ಈ ನಂಬಿಕೆಯನ್ನು ತಮ್ಮ ಬದುಕಲ್ಲಿ ಸಾಕಾರಗೊಳಿಸಿದವರು. ಶಿಕ್ಷಣ, ಆರೋಗ್ಯ, ಧಾರ್ಮಿಕ ಹಾಗೂ ಸಾಂಸ್ಕೃತಿಕ ಕ್ಷೇತ್ರಗಳಲ್ಲಿ ನಿರಂತರ ದಾನ–ಧರ್ಮ.</p></div>
+    <div class="chips">
+      <span class="chip">ಶಿಕ್ಷಣ ನೆರವು</span>
+      <span class="chip">ಆರೋಗ್ಯ ಸೇವೆ</span>
+      <span class="chip">ಧಾರ್ಮಿಕ ಕೊಡುಗೆ</span>
+      <span class="chip">ಸಂಕಷ್ಟ ನೆರವು</span>
+    </div>
+    <div class="pfoot"><span><i class="dot"></i>ಸಮಾಜ ಸೇವೆ</span><span>06</span></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PAGE 7 — KAMBALA -->
+<!-- =================================================================== -->
+<section class="page">
+  <div class="frame"></div>{{CORNERS}}
+  <div class="pad">
+    <div class="sec-head">
+      <div class="sec-num">04</div>
+      <div class="sec-title">ಕಂಬಳ ಸಂಸ್ಕೃತಿಯ<br>ಧೀಮಂತ ನಾಯಕ</div>
+      <div class="sec-sub">Guardian of Coastal Kambala Heritage</div>
+    </div>
+    <p class="body lead">ಜಿಲ್ಲಾ ಕಂಬಳ ಸಮಿತಿಯ ಉಪಾಧ್ಯಕ್ಷರಾದ ಬಳಿಕ, ತುಳುನಾಡಿನ ಹೆಮ್ಮೆಯ ಜಾನಪದ ಕ್ರೀಡೆಯಾದ ಕಂಬಳದ ವೈಭವವನ್ನು ಮತ್ತಷ್ಟು ಎತ್ತರಕ್ಕೆ ಕೊಂಡೊಯ್ಯುವಲ್ಲಿ ಶ್ರಮಿಸುತ್ತಿದ್ದಾರೆ.</p>
+    <p class="body">ಆಧುನಿಕತೆಯ ನಡುವೆಯೂ ನಮ್ಮ ಮಣ್ಣಿನ ಕ್ರೀಡೆಯನ್ನು ಮುಂದಿನ ಪೀಳಿಗೆಗೆ ದಾಟಿಸುವ ಇವರ ಕಳಕಳಿ ಪ್ರಶಂಸನೀಯ. ಕ್ರೀಡಾ ಸಂಘಟನೆ, ಪ್ರೋತ್ಸಾಹ ಹಾಗೂ ಸಂಪ್ರದಾಯದ ಜತನ — ಇವರ ನಾಯಕತ್ವದ ಮೂರು ಆಧಾರಸ್ತಂಭಗಳು.</p>
+    <div class="mediarow">
+      <div class="ph" style="flex:1;height:56mm"><img src="{{IMG_lamp_lighting}}" alt="">
+        <div class="cap">ಕ್ರೀಡಾ ಸಮಾರಂಭದ ದೀಪ ಪ್ರಜ್ವಲನೆ</div></div>
+      <div class="ph" style="flex:1;height:56mm"><img src="{{IMG_felicitation_orange}}" alt="">
+        <div class="cap">ಸಂಘಟಕರಿಂದ ಸನ್ಮಾನ</div></div>
+    </div>
+    <div class="mediarow" style="margin-top:5mm">
+      <div class="ph" style="flex:1;height:50mm"><img src="{{IMG_felicitation_village}}" alt=""></div>
+      <div class="ph" style="flex:1;height:50mm"><img src="{{IMG_felicitation_temple}}" alt=""></div>
+      <div class="ph" style="flex:1;height:50mm"><img src="{{IMG_dignitaries}}" alt=""></div>
+    </div>
+    <div class="pfoot"><span><i class="dot"></i>ಕಂಬಳ ಸಂಸ್ಕೃತಿ</span><span>07</span></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PAGE 8 — PORTRAIT OF A LEADER / GALLERY -->
+<!-- =================================================================== -->
+<section class="page">
+  <div class="frame"></div>{{CORNERS}}
+  <div class="pad">
+    <div class="kicker">ವ್ಯಕ್ತಿತ್ವ</div>
+    <div class="rule-orn"><span class="diamond"></span></div>
+    <h2 class="sec-title" style="text-align:center">ನಾಯಕತ್ವಕ್ಕೆ ಮಾದರಿಯಾದ ಬದುಕು</h2>
+    <p class="body" style="text-align:center;margin-top:5mm">ಸಿನಿಮಾ, ಕಂಬಳ, ಸಮಾಜ ಸೇವೆ — ಹೀಗೆ ಮುಟ್ಟಿದ್ದನ್ನೆಲ್ಲಾ ಚಿನ್ನವಾಗಿಸುತ್ತಾ, ಸಮಾಜಕ್ಕೆ ಸದಾ ಸಕಾರಾತ್ಮಕ ಕೊಡುಗೆ ನೀಡುತ್ತಿರುವ ಶ್ರೀ ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ ಅವರ ಬದುಕು ಯುವಜನತೆಗೆ ಸ್ಪೂರ್ತಿಯ ಸೆಲೆ.</p>
+    <div class="gallery">
+      <div class="ph"><img src="{{IMG_news_clip}}" alt=""></div>
+      <div class="ph"><img src="{{IMG_group_office}}" alt=""></div>
+      <div class="ph"><img src="{{IMG_felicitation_red}}" alt=""></div>
+      <div class="ph"><img src="{{IMG_letter_official}}" alt=""></div>
+      <div class="ph"><img src="{{IMG_concert_stage}}" alt=""></div>
+      <div class="ph"><img src="{{IMG_portrait_white_turban}}" alt=""></div>
+    </div>
+    <div class="quote" style="margin-top:7mm">
+      <p>“ನುಡಿದಂತೆ ನಡೆಯುವ, ನಾಯಕತ್ವಕ್ಕೆ ಮಾದರಿಯಾದ ವ್ಯಕ್ತಿತ್ವ — ಸಾಧನೆಯ ಶಿಖರ, ಕರಾವಳಿಯ ಹೆಮ್ಮೆ.”</p>
+      <div class="by">ಶ್ರೀ ಉದಯ ಶೆಟ್ಟಿ ಕಾಂತಾವರ</div>
+    </div>
+    <div class="pfoot"><span><i class="dot"></i>ವ್ಯಕ್ತಿತ್ವ</span><span>08</span></div>
+  </div>
+</section>
+
+<script>
+// inject corner ornaments
+const tpl = document.getElementById('corner-svg').innerHTML;
+const cornerHTML = '<div class="corner c-tl">'+tpl+'</div><div class="corner c-tr">'+tpl+'</div><div class="corner c-bl">'+tpl+'</div><div class="corner c-br">'+tpl+'</div>';
+document.querySelectorAll('.page').forEach(p=>{
+  // replace the {{CORNERS}} placeholder marker nodes already substituted server-side; nothing needed
+});
+</script>

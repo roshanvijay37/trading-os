@@ -1,0 +1,6 @@
+node_modules/
+package-lock.json
+*.css
+qa-*.png
+resume.html
+artifact.html
