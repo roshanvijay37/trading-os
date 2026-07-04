@@ -4,6 +4,7 @@ import {
   placeLimitEntry,
   placeMarketExit,
   placeStopLossOrder,
+  placeStopEntry,
   cancelOrder,
   extractOrderId,
   isTokenErrorData,
@@ -138,17 +139,39 @@ describe("paper-trading order helpers (no broker call)", () => {
     expect(order.limitPrice).toBe(12.5);
   });
 
-  it("placeMarketExit sells with a MARKET order", async () => {
-    const order = await placeMarketExit({ symbol: "NSE:X", qty: 50, session, paperTrading: true });
-    expect(order.side).toBe(ORDER_SIDE.SELL);
-    expect(order.type).toBe(ORDER_TYPE.MARKET);
+  it("placeMarketExit takes an explicit side — SELL closes a LONG, BUY covers a SHORT", async () => {
+    const closeLong = await placeMarketExit({ symbol: "NSE:X", qty: 50, side: ORDER_SIDE.SELL, session, paperTrading: true });
+    expect(closeLong.side).toBe(ORDER_SIDE.SELL);
+    expect(closeLong.type).toBe(ORDER_TYPE.MARKET);
+
+    const closeShort = await placeMarketExit({ symbol: "NSE:X", qty: 50, side: ORDER_SIDE.BUY, session, paperTrading: true });
+    expect(closeShort.side).toBe(ORDER_SIDE.BUY);
   });
 
-  it("placeStopLossOrder sells with an SL-M (STOP) order at the stop price", async () => {
-    const order = await placeStopLossOrder({ symbol: "NSE:X", qty: 50, stopPrice: 8, session, paperTrading: true });
-    expect(order.side).toBe(ORDER_SIDE.SELL);
-    expect(order.type).toBe(ORDER_TYPE.STOP);
-    expect(order.stopPrice).toBe(8);
+  it("placeMarketExit rejects a missing side rather than silently defaulting", async () => {
+    await expect(
+      placeMarketExit({ symbol: "NSE:X", qty: 50, session, paperTrading: true })
+    ).rejects.toThrow(/Invalid order side/);
+  });
+
+  it("placeStopLossOrder takes an explicit side — SELL protects a LONG, BUY protects a SHORT", async () => {
+    const protectLong = await placeStopLossOrder({ symbol: "NSE:X", qty: 50, stopPrice: 8, side: ORDER_SIDE.SELL, session, paperTrading: true });
+    expect(protectLong.side).toBe(ORDER_SIDE.SELL);
+    expect(protectLong.type).toBe(ORDER_TYPE.STOP);
+    expect(protectLong.stopPrice).toBe(8);
+
+    const protectShort = await placeStopLossOrder({ symbol: "NSE:X", qty: 50, stopPrice: 12, side: ORDER_SIDE.BUY, session, paperTrading: true });
+    expect(protectShort.side).toBe(ORDER_SIDE.BUY);
+  });
+
+  it("placeStopEntry rests a SL-M order sized/sided for the intended breakout direction", async () => {
+    const longEntry = await placeStopEntry({ symbol: "NSE:X", qty: 30, side: ORDER_SIDE.BUY, stopPrice: 55100, session, paperTrading: true });
+    expect(longEntry.side).toBe(ORDER_SIDE.BUY);
+    expect(longEntry.type).toBe(ORDER_TYPE.STOP);
+    expect(longEntry.stopPrice).toBe(55100);
+
+    const shortEntry = await placeStopEntry({ symbol: "NSE:X", qty: 30, side: ORDER_SIDE.SELL, stopPrice: 54900, session, paperTrading: true });
+    expect(shortEntry.side).toBe(ORDER_SIDE.SELL);
   });
 
   it("cancelOrder short-circuits for PAPER ids", async () => {

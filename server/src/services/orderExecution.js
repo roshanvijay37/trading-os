@@ -54,6 +54,44 @@ export function isTokenErrorData(data) {
 }
 
 /**
+ * Classify whether a thrown broker-call error is worth retrying. Retryable: network-level
+ * failures (timeout/connection) and HTTP 429/5xx — transient, likely to succeed on retry.
+ * NOT retryable: 4xx validation/business errors (the broker will reject the identical request
+ * every time — retrying just delays the caller) and token/auth errors, which already have their
+ * own dedicated single-refresh-and-retry path inside fyersApiCall (retrying those again here
+ * would stack an uncoordinated second retry policy on top of that one).
+ */
+export function isRetryableError(err) {
+  if (!err) return false;
+  if (err.name === "AbortError") return true; // request timeout (AbortSignal.timeout)
+  if (err instanceof TypeError) return true; // network/connection failure — fetch() itself threw
+  if (typeof err.status === "number") return err.status === 429 || err.status >= 500;
+  return false;
+}
+
+/**
+ * Retry a broker call with jittered exponential backoff, but only for transient failures
+ * (isRetryableError) — a 4xx or an already-exhausted auth retry fails immediately.
+ */
+export async function withRetry(fn, { attempts = 3, baseDelayMs = 500, maxDelayMs = 4000, label = "broker call", auditLogger = null } = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt === attempts || !isRetryableError(err)) throw err;
+      const backoff = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+      const jitter = backoff * (0.5 + Math.random() * 0.5);
+      console.error(`[ORDER] ${label} failed (attempt ${attempt}/${attempts}), retrying in ${Math.round(jitter)}ms:`, err.message);
+      if (auditLogger) auditLogger({ type: "BROKER_CALL_RETRY", label, attempt, error: err.message });
+      await sleep(jitter);
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * Pull the broker order id out of a place-order or orderbook entry, tolerating the several
  * shapes FYERS has used across endpoints/versions. Returns a non-empty string, or null.
  */
@@ -103,7 +141,9 @@ async function fyersApiCall(endpoint, session, body = null, method = "GET", _ret
     if (response.status === 401 && !_retried && (await refreshAccessToken(session))) {
       return fyersApiCall(endpoint, session, body, method, true);
     }
-    throw new Error(`FYERS ${method} ${endpoint} HTTP ${response.status}: ${text.substring(0, 240)}`);
+    const err = new Error(`FYERS ${method} ${endpoint} HTTP ${response.status}: ${text.substring(0, 240)}`);
+    err.status = response.status;
+    throw err;
   }
 
   const data = await response.json();
@@ -196,6 +236,40 @@ function extractPendingQty(order) {
 }
 
 /**
+ * Place-order retry loop. Deliberately NOT the generic withRetry: a transient failure (timeout,
+ * network blip, 5xx) on the place-order call is ambiguous — the request may have already reached
+ * the broker and been accepted before the response was lost, so blindly re-POSTing could create a
+ * SECOND, duplicate live order. Before each retry attempt, recover by the unique orderTag first;
+ * only issue an actual re-POST if no order with this tag exists yet at the broker.
+ */
+async function placeOrderWithRetry(orderBody, orderTag, session, auditLogger, symbol, attempts = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fyersApiCall(PLACE_ORDER_ENDPOINT, session, { ...orderBody, orderTag }, "POST");
+    } catch (err) {
+      lastErr = err;
+      if (attempt === attempts || !isRetryableError(err)) throw err;
+
+      const existingId = await findOrderIdByTag(orderTag, session);
+      if (existingId) {
+        if (auditLogger) {
+          auditLogger({ type: "PLACE_ORDER_RECOVERED_VIA_TAG", symbol, orderTag, orderId: existingId });
+        }
+        return { id: existingId }; // the prior "failed" attempt actually landed — do not re-POST
+      }
+
+      const backoff = Math.min(4000, 500 * 2 ** (attempt - 1));
+      const jitter = backoff * (0.5 + Math.random() * 0.5);
+      console.error(`[ORDER] placeOrder ${symbol} failed (attempt ${attempt}/${attempts}), retrying in ${Math.round(jitter)}ms:`, err.message);
+      if (auditLogger) auditLogger({ type: "BROKER_CALL_RETRY", label: `placeOrder ${symbol}`, attempt, error: err.message });
+      await sleep(jitter);
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * Place a broker order.
  */
 export async function placeOrder({
@@ -278,7 +352,12 @@ export async function placeOrder({
   // NOTE(verify FYERS v3 docs): normalizeStatus() maps 1=Pending,2=Filled,3=Rejected,
   // 4=Cancelled — confirm against current docs; a wrong map could misreport a fill.
   const orderTag = generateOrderTag();
-  const response = await fyersApiCall(PLACE_ORDER_ENDPOINT, session, { ...orderBody, orderTag }, "POST");
+  // Placing an order gets a BESPOKE retry loop, not the generic withRetry: a "failed" attempt
+  // (timeout/network error) may have actually reached the broker before the response was lost —
+  // blindly re-POSTing on retry could place a DUPLICATE live order, the single most dangerous
+  // failure mode here. Before any retry attempt, check by orderTag whether the prior attempt
+  // actually landed; only re-POST if it genuinely didn't.
+  const response = await placeOrderWithRetry(orderBody, orderTag, session, auditLogger, symbol);
 
   // Resolve the order id robustly. If the response omitted it, the order may still be live —
   // recover it from the orderbook by orderTag rather than ever returning an untracked order
@@ -415,7 +494,16 @@ export async function waitForFill(orderId, session, options = {}) {
  * Fetch normalized order details from the broker.
  */
 export async function getOrderDetails(orderId, session) {
-  const data = await fyersApiCall(`/orders/${orderId}`, session);
+  // Small attempt count / short backoff: getOrderDetails is also called on every tick inside
+  // waitForFill's own poll loop, which already tolerates failures by just polling again — a
+  // heavier retry here would needlessly compound with that and eat into waitForFill's timeout
+  // budget. This still meaningfully helps one-off callers (e.g. ensureStopLoss) recover from a
+  // single transient blip without misreading it as "no live order."
+  const data = await withRetry(() => fyersApiCall(`/orders/${orderId}`, session), {
+    attempts: 2,
+    baseDelayMs: 400,
+    label: `getOrderDetails ${orderId}`,
+  });
   const order = data.data || {};
   return {
     orderId,
@@ -434,14 +522,12 @@ export async function getOrderDetails(orderId, session) {
 }
 
 /**
- * Cancel a pending broker order.
+ * One cancel attempt: REST-style DELETE first, falling back to the older POST /orders/cancel,
+ * with the existing single-refresh-and-retry-on-401 behavior. Cancelling an already-cancelled or
+ * already-filled order is safe to retry (unlike placing one), so the outer withRetry in
+ * cancelOrder can wrap this whole attempt without any duplicate-action risk.
  */
-export async function cancelOrder(orderId, session, auditLogger = null, _retried = false) {
-  if (orderId && String(orderId).startsWith("PAPER-")) {
-    if (auditLogger) auditLogger({ type: "PAPER_ORDER_CANCELLED", orderId });
-    return { success: true };
-  }
-
+async function attemptCancelOrder(orderId, session, _retried = false) {
   const appId = session.appId ?? process.env.FYERS_APP_ID;
   const authHeaders = {
     "Content-Type": "application/json",
@@ -470,21 +556,39 @@ export async function cancelOrder(orderId, session, auditLogger = null, _retried
     // Refresh the token once and retry — cancelling a stale SL on close must not be blocked
     // by an expired token.
     if (response.status === 401 && !_retried && (await refreshAccessToken(session))) {
-      return cancelOrder(orderId, session, auditLogger, true);
+      return attemptCancelOrder(orderId, session, true);
     }
-    throw new Error(`Cancel order ${orderId} failed: HTTP ${response.status}: ${text.substring(0, 240)}`);
+    const err = new Error(`Cancel order ${orderId} failed: HTTP ${response.status}: ${text.substring(0, 240)}`);
+    err.status = response.status;
+    throw err;
   }
 
   const data = await response.json();
   if (data.s !== "ok") {
     if (!_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
-      return cancelOrder(orderId, session, auditLogger, true);
+      return attemptCancelOrder(orderId, session, true);
     }
     throw new Error(data.message || `Cancel order ${orderId} failed`);
   }
+  return { success: true, data };
+}
+
+/**
+ * Cancel a pending broker order.
+ */
+export async function cancelOrder(orderId, session, auditLogger = null) {
+  if (orderId && String(orderId).startsWith("PAPER-")) {
+    if (auditLogger) auditLogger({ type: "PAPER_ORDER_CANCELLED", orderId });
+    return { success: true };
+  }
+
+  const result = await withRetry(() => attemptCancelOrder(orderId, session), {
+    label: `cancelOrder ${orderId}`,
+    auditLogger,
+  });
 
   if (auditLogger) auditLogger({ type: "ORDER_CANCELLED", orderId });
-  return { success: true, data };
+  return result;
 }
 
 /**
@@ -504,11 +608,18 @@ export function placeLimitEntry({ symbol, qty, limitPrice, session, paperTrading
   });
 }
 
-export function placeMarketExit({ symbol, qty, session, paperTrading = false, paperFillPrice = 0, auditLogger }) {
+// `side` is a required parameter on every wrapper below (no hardcoded default) — these are used
+// to both open (BUY for LONG / SELL for SHORT) and close (the opposite) an EMA5T futures
+// position, which trades both directions. An omitted side fails loudly via placeOrder's own
+// "Invalid order side" check rather than silently defaulting to one direction. Callers derive
+// the correct side from the position's direction + purpose (see futuresOrderSide in
+// autoTrader.js, which stays the domain-logic home for that mapping).
+
+export function placeMarketExit({ symbol, qty, side, session, paperTrading = false, paperFillPrice = 0, auditLogger }) {
   return placeOrder({
     symbol,
     qty,
-    side: ORDER_SIDE.SELL,
+    side,
     type: ORDER_TYPE.MARKET,
     session,
     paperTrading,
@@ -517,11 +628,11 @@ export function placeMarketExit({ symbol, qty, session, paperTrading = false, pa
   });
 }
 
-export function placeStopLossOrder({ symbol, qty, stopPrice, session, paperTrading = false, auditLogger }) {
+export function placeStopLossOrder({ symbol, qty, stopPrice, side, session, paperTrading = false, auditLogger }) {
   return placeOrder({
     symbol,
     qty,
-    side: ORDER_SIDE.SELL,
+    side,
     type: ORDER_TYPE.STOP,
     stopPrice,
     session,
@@ -531,11 +642,31 @@ export function placeStopLossOrder({ symbol, qty, stopPrice, session, paperTradi
   });
 }
 
-export function placeTargetOrder({ symbol, qty, targetPrice, session, paperTrading = false, auditLogger }) {
+/**
+ * Resting stop-ENTRY order — opens a NEW position when price crosses stopPrice, as opposed to
+ * placeStopLossOrder which protects an already-open one. Kept as its own named export (rather
+ * than reusing placeStopLossOrder) so audit logs and call sites read unambiguously as entry vs.
+ * protective-exit even though both use the same broker order type (SL-M).
+ */
+export function placeStopEntry({ symbol, qty, side, stopPrice, session, paperTrading = false, paperFillPrice = 0, auditLogger }) {
   return placeOrder({
     symbol,
     qty,
-    side: ORDER_SIDE.SELL,
+    side,
+    type: ORDER_TYPE.STOP,
+    stopPrice,
+    session,
+    paperTrading,
+    paperFillPrice: paperFillPrice || stopPrice,
+    auditLogger,
+  });
+}
+
+export function placeTargetOrder({ symbol, qty, targetPrice, side, session, paperTrading = false, auditLogger }) {
+  return placeOrder({
+    symbol,
+    qty,
+    side,
     type: ORDER_TYPE.LIMIT,
     limitPrice: targetPrice,
     session,

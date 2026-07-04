@@ -38,4 +38,22 @@ describe("computeHealthSnapshot", () => {
     expect(h.healthScore).toBe(80); // full loss ratio -> -20
     expect(h.components.find((c) => c.name === "Risk").status).toBe("WARNING");
   });
+
+  it("penalizes a stale-but-connected feed during market hours (lesser than a dropped connection)", () => {
+    const h = computeHealthSnapshot({ isRunning: true, wsConnected: true, marketOpen: true, feedStale: true });
+    expect(h.healthScore).toBe(85);
+    expect(h.overallStatus).toBe("HEALTHY");
+    expect(h.components.find((c) => c.name === "Broker Feed").status).toBe("STALE");
+  });
+
+  it("does not double-penalize staleness on top of a fully dropped connection", () => {
+    const h = computeHealthSnapshot({ isRunning: true, wsConnected: false, marketOpen: true, feedStale: true });
+    expect(h.healthScore).toBe(70); // same as the plain DOWN case — no extra -15 stacked on
+    expect(h.components.find((c) => c.name === "Broker Feed").status).toBe("DOWN");
+  });
+
+  it("does not penalize staleness when the market is closed", () => {
+    const h = computeHealthSnapshot({ isRunning: true, wsConnected: true, marketOpen: false, feedStale: true });
+    expect(h.healthScore).toBe(100);
+  });
 });

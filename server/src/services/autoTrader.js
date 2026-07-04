@@ -17,10 +17,12 @@ import {
 import {
   placeMarketExit,
   placeStopLossOrder,
+  placeStopEntry,
   waitForFill,
   cancelOrder,
   getOrderDetails,
   isTokenErrorData,
+  ORDER_SIDE,
 } from "./orderExecution.js";
 
 import { refreshAccessToken } from "../routes/auth.js";
@@ -46,7 +48,7 @@ import path from "path";
 import { computeExecutionStats } from "./executionStats.js";
 import { computeHealthSnapshot } from "./healthSnapshot.js";
 // Statutory + brokerage cost model, shared with the backtest so live P&L is reported NET (not gross).
-import { computeOptionCosts } from "./blackScholes.js";
+import { computeFuturesCosts } from "./futuresCosts.js";
 
 // ΓöÇΓöÇΓöÇ CONFIGURATION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const CONFIG = {
@@ -173,17 +175,27 @@ let dailyRealizedPnL = 0;
 let consecutiveLosses = 0;
 let auditLog = [];
 
+// Re-entrancy guard for closePosition: a module-level Set (NOT a flag on the position object,
+// and NOT persisted) keyed by position.id. A persisted flag would wedge a position permanently
+// after a crash mid-close (loadState would restore it as stuck "true" forever); a fresh process
+// always correctly starts with zero in-flight closes, so an empty Set needs no special-casing on
+// restart. This closes the CONCURRENT (not just sequential) duplicate-exit-order race: e.g.
+// emergencyStop's un-awaited flattenAllPositions() interleaving with an in-flight monitorPositions
+// cycle's own close call on the same position. JS only yields at await boundaries, so whichever
+// caller runs first fully claims the guard before a second caller's check can run.
+const closingPositionIds = new Set();
+
 // Gates new entries until local open positions have been verified against the broker on
 // startup. Stays false if that reconciliation could not run, so a phantom position can never
 // trigger a naked exit and we never trade on an unverified picture of what we hold.
 let reconcileOk = false;
 
-// EMA5T (futures): resting stop-entry orders, keyed like activeAlerts. Phase A simulates
-// them in PAPER mode only (fill at the alert level ± slippage when a completed candle
-// crosses it — the exact fill model the 6-year validation used). Persisted so a mid-day
-// restart keeps them. The LIVE broker-side stop-entry path is not built yet and is blocked.
+// EMA5T (futures): resting stop-entry orders, keyed like activeAlerts. One unified lifecycle for
+// both paper and live (see manageFuturesPending) — paperTrading is threaded through to
+// placeStopEntry either way, so paper mode exercises the same order-placement/cancel-discipline
+// code live runs, differing only in how a fill is detected. Persisted so a mid-day restart keeps
+// them; cleared daily (tradingLoop's new-day reset) since resting entries never carry across days.
 let pendingEntries = new Map();
-let ema5tLiveWarnedDate = null;
 
 
 // ΓöÇΓöÇΓöÇ PERSISTENCE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -275,6 +287,35 @@ export function dropInProgressCandle(candles, timeframeMinutes, nowSec = Math.fl
   const periodSec = (Number(timeframeMinutes) || 5) * 60;
   if (startSec > 0 && nowSec < startSec + periodSec) return candles.slice(0, -1);
   return candles;
+}
+
+/**
+ * Is the most recent (already-completed, post dropInProgressCandle) candle too old to trust for
+ * a live entry decision? Stale if its period ENDED more than `toleranceMultiples` periods ago —
+ * generous enough to tolerate normal poll jitter / REST-fallback latency, tight enough to catch a
+ * genuinely stuck feed within a few missed bars. Missing/empty candles are stale by default
+ * (fail-safe: no data is never treated as "fine"). Pure (nowSec injectable) for unit testing.
+ */
+export function isCandleStale(candles, timeframeMinutes, nowSec = Math.floor(Date.now() / 1000), toleranceMultiples = 2.5) {
+  if (!Array.isArray(candles) || candles.length === 0) return true;
+  const startSec = Number(candles[candles.length - 1]?.[0]) || 0;
+  if (!startSec) return true;
+  const periodSec = (Number(timeframeMinutes) || 5) * 60;
+  return nowSec - (startSec + periodSec) > periodSec * toleranceMultiples;
+}
+
+/**
+ * Is a single tick (getLatestTick's shape: { symbol, ltp, volume, timestamp(ms) }) too old to
+ * trust? Ticks should be near-continuous intra-session, so this is a much tighter, ABSOLUTE
+ * threshold than isCandleStale's timeframe-scaled one — it targets a stalled-but-still-
+ * "connected" WebSocket specifically, since getWsStatus() reports connection state but not tick
+ * recency. Pure (nowMs injectable) for unit testing.
+ */
+export function isTickStale(tick, nowMs = Date.now(), thresholdMs = 3 * 60 * 1000) {
+  if (!tick) return true;
+  const tickMs = Number(tick.timestamp) || 0;
+  if (!tickMs) return true;
+  return nowMs - tickMs > thresholdMs;
 }
 
 async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
@@ -484,6 +525,27 @@ function checkCorrelationFilter(underlyingName) {
   return true;
 }
 
+/**
+ * Total margin currently committed across every OPEN position plus every resting pending entry
+ * that already has a live entryOrderId (a resting live order provisionally reserves margin at
+ * the broker the moment it's placed — a conservative default, verify against FYERS's actual
+ * margin-blocking behavior for a working SL-M order). Computed on-demand from the current
+ * positions/pending map rather than a maintained running counter: a separate counter would need
+ * to stay in lockstep with every position-mutation site (open, partial exit, reconcile, close) —
+ * exactly the class of drift bug the rest of this effort is eliminating. openPositions is already
+ * the single source of truth; summing a handful of entries a few times per 30s cycle is
+ * negligible cost. Pure (positions/pending injectable) for unit testing.
+ */
+export function computeCommittedMargin(positions, pending) {
+  const openMargin = (positions || [])
+    .filter((p) => p.status === "OPEN")
+    .reduce((sum, p) => sum + (Number(p.marginAtEntry) || 0), 0);
+  const pendingMargin = Array.from((pending && typeof pending.values === "function" ? pending.values() : []))
+    .filter((p) => p && p.entryOrderId)
+    .reduce((sum, p) => sum + (Number(p.marginEst) || 0), 0);
+  return openMargin + pendingMargin;
+}
+
 async function fetchOptionQuote(optionSymbol, session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(optionSymbol)}`;
@@ -568,15 +630,16 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
   position.quantity = exitQty;
   position.pendingExitOrderId = null; // exit resolved — nothing in flight anymore
 
-  // C4: report NET P&L — deduct brokerage + statutory costs (same model the backtest uses) so the
-  // dashboard/audit isn't optimistic. Paper mode has no real costs. The round-trip cost is charged
-  // ONCE for the whole position (on the original entry qty), so a multi-leg exit — where earlier
-  // legs were realized GROSS via settleLeg — never double-counts brokerage / buy-side charges.
-  // Direction-aware: SHORT futures profit when exit < entry (options have no side → long math).
+  // C4: report NET P&L — deduct brokerage + statutory futures costs (STT/exchange/stamp/GST on
+  // notional turnover, NOT the options premium model) so the dashboard/audit isn't optimistic.
+  // Paper mode has no real costs. The round-trip cost is charged ONCE for the whole position (on
+  // the original entry qty), so a multi-leg exit — where earlier legs were realized GROSS via
+  // settleLeg — never double-counts brokerage / buy-side charges.
+  // Direction-aware: SHORT futures profit when exit < entry.
   const dirMult = position.side === "SHORT" ? -1 : 1;
   const gross = (exitPrice - position.avgFillPrice) * exitQty * dirMult;
   const costQty = position.origEntryQty || exitQty;
-  const costs = CONFIG.PAPER_TRADING ? 0 : computeOptionCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER });
+  const costs = CONFIG.PAPER_TRADING ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER });
   const pnl = gross - costs;
   position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
   position.pnl = position.realizedPnl;
@@ -633,7 +696,24 @@ function settleLeg(position, exitPrice, qty, source) {
   return position.quantity;
 }
 
-async function closePosition(position, session, reason) {
+/**
+ * Guarded entry point: claims position.id in closingPositionIds synchronously (before any await)
+ * so two concurrent invocations for the same position can never both reach the exit-order-placing
+ * logic in closePositionInner. See the closingPositionIds declaration for why this is a module-
+ * level Set rather than a persisted flag. Exported only for the reentrancy test — not part of the
+ * public API surface used by routes.
+ */
+export async function closePosition(position, session, reason) {
+  if (closingPositionIds.has(position.id)) return;
+  closingPositionIds.add(position.id);
+  try {
+    await closePositionInner(position, session, reason);
+  } finally {
+    closingPositionIds.delete(position.id);
+  }
+}
+
+async function closePositionInner(position, session, reason) {
   if (position.status !== "OPEN") return;
 
   let heldQty = position.entryQty ?? position.quantity;
@@ -729,6 +809,9 @@ async function closePosition(position, session, reason) {
   const exitOrder = await placeMarketExit({
     symbol: position.optionSymbol,
     qty: heldQty,
+    // SELL closes a LONG; BUY covers a SHORT. EMA5T trades both directions, unlike the
+    // (removed) option-buying flow this wrapper was originally built for.
+    side: futuresOrderSide(position.side, "EXIT"),
     session,
     paperTrading: CONFIG.PAPER_TRADING,
     paperFillPrice,
@@ -842,15 +925,21 @@ export function planReconciliation(openLocal, netPositions) {
   const toKeep = [];
   for (const pos of openLocal || []) {
     const brokerQty = netQtyBySymbol.get(pos.optionSymbol);
-    // The bot only ever BUYS options, so a live position has a positive net qty. Absent or
-    // <= 0 means the broker is flat in this symbol — it was closed (SL/manual/expiry) while
-    // we were offline, so reconcile it to CLOSED rather than ever acting on it again.
-    if (!brokerQty || brokerQty <= 0) {
+    // EMA5T trades futures both LONG and SHORT — a genuinely open SHORT reports a NEGATIVE
+    // netQty at the broker, so only exactly 0 (or absent) means flat. Treating <= 0 as flat
+    // (the old options-only-BUYS assumption) would silently reconcile a live open short to
+    // CLOSED, losing all tracking/monitoring/SL of a real position.
+    if (!brokerQty) {
       const np = npBySymbol.get(pos.optionSymbol);
       const realized = np ? Number(np.realized_profit ?? np.pl ?? np.realizedPnl ?? 0) || 0 : 0;
       toClose.push({ position: pos, realized });
     } else {
-      toKeep.push({ position: pos, brokerQty });
+      // Sanity-check the sign matches the position's recorded side. A mismatch is never treated
+      // as flat/closed — an anomalous sign is still a live position that needs monitoring — it's
+      // only flagged so the operator can see it, never silently swallowed.
+      const expectedSign = pos.side === "SHORT" ? -1 : 1;
+      const signMismatch = Math.sign(brokerQty) !== expectedSign;
+      toKeep.push({ position: pos, brokerQty: Math.abs(brokerQty), signMismatch });
     }
   }
   return { toClose, toKeep };
@@ -862,15 +951,21 @@ export function planReconciliation(openLocal, netPositions) {
  * SL is exactly the unattended risk this whole tier targets.
  */
 async function ensureStopLoss(position, session) {
-  if (CONFIG.PAPER_TRADING) return;
   let alive = false;
   if (position.slOrderId) {
-    try {
-      const details = await getOrderDetails(position.slOrderId, session);
-      alive = details.status === "PENDING";
-    } catch (err) {
-      console.error(`[AUTO-TRADER] Reconcile: SL status check failed for ${position.optionSymbol}:`, err.message);
-      alive = false;
+    if (CONFIG.PAPER_TRADING) {
+      // Synthetic paper SL orders don't independently expire/fill at a broker — once armed,
+      // treat as alive (paper's actual SL enforcement is the candle-level check in
+      // monitorPositions; this order is for parity/observability with what live will do).
+      alive = true;
+    } else {
+      try {
+        const details = await getOrderDetails(position.slOrderId, session);
+        alive = details.status === "PENDING";
+      } catch (err) {
+        console.error(`[AUTO-TRADER] Reconcile: SL status check failed for ${position.optionSymbol}:`, err.message);
+        alive = false;
+      }
     }
   }
   if (alive) return;
@@ -880,8 +975,10 @@ async function ensureStopLoss(position, session) {
       symbol: position.optionSymbol,
       qty: position.quantity,
       stopPrice,
+      // BUY protects a SHORT (stop above entry); SELL protects a LONG (stop below entry).
+      side: futuresOrderSide(position.side, "EXIT"),
       session,
-      paperTrading: false,
+      paperTrading: CONFIG.PAPER_TRADING,
       auditLogger: logAudit,
     });
     position.slOrderId = slOrder.orderId;
@@ -959,7 +1056,11 @@ async function reconcilePositionsWithBroker(session) {
     console.log(`[AUTO-TRADER] Reconciled FLAT at broker → CLOSED: ${position.optionSymbol} (realized ₹${position.realizedPnl.toFixed(2)})`);
   }
 
-  for (const { position, brokerQty } of toKeep) {
+  for (const { position, brokerQty, signMismatch } of toKeep) {
+    if (signMismatch) {
+      logAudit({ type: "RECONCILE_SIDE_MISMATCH", optionSymbol: position.optionSymbol, localSide: position.side, brokerQty });
+      console.error(`[AUTO-TRADER] Reconcile: broker qty sign doesn't match recorded side for ${position.optionSymbol} (side=${position.side}, brokerQty=${brokerQty}) — kept open, needs manual review.`);
+    }
     if (brokerQty !== position.quantity) {
       logAudit({ type: "RECONCILE_QTY_MISMATCH", optionSymbol: position.optionSymbol, localQty: position.quantity, brokerQty });
       position.quantity = brokerQty;
@@ -1135,12 +1236,24 @@ async function fetchLatestCandles(symbol, session, timeframeMinutes) {
   return data.candles || [];
 }
 
-// ─── EMA5T FUTURES (Phase A: paper only) ─────────────────────────────
+// ─── EMA5T FUTURES ─────────────────────────────────────────────────
 const MONTH_CODES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 /** FYERS futures symbol, e.g. NSE:BANKNIFTY26JULFUT. Pure/exported for unit tests. */
 export function buildFuturesSymbol(underlyingName, year, monthIdx) {
   return `NSE:${underlyingName}${String(year % 100).padStart(2, "0")}${MONTH_CODES[monthIdx]}FUT`;
+}
+
+/**
+ * Map an EMA5T position direction + order purpose to the correct broker order side. EMA5T trades
+ * both LONG and SHORT futures, so "closing" or "protecting" a position is BUY for a SHORT and
+ * SELL for a LONG — the opposite of the option-buying flow's always-SELL-to-exit assumption that
+ * placeMarketExit/placeStopLossOrder used to hardcode. Pure/exported for unit tests.
+ */
+export function futuresOrderSide(dir, purpose) {
+  if (dir === "LONG") return purpose === "ENTRY" ? ORDER_SIDE.BUY : ORDER_SIDE.SELL;
+  if (dir === "SHORT") return purpose === "ENTRY" ? ORDER_SIDE.SELL : ORDER_SIDE.BUY;
+  throw new Error(`futuresOrderSide: unknown direction "${dir}"`);
 }
 
 // Resolve the tradable (current-month, else next) futures contract by asking FYERS for a
@@ -1172,139 +1285,229 @@ async function resolveFuturesSymbol(underlying, session) {
 }
 
 /**
- * EMA5T resting stop-entry lifecycle (called once per underlying+timeframe per cycle,
- * INSTEAD of the option/breakout flow). PAPER ONLY in Phase A — fills are simulated at
- * the alert level ± slippage when a completed candle crosses it, with the same worst-case
- * same-candle SL rule the 6-year validation used. The live broker-side stop-order path is
- * deliberately NOT wired: running EMA5T in live mode refuses loudly instead of silently
- * degrading to market fills (which the validation showed destroys the edge).
+ * Check whether a resting EMA5T entry order has filled. LIVE: a real broker order-status lookup.
+ * PAPER: the exact candle-crossing check the original paper-only simulation used (a resting
+ * stop-entry must NOT instant-fill the way waitForFill's generic paper branch does — it only
+ * fills when a LATER candle actually crosses the level). Returns a normalized
+ * { status: "FILLED"|"PENDING"|"REJECTED"|"CANCELLED"|"EXPIRED"|"UNKNOWN", avgFillPrice?, filledQty? }.
  */
-async function manageFuturesPending({ key, underlying, tf, candles, futSymbol, alert, session }) {
-  if (!CONFIG.PAPER_TRADING) {
-    const today = new Date().toDateString();
-    if (ema5tLiveWarnedDate !== today) {
-      ema5tLiveWarnedDate = today;
-      console.error("[AUTO-TRADER] EMA5T is PAPER-ONLY until the live stop-entry path is built — skipping live signals.");
-      logAudit({ type: "EMA5T_LIVE_BLOCKED", key });
-    }
-    return;
+export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, level, latestCandle, qty, session }) {
+  if (paperTrading) {
+    const crossed = dir === "LONG" ? latestCandle[2] >= level : latestCandle[3] <= level;
+    if (!crossed) return { status: "PENDING", filledQty: 0 };
+    const slip = 0.0005; // same stop-fill slippage the 6-year validation charged
+    const avgFillPrice = dir === "LONG" ? level * (1 + slip) : level * (1 - slip);
+    return { status: "FILLED", avgFillPrice, filledQty: qty };
   }
+  if (!entryOrderId) return { status: "PENDING", filledQty: 0 }; // armed locally, gated out at placement time
+  return getOrderDetails(entryOrderId, session);
+}
 
+/**
+ * Cancel a resting EMA5T entry order (or no-op for one never actually placed / a paper record).
+ * Returns { ok:true } once safely gone, { ok:false } if the cancel could not be confirmed — the
+ * caller must NOT delete/overwrite the local record in that case (the order may still be live;
+ * losing track of it is worse than a one-cycle delay in expiring it).
+ */
+export async function cancelPendingEntryOrder(p, paperTrading, session) {
+  if (!p.entryOrderId || paperTrading) return { ok: true };
+  try {
+    await cancelOrder(p.entryOrderId, session, logAudit);
+    return { ok: true };
+  } catch (err) {
+    console.error(`[AUTO-TRADER] Could not cancel EMA5T entry order ${p.entryOrderId} for ${p.key}:`, err.message);
+    return { ok: false };
+  }
+}
+
+/**
+ * EMA5T resting stop-entry lifecycle (called once per underlying+timeframe per cycle, INSTEAD of
+ * the option/breakout flow). ONE unified path for both paper and live: placeStopEntry is called
+ * either way (paperTrading threaded through — placeOrder's own paper branch fabricates a
+ * synthetic order id + audit entry with no real API call), and the ONLY paper/live branch point is
+ * checkEntryOrderFill above. This means paper mode now exercises the exact same order-placement,
+ * cancel-discipline, and margin-aggregation code live will run — not a separate simulated path.
+ * Errors are caught here (not left to propagate) so one flaky broker call for one timeframe can
+ * never abort the sibling timeframes' processing in the same processCandles cycle.
+ */
+async function manageFuturesPending(args) {
+  try {
+    await manageFuturesPendingInner(args);
+  } catch (err) {
+    console.error(`[AUTO-TRADER] EMA5T pending-entry cycle failed for ${args.key}:`, err.message);
+    logAudit({ type: "EMA5T_PENDING_CYCLE_ERROR", key: args.key, error: err.message });
+  }
+}
+
+async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymbol, alert, session }) {
+  const paperTrading = CONFIG.PAPER_TRADING;
   const latest = candles[candles.length - 1]; // last COMPLETED candle (in-progress dropped upstream)
 
-  // A fresh alert (re)arms the resting stop at its level, replacing any previous pending.
-  if (alert) {
-    const existing = pendingEntries.get(key);
-    if (!existing || existing.alertTimestamp !== alert.timestamp) {
-      const dir = alert.type === "BULLISH_ALERT" ? "LONG" : "SHORT";
-      const level = dir === "LONG" ? alert.high : alert.low;
-      const sl = dir === "LONG" ? alert.low : alert.high;
-      const risk = Math.abs(level - sl);
-      if (risk > 0) {
-        pendingEntries.set(key, {
-          key,
-          strategy: "EMA5T",
-          underlying: underlying.name,
-          timeframe: tf,
-          dir,
-          level,
-          stopLoss: sl,
-          target: dir === "LONG" ? level + 2 * risk : level - 2 * risk,
-          alertTimestamp: alert.timestamp,
-          createdAt: new Date().toISOString(),
-        });
-        saveState();
-        logAudit({ type: "EMA5T_PENDING_ARMED", key, dir, level, stopLoss: sl, timeframe: tf });
-      }
-    }
-  }
-
+  // ── Step 1: resolve any EXISTING pending entry's fate BEFORE considering a new alert — a fill
+  // must never be lost to a same-cycle overwrite by a fresh alert (see manageFuturesPending doc).
   const p = pendingEntries.get(key);
-  if (!p) return;
+  if (p) {
+    const fillCheck = await checkEntryOrderFill({
+      paperTrading, entryOrderId: p.entryOrderId, dir: p.dir, level: p.level, latestCandle: latest, qty: underlying.lotSize, session,
+    });
 
-  // Entry window: same 14:00 IST cutoff the validation used. Expired pendings are dropped.
-  if (!checkTimeFilter()) {
-    pendingEntries.delete(key);
-    saveState();
-    logAudit({ type: "EMA5T_PENDING_EXPIRED", key });
-    return;
+    const filledQty = Number(fillCheck.filledQty) || 0;
+    if (fillCheck.status === "FILLED" || (fillCheck.status === "PENDING" && filledQty > 0)) {
+      // FYERS reports a partial fill as PENDING with filledQty>0 (no dedicated PARTIAL code) — a
+      // partial is handled identically to a full fill, just sized at whatever actually filled.
+      const signalId = `${key}-${p.alertTimestamp}-${p.dir}`;
+      if (processedSignals.has(signalId)) {
+        // Already turned into a position on a prior cycle (persisted-state race after a crash) —
+        // never open a second one for the same fill.
+        pendingEntries.delete(key);
+        saveState();
+        return;
+      }
+
+      const qty = Math.min(filledQty || underlying.lotSize, underlying.lotSize);
+      const isPartial = qty < underlying.lotSize;
+      const entryFillPrice = fillCheck.avgFillPrice || p.level;
+
+      // All local state mutations happen BEFORE the one saveState() below, so a crash right
+      // after can never persist "signal processed" without the position it created (which would
+      // orphan a real live position with zero local tracking — worse than a duplicate).
+      processedSignals.add(signalId);
+      pendingEntries.delete(key);
+
+      const position = {
+        id: paperTrading ? `PAPER-FUT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` : `FUT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        entryOrderId: p.entryOrderId,
+        slOrderId: null,
+        marginAtEntry: p.marginEst,
+        kind: "FUT",
+        side: p.dir,
+        optionSymbol: futSymbol, // symbol field shared with the monitor/quote/audit plumbing
+        quantity: qty,
+        entryQty: qty,
+        origEntryQty: qty,
+        avgFillPrice: entryFillPrice,
+        entryPrice: p.level,
+        stopLoss: p.stopLoss,
+        target: p.target,
+        currentSL: p.stopLoss,
+        unrealizedPnl: 0,
+        realizedPnl: 0,
+        pnl: 0,
+        status: "OPEN",
+        entryTime: new Date().toISOString(),
+        signal: { type: p.dir, strategy: "EMA5T", timeframe: tf, entryPrice: p.level, stopLoss: p.stopLoss, target: p.target, underlying: underlying.name },
+        underlying: underlying.name,
+      };
+      openPositions.push(position);
+      todayTrades++;
+      try {
+        subscribeToSymbols([futSymbol]);
+      } catch {
+        /* best-effort */
+      }
+      storeSignal({ ...position.signal, quantity: qty, optionSymbol: futSymbol, timestamp: p.alertTimestamp });
+      logAudit({ type: "POSITION_OPENED", kind: "FUT", strategy: "EMA5T", orderId: position.id, optionSymbol: futSymbol, side: p.dir, qty, entry: entryFillPrice, stopLoss: p.stopLoss, target: p.target, timeframe: tf });
+      console.log(`[AUTO-TRADER] EMA5T ${paperTrading ? "PAPER" : "LIVE"} ${p.dir} ${futSymbol} @ ${entryFillPrice.toFixed(2)} (SL ${p.stopLoss}, target ${p.target.toFixed(2)}, ${tf}m)`);
+      recalcDailyPnL();
+      saveState();
+
+      if (isPartial) {
+        // Best-effort cancel the unfilled remainder so it doesn't keep resting and fill later as
+        // an unexpected second leg on a position we're already tracking as fully formed.
+        await cancelPendingEntryOrder(p, paperTrading, session);
+      }
+      // Never leave a live (or paper-parity) position without a resting protective stop for even
+      // one avoidable cycle — don't wait for the next monitorPositions pass to catch it up.
+      await ensureStopLoss(position, session);
+      saveState();
+      return;
+    }
+
+    if (["REJECTED", "CANCELLED", "EXPIRED"].includes(fillCheck.status)) {
+      logAudit({ type: "EMA5T_ENTRY_ORDER_FAILED", key, status: fillCheck.status });
+      pendingEntries.delete(key);
+      saveState();
+      return;
+    }
+
+    // Still resting (PENDING, nothing filled yet) — re-validate it's still worth holding. Any gate
+    // tripping cancels the resting order (real cancelOrder live; a no-op for paper/never-placed).
+    const dataFresh = !isCandleStale(candles, tf);
+    const timeOk = checkTimeFilter();
+    const riskOk = canTakeTrade(underlying.name);
+    const vixOk = checkVIXFilter();
+    if (!timeOk || !riskOk || !vixOk || !dataFresh) {
+      const cancelled = await cancelPendingEntryOrder(p, paperTrading, session);
+      if (!cancelled.ok) return; // couldn't confirm — leave tracked, retry the cancel next cycle
+      const reason = !timeOk ? "TIME" : !riskOk ? "RISK_GATE" : !vixOk ? "VIX" : "STALE_DATA";
+      pendingEntries.delete(key);
+      saveState();
+      logAudit({ type: "EMA5T_PENDING_CANCELLED", key, reason });
+      return;
+    }
+    // Still valid, still resting — fall through in case a NEW alert should supersede it below.
   }
 
-  // Fill check: has a completed candle crossed the resting level?
-  const crossed = p.dir === "LONG" ? latest[2] >= p.level : latest[3] <= p.level;
-  if (!crossed) return;
+  // ── Step 2: arm/re-arm on a new or changed alert ──
+  if (!alert) return;
+  const existing = pendingEntries.get(key);
+  if (existing && existing.alertTimestamp === alert.timestamp) return; // no change
 
-  const signalId = `${key}-${p.alertTimestamp}-${p.dir}`;
-  if (processedSignals.has(signalId)) {
-    pendingEntries.delete(key);
-    saveState();
-    return;
-  }
-  if (!canTakeTrade(underlying.name)) {
-    pendingEntries.delete(key);
-    saveState();
-    return;
-  }
-  // Catastrophe guard only (validated spec has no VIX band): skip fills when VIX > MAX_VIX.
-  if (!checkVIXFilter()) {
-    pendingEntries.delete(key);
-    saveState();
-    return;
-  }
-  processedSignals.add(signalId);
-  pendingEntries.delete(key);
+  const dir = alert.type === "BULLISH_ALERT" ? "LONG" : "SHORT";
+  const level = dir === "LONG" ? alert.high : alert.low;
+  const sl = dir === "LONG" ? alert.low : alert.high;
+  const risk = Math.abs(level - sl);
+  if (risk <= 0) return;
 
-  const slip = 0.0005; // same stop-fill slippage the 6-year validation charged
-  const entry = p.dir === "LONG" ? p.level * (1 + slip) : p.level * (1 - slip);
-  const qty = underlying.lotSize; // Phase A: fixed 1 lot
-  const marginReq = entry * qty * 0.14; // SPAN+exposure approximation with headroom
-  if (marginReq > CONFIG.CAPITAL) {
-    logAudit({ type: "EMA5T_MARGIN_SKIP", key, marginReq, capital: CONFIG.CAPITAL });
-    saveState();
-    return;
+  // A previous resting order for the OLD level must be cancelled before arming the new one.
+  if (existing) {
+    const cancelled = await cancelPendingEntryOrder(existing, paperTrading, session);
+    if (!cancelled.ok) return; // couldn't confirm the old order is gone — don't overwrite it yet
   }
 
-  const position = {
-    id: `PAPER-FUT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    entryOrderId: null,
-    slOrderId: null,
-    kind: "FUT",
-    side: p.dir,
-    optionSymbol: futSymbol, // symbol field shared with the monitor/quote/audit plumbing
-    quantity: qty,
-    entryQty: qty,
-    origEntryQty: qty,
-    avgFillPrice: entry,
-    entryPrice: p.level,
-    stopLoss: p.stopLoss,
-    target: p.target,
-    currentSL: p.stopLoss,
-    unrealizedPnl: 0,
-    realizedPnl: 0,
-    pnl: 0,
-    status: "OPEN",
-    entryTime: new Date().toISOString(),
-    signal: { type: p.dir, strategy: "EMA5T", timeframe: tf, entryPrice: p.level, stopLoss: p.stopLoss, target: p.target, underlying: underlying.name },
+  const target = dir === "LONG" ? level + 2 * risk : level - 2 * risk;
+  const marginReq = underlying.marginPerLot;
+  const committedMargin = computeCommittedMargin(openPositions, pendingEntries);
+  const dataFresh = !isCandleStale(candles, tf);
+
+  let entryOrderId = null;
+  if (checkTimeFilter() && canTakeTrade(underlying.name) && checkVIXFilter() && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
+    try {
+      const order = await placeStopEntry({
+        symbol: futSymbol,
+        qty: underlying.lotSize,
+        side: futuresOrderSide(dir, "ENTRY"),
+        stopPrice: level,
+        session,
+        paperTrading,
+        auditLogger: logAudit,
+      });
+      entryOrderId = order.orderId;
+      logAudit({ type: "EMA5T_ENTRY_ORDER_PLACED", key, dir, level, stopLoss: sl, timeframe: tf, orderId: entryOrderId });
+    } catch (err) {
+      console.error(`[AUTO-TRADER] Failed to place EMA5T entry order for ${key}:`, err.message);
+      logAudit({ type: "EMA5T_ENTRY_ORDER_PLACE_FAILED", key, error: err.message });
+    }
+  } else {
+    logAudit({ type: "EMA5T_ENTRY_ORDER_SKIPPED", key, dir, level, timeframe: tf });
+  }
+
+  pendingEntries.set(key, {
+    key,
+    strategy: "EMA5T",
     underlying: underlying.name,
-  };
-  openPositions.push(position);
-  todayTrades++;
-  try {
-    subscribeToSymbols([futSymbol]);
-  } catch {
-    /* best-effort */
-  }
-  storeSignal({ ...position.signal, quantity: qty, optionSymbol: futSymbol, timestamp: p.alertTimestamp });
-  logAudit({ type: "POSITION_OPENED", kind: "FUT", strategy: "EMA5T", orderId: position.id, optionSymbol: futSymbol, side: p.dir, qty, entry, stopLoss: p.stopLoss, target: p.target, timeframe: tf });
-  console.log(`[AUTO-TRADER] EMA5T PAPER ${p.dir} ${futSymbol} @ ${entry.toFixed(2)} (SL ${p.stopLoss}, target ${p.target.toFixed(2)}, ${tf}m)`);
-
-  // Worst-case same-candle stop — backtest parity (SL is checked before target within a bar).
-  const sameBarSl = p.dir === "LONG" ? latest[3] <= p.stopLoss : latest[2] >= p.stopLoss;
-  if (sameBarSl) {
-    finalizeClose(position, { exitPrice: p.stopLoss, exitQty: qty, reason: "STOPLOSS", exitOrderId: position.id });
-  }
-  recalcDailyPnL();
+    timeframe: tf,
+    dir,
+    level,
+    stopLoss: sl,
+    target,
+    alertTimestamp: alert.timestamp,
+    createdAt: new Date().toISOString(),
+    entryOrderId,
+    marginEst: marginReq,
+  });
   saveState();
+  logAudit({ type: "EMA5T_PENDING_ARMED", key, dir, level, stopLoss: sl, timeframe: tf, live: !!entryOrderId });
 }
 
 // ΓöÇΓöÇΓöÇ MARKET STATUS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -1347,7 +1550,6 @@ async function tradingLoop(session) {
       openPositions = openPositions.filter((p) => p.status !== "CLOSED");
       processedSignals.clear();
       pendingEntries.clear(); // resting stop entries never carry across days
-      ema5tLiveWarnedDate = null;
       console.log(`[AUTO-TRADER] New day - all counters reset`);
       saveState();
     }
@@ -1558,6 +1760,9 @@ function getExecutionStats() {
 
 function getHealthSnapshot() {
   const ws = getWsStatus();
+  // A "connected" socket that stopped delivering fresh candles is otherwise invisible to the
+  // health score — surface it if ANY actively-scanned underlying's last candle is stale.
+  const feedStale = Object.values(latestData).some((d) => isCandleStale(d.candles, d.timeframe));
   return computeHealthSnapshot({
     isRunning,
     wsConnected: !!(ws && ws.isConnected),
@@ -1565,6 +1770,7 @@ function getHealthSnapshot() {
     consecutiveLosses,
     maxConsecutiveLosses: CONFIG.MAX_CONSECUTIVE_LOSSES,
     marketOpen: isNseMarketOpen(),
+    feedStale,
   });
 }
 
