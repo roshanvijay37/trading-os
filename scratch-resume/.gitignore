@@ -4,3 +4,7 @@ package-lock.json
 qa-*.png
 resume.html
 artifact.html
+contact-*.png
+img-meta.json
+pdf-imgs/
+src-pdf/
