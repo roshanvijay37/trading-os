@@ -15,7 +15,6 @@ describe("sanitizeConfigUpdates (config bounds validation)", () => {
       positionSizingMode: "RISK",
       paperTrading: true,
       minOI: 100000,
-      maxVIX: 25,
       maxSpreadPct: 2,
       maxTimeEntryHour: 14,
     });
@@ -32,7 +31,7 @@ describe("sanitizeConfigUpdates (config bounds validation)", () => {
   });
 
   it("drops non-numeric garbage (strings coerce only if truly numeric; NaN/booleans rejected)", () => {
-    const { clean, rejected } = sanitizeConfigUpdates({ riskPercent: "abc", maxVIX: null, minOI: true });
+    const { clean, rejected } = sanitizeConfigUpdates({ riskPercent: "abc", maxRiskPerDay: null, minOI: true });
     expect(clean).toEqual({});
     expect(rejected).toHaveLength(3);
   });

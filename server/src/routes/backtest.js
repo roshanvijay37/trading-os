@@ -179,15 +179,14 @@ export function istClock(tsMs) {
 }
 
 // Pure live-parity ENTRY gate (C3): mirrors the autoTrader gates that the backtest historically
-// ignored (session window, 14:00 entry cutoff, max-trades/day, daily-loss, consecutive-loss, VIX).
-// Returns { allow, reason }. OI and correlation are intentionally not here (see runBacktest notes).
-export function liveEntryGate({ decimal, hour, dayTrades, dayPnL, consecutiveLosses, vix }, limits) {
+// ignored (session window, 14:00 entry cutoff, max-trades/day, daily-loss). Returns { allow, reason }.
+// OI and correlation are intentionally not here (see runBacktest notes); VIX and consecutive-loss
+// gates were removed at the user's request (not needed for either backtest or live).
+export function liveEntryGate({ decimal, hour, dayTrades, dayPnL }, limits) {
   if (decimal < limits.sessionStartDecimal || decimal >= limits.sessionEndDecimal) return { allow: false, reason: "OUTSIDE_SESSION" };
   if (hour >= limits.maxTimeEntryHour) return { allow: false, reason: "AFTER_ENTRY_CUTOFF" };
   if (dayTrades >= limits.maxTradesPerDay) return { allow: false, reason: "MAX_TRADES" };
   if (dayPnL <= -limits.dailyLossCap) return { allow: false, reason: "DAILY_LOSS_LIMIT" };
-  if (consecutiveLosses >= limits.maxConsecutiveLosses) return { allow: false, reason: "CONSECUTIVE_LOSSES" };
-  if (limits.maxVix != null && vix != null && vix > limits.maxVix) return { allow: false, reason: "HIGH_VIX" };
   return { allow: true, reason: "" };
 }
 
@@ -246,8 +245,6 @@ export function runBacktest(candles, config) {
     squareOffMinute = 15,         // force-exit at 15:15 IST (isSquareOffTime)
     maxTradesPerDay = 10,
     maxRiskPerDayPercent = 2,     // halt new entries once daily P&L <= -this% of capital
-    maxConsecutiveLossesLimit = 3,
-    maxVix = 25,                  // only enforced when ivSource === "INDIA_VIX" (VIX known per bar)
     marginSafetyMultiplier = 2,   // option-buying capital cap = premium * this (autoTrader MARGIN_SAFETY)
   } = config;
 
@@ -317,8 +314,6 @@ export function runBacktest(candles, config) {
   const limits = {
     sessionStartDecimal, sessionEndDecimal, maxTimeEntryHour, maxTradesPerDay,
     dailyLossCap: initialCapital * (Number(maxRiskPerDayPercent) || 0) / 100,
-    maxConsecutiveLosses: maxConsecutiveLossesLimit,
-    maxVix: isVixSource ? maxVix : null, // VIX is only known per-bar when sourced from India VIX
   };
   let curDay = null, dayTrades = 0, dayPnL = 0;
   const blockedByFilter = {}; // reason -> count, surfaced in the result for transparency
@@ -406,9 +401,8 @@ export function runBacktest(candles, config) {
     const wantShort = alertCandle.type === "BEARISH" && candle.low < ac.low;
     if (!wantLong && !wantShort) return;
     if (applyLiveFilters) {
-      const vix = isVixSource ? (candleIv[i] / ivMult) * 100 : null;
       const gate = liveEntryGate(
-        { decimal: clk.decimal, hour: clk.hour, dayTrades, dayPnL, consecutiveLosses: currentConsecutiveLosses, vix },
+        { decimal: clk.decimal, hour: clk.hour, dayTrades, dayPnL },
         limits
       );
       if (!gate.allow) {
@@ -686,7 +680,7 @@ export function runBacktest(candles, config) {
     parity: {
       applyLiveFilters,
       filtersApplied: applyLiveFilters
-        ? ["session", "entryCutoff14", "maxTradesPerDay", "dailyLoss", "consecutiveLoss", "squareOff1515", "marginSafety", ...(isVixSource ? ["maxVix"] : [])]
+        ? ["session", "entryCutoff14", "maxTradesPerDay", "dailyLoss", "squareOff1515", "marginSafety"]
         : [],
       blockedByFilter,
       oiModeled: true,              // MIN_OI gate cannot be reproduced (no historical per-strike OI)
@@ -797,8 +791,6 @@ router.post("/run", async (req, res) => {
       maxTimeEntryHour: req.body.maxTimeEntryHour,
       maxTradesPerDay: req.body.maxTradesPerDay,
       maxRiskPerDayPercent: req.body.maxRiskPerDayPercent,
-      maxConsecutiveLossesLimit: req.body.maxConsecutiveLossesLimit,
-      maxVix: req.body.maxVix,
       marginSafetyMultiplier: req.body.marginSafetyMultiplier,
     });
 
@@ -992,8 +984,6 @@ router.post("/run-multi", async (req, res) => {
       maxTimeEntryHour: req.body.maxTimeEntryHour,
       maxTradesPerDay: req.body.maxTradesPerDay,
       maxRiskPerDayPercent: req.body.maxRiskPerDayPercent,
-      maxConsecutiveLossesLimit: req.body.maxConsecutiveLossesLimit,
-      maxVix: req.body.maxVix,
       marginSafetyMultiplier: req.body.marginSafetyMultiplier,
     });
       results.push({

@@ -18,12 +18,15 @@ describe("istClock (IST wall-clock from epoch ms)", () => {
   });
 });
 
+// VIX and consecutive-loss gates were removed at the user's request (not needed for either
+// backtest or live) — liveEntryGate now only covers session window, entry cutoff, max
+// trades/day, and daily loss.
 describe("liveEntryGate (backtest ↔ live entry parity)", () => {
   const limits = {
     sessionStartDecimal: 9.25, sessionEndDecimal: 15.0, maxTimeEntryHour: 14,
-    maxTradesPerDay: 10, dailyLossCap: 2000, maxConsecutiveLosses: 3, maxVix: 25,
+    maxTradesPerDay: 10, dailyLossCap: 2000,
   };
-  const base = { decimal: 10, hour: 10, dayTrades: 0, dayPnL: 0, consecutiveLosses: 0, vix: 15 };
+  const base = { decimal: 10, hour: 10, dayTrades: 0, dayPnL: 0 };
 
   it("allows a clean mid-morning signal", () => {
     expect(liveEntryGate(base, limits)).toEqual({ allow: true, reason: "" });
@@ -39,14 +42,5 @@ describe("liveEntryGate (backtest ↔ live entry parity)", () => {
   });
   it("blocks once the daily loss cap is breached", () => {
     expect(liveEntryGate({ ...base, dayPnL: -2000 }, limits).reason).toBe("DAILY_LOSS_LIMIT");
-  });
-  it("blocks after the consecutive-loss limit", () => {
-    expect(liveEntryGate({ ...base, consecutiveLosses: 3 }, limits).reason).toBe("CONSECUTIVE_LOSSES");
-  });
-  it("blocks on high VIX (when VIX is known)", () => {
-    expect(liveEntryGate({ ...base, vix: 26 }, limits).reason).toBe("HIGH_VIX");
-  });
-  it("ignores VIX when not available (maxVix null)", () => {
-    expect(liveEntryGate({ ...base, vix: 99 }, { ...limits, maxVix: null }).allow).toBe(true);
   });
 });

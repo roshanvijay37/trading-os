@@ -80,7 +80,6 @@ const CONFIG = {
   // and, with a small account, blocked every trade at the margin gate. 1.1 keeps a 10% buffer for the
   // limit-buffer overpay + rounding.
   MARGIN_SAFETY_MULTIPLIER: 1.1,
-  MAX_VIX: 25,
   MAX_SPREAD_PCT: 2,
   MIN_OI: 100000,
   MAX_TIME_ENTRY_HOUR: 14,
@@ -144,7 +143,6 @@ const CONFIG_FIELD_MAP = {
   paperTrading: "PAPER_TRADING",
   paperCapital: "PAPER_CAPITAL",
   limitBufferPct: "LIMIT_BUFFER_PCT",
-  maxVIX: "MAX_VIX",
   maxSpreadPct: "MAX_SPREAD_PCT",
   minOI: "MIN_OI",
   maxTimeEntryHour: "MAX_TIME_ENTRY_HOUR",
@@ -168,7 +166,6 @@ let lastTradeDate = null;
 
 let latestData = {};
 let processedSignals = new Set();
-let indiaVIX = 0;
 let marketStatus = "CLOSED";
 let dailyPnL = 0;
 let dailyRealizedPnL = 0;
@@ -469,40 +466,7 @@ function checkDailyLossLimit() {
   return !hit;
 }
 
-function checkConsecutiveLosses() {
-  const hit = consecutiveLosses >= CONFIG.MAX_CONSECUTIVE_LOSSES;
-  if (hit) {
-    console.log(`[AUTO-TRADER] CONSECUTIVE LOSS LIMIT: ${consecutiveLosses} losses`);
-    logAudit({ type: "CIRCUIT_BREAKER", reason: "CONSECUTIVE_LOSSES", consecutiveLosses });
-  }
-  return !hit;
-}
-
 // ΓöÇΓöÇΓöÇ MARKET FILTERS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-async function fetchIndiaVIX(session) {
-  try {
-    const url = `${FYERS_DATA_BASE}/quotes?symbols=NSE:INDIAVIX-INDEX`;
-    const data = await fyersDataFetch(url, session);
-    indiaVIX = data.d?.[0]?.v?.lp || 0;
-    return indiaVIX;
-  } catch (err) {
-    console.error("[AUTO-TRADER] VIX fetch failed:", err.message);
-    // Fail-OPEN by design (a dead VIX feed shouldn't halt trading) — but leave a trace so a
-    // day traded without the VIX filter is visible in the audit trail.
-    logAudit({ type: "VIX_FETCH_FAILED", error: err.message });
-    return 0;
-  }
-}
-
-function checkVIXFilter() {
-  if (indiaVIX > CONFIG.MAX_VIX) {
-    console.log(`[AUTO-TRADER] HIGH VIX: ${indiaVIX} (max: ${CONFIG.MAX_VIX})`);
-    logAudit({ type: "FILTER_BLOCKED", reason: "HIGH_VIX", vix: indiaVIX });
-    return false;
-  }
-  return true;
-}
-
 function checkTimeFilter() {
   const now = new Date();
   const istOffset = 330;
@@ -1156,7 +1120,6 @@ function canTakeTrade(underlyingName) {
   }
   if (!isValidTradingTime()) return false;
   if (!checkDailyLossLimit()) return false;
-  if (!checkConsecutiveLosses()) return false;
   if (!checkMaxTrades()) return false;
   if (!checkTimeFilter()) return false;
   if (!checkCorrelationFilter(underlyingName)) return false;
@@ -1435,11 +1398,10 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     const dataFresh = !isCandleStale(candles, tf);
     const timeOk = checkTimeFilter();
     const riskOk = canTakeTrade(underlying.name);
-    const vixOk = checkVIXFilter();
-    if (!timeOk || !riskOk || !vixOk || !dataFresh) {
+    if (!timeOk || !riskOk || !dataFresh) {
       const cancelled = await cancelPendingEntryOrder(p, paperTrading, session);
       if (!cancelled.ok) return; // couldn't confirm — leave tracked, retry the cancel next cycle
-      const reason = !timeOk ? "TIME" : !riskOk ? "RISK_GATE" : !vixOk ? "VIX" : "STALE_DATA";
+      const reason = !timeOk ? "TIME" : !riskOk ? "RISK_GATE" : "STALE_DATA";
       pendingEntries.delete(key);
       saveState();
       logAudit({ type: "EMA5T_PENDING_CANCELLED", key, reason });
@@ -1471,7 +1433,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const dataFresh = !isCandleStale(candles, tf);
 
   let entryOrderId = null;
-  if (checkTimeFilter() && canTakeTrade(underlying.name) && checkVIXFilter() && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
+  if (checkTimeFilter() && canTakeTrade(underlying.name) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
     try {
       const order = await placeStopEntry({
         symbol: futSymbol,
@@ -1553,7 +1515,6 @@ async function tradingLoop(session) {
       console.log(`[AUTO-TRADER] New day - all counters reset`);
       saveState();
     }
-    await fetchIndiaVIX(session);
     const { hours, minutes } = getISTTime();
     const timeStr = `${hours}:${minutes.toString().padStart(2, "0")}`;
     if (hours === 9 && minutes < 15) {
@@ -1798,7 +1759,6 @@ export function getAutoTraderStatus() {
     activeAlerts: Object.fromEntries(activeAlerts),
     latestData,
     recentSignals: getRecentSignals(10),
-    indiaVIX,
     // Live tick-feed state so the UI "Tick Feed" badge (status.tickStatus) reflects reality
     // instead of always showing REST.
     tickStatus: getWsStatus(),
@@ -1849,7 +1809,6 @@ const CONFIG_NUMERIC_BOUNDS = {
   fixedLots: { min: 1, max: 100, int: true },
   paperCapital: { min: 10000, max: 100000000 },
   limitBufferPct: { min: 0, max: 5 },
-  maxVIX: { min: 5, max: 100 },
   maxSpreadPct: { min: 0.1, max: 20 },
   minOI: { min: 0, max: 10000000, int: true },
   maxTimeEntryHour: { min: 9, max: 15, int: true },
@@ -1950,7 +1909,6 @@ export function updateConfig(updates) {
       fixedLots: CONFIG.FIXED_LOTS,
       paperTrading: CONFIG.PAPER_TRADING,
       limitBufferPct: CONFIG.LIMIT_BUFFER_PCT,
-      maxVIX: CONFIG.MAX_VIX,
       maxSpreadPct: CONFIG.MAX_SPREAD_PCT,
       minOI: CONFIG.MIN_OI,
       maxTimeEntryHour: CONFIG.MAX_TIME_ENTRY_HOUR,

@@ -76,6 +76,11 @@ export function BacktestLab() {
   const [targetMult, setTargetMult] = useState(2);
   const [slippage, setSlippage] = useState(0.02);
   const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
+  // Live-parity risk gates — same figures the live bot's own config uses by default, but
+  // editable here rather than silently hardcoded (matches the bot's own config, not a
+  // separate backtest-only assumption).
+  const [maxTradesPerDay, setMaxTradesPerDay] = useState(10);
+  const [maxRiskPerDayPercent, setMaxRiskPerDayPercent] = useState(2);
   // EMA5T only: INDEX has years of history but isn't the literal traded instrument; FUTURES is
   // the actual live contract, with real availability that varies by contract (see resolveFuturesRange).
   const [instrumentSource, setInstrumentSource] = useState<"INDEX" | "FUTURES">("INDEX");
@@ -150,6 +155,8 @@ export function BacktestLab() {
         capitalMode,
         pricingModel: "INDEX",
         instrumentSource,
+        maxTradesPerDay,
+        maxRiskPerDayPercent,
       });
       setResult(res);
     } catch (err: any) {
@@ -434,6 +441,14 @@ export function BacktestLab() {
               <option value="COMPOUND">Compounding</option>
               <option value="FIXED">Fixed</option>
             </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-2xs text-zinc-600">Max Trades/Day</label>
+            <input type="number" min="1" max="100" value={maxTradesPerDay} onChange={(e) => setMaxTradesPerDay(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+          </div>
+          <div>
+            <label className="mb-1 block text-2xs text-zinc-600">Daily Loss Limit %</label>
+            <input type="number" step="0.1" min="0.5" max="10" value={maxRiskPerDayPercent} onChange={(e) => setMaxRiskPerDayPercent(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div className="flex items-end gap-2 sm:col-span-2">
             <button onClick={runBacktest} disabled={loading || resolvingRange} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">

@@ -192,6 +192,11 @@ export const backtestApi = {
     // real availability varies (a few weeks to a few months depending on FYERS' cont_flag
     // behaviour), so let the UI ask /futures-range rather than assuming a fixed window.
     instrumentSource?: "INDEX" | "FUTURES";
+    // Live-parity risk gates — configurable here rather than silently defaulted server-side,
+    // matching the bot's own config (Max Trades/Day, Daily Loss Limit %) instead of a
+    // separate backtest-only assumption.
+    maxTradesPerDay?: number;
+    maxRiskPerDayPercent?: number;
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",
