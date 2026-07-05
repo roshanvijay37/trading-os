@@ -316,13 +316,18 @@ export function computeBacktestAnalytics(tradesIn: AnalyticsTrade[], baselineCap
 
 export type DateFilterPreset = "ALL" | "THIS_YEAR" | "LAST_12M" | "LAST_3M" | "CUSTOM";
 
-/** Filters a trade list by exitTime according to a preset or a custom [from, to] range. */
-export function filterTradesByDate(
-  trades: AnalyticsTrade[],
+/**
+ * Filters a trade list by exitTime according to a preset or a custom [from, to] range.
+ * Generic over T so callers passing a richer trade type (e.g. the UI's own Trade, which adds
+ * id/side/entryPrice/etc. on top of AnalyticsTrade) get that same richer type back, not the
+ * narrower AnalyticsTrade shape.
+ */
+export function filterTradesByDate<T extends AnalyticsTrade>(
+  trades: T[],
   preset: DateFilterPreset,
   customFrom?: string,
   customTo?: string
-): AnalyticsTrade[] {
+): T[] {
   if (preset === "ALL") return trades;
   if (preset === "CUSTOM") {
     const fromMs = customFrom ? new Date(customFrom).getTime() : -Infinity;
