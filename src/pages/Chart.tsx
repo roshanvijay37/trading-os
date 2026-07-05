@@ -231,16 +231,36 @@ export function Chart() {
     });
   }
 
+  const alerts = showSignals ? findEmaAlerts(chartCandles) : [];
+
   // Small arrow only (no text label) — a label like "B"/"S" reads too easily as "Buy"/"Sell",
   // overclaiming that this is a confirmed trade rather than just an EMA5T alert candle.
-  const markers: CandleMarker[] = showSignals
-    ? findEmaAlerts(chartCandles).map((a) => ({
-        time: chartCandles[a.index].time,
-        position: a.type === "BULLISH" ? "belowBar" : "aboveBar",
-        color: a.type === "BULLISH" ? "#10b981" : "#ef4444",
-        shape: a.type === "BULLISH" ? "arrowUp" : "arrowDown",
-      }))
-    : [];
+  const markers: CandleMarker[] = alerts.map((a) => ({
+    time: chartCandles[a.index].time,
+    position: a.type === "BULLISH" ? "belowBar" : "aboveBar",
+    color: a.type === "BULLISH" ? "#10b981" : "#ef4444",
+    shape: a.type === "BULLISH" ? "arrowUp" : "arrowDown",
+  }));
+
+  // SL/Target for the most recent alert only (older ones would clutter the chart with levels
+  // that may already be long resolved). Same entry/SL/target formula the live bot uses
+  // (autoTrader.js: entry = alert high/low, SL = alert low/high, target = entry ± 2x risk) —
+  // drawn from the alert candle out to the latest candle, NOT a claim that this setup is still
+  // "live" (a later alert or an actual breakout may have already superseded it).
+  const latestAlert = alerts[alerts.length - 1];
+  if (latestAlert && chartCandles.length > 0) {
+    const alertCandle = chartCandles[latestAlert.index];
+    const lastTime = chartCandles[chartCandles.length - 1].time;
+    const isBullish = latestAlert.type === "BULLISH";
+    const entry = isBullish ? alertCandle.high : alertCandle.low;
+    const sl = isBullish ? alertCandle.low : alertCandle.high;
+    const risk = Math.abs(entry - sl);
+    const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
+    overlays.push(
+      { label: "SL", color: "#ef4444", dashed: true, data: [{ time: alertCandle.time, value: sl }, { time: lastTime, value: sl }] },
+      { label: "Target", color: "#10b981", dashed: true, data: [{ time: alertCandle.time, value: target }, { time: lastTime, value: target }] },
+    );
+  }
 
   return (
     <div>

@@ -7,7 +7,7 @@
  * chart.addSeries(...) form does not exist in 4.2.
  */
 
-import { ColorType, createChart, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
+import { ColorType, createChart, LineStyle, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../../store/theme";
 import { getChartPalette } from "../../lib/chartTheme";
@@ -32,6 +32,9 @@ export interface OverlayLine {
   label: string;
   color: string;
   data: LinePoint[];
+  /** Dashed instead of solid — e.g. to distinguish a reference level (SL/target) from a
+   * continuous indicator line (EMA). */
+  dashed?: boolean;
 }
 
 export interface CandleMarker {
@@ -93,7 +96,7 @@ export function CandlesChart({
   const lastFitKeyRef = useRef<string | null>(null);
   const [hover, setHover] = useState<CandlePoint | null>(null);
   const theme = useTheme();
-  const overlayKey = overlays.map((o) => `${o.label}:${o.color}`).join("|");
+  const overlayKey = overlays.map((o) => `${o.label}:${o.color}:${o.dashed ? 1 : 0}`).join("|");
 
   // Create/destroy the chart. StrictMode-safe: cleanup fully removes the chart. Recreated (not
   // just recolored) on theme change — lightweight-charts has no "update palette" API.
@@ -135,10 +138,11 @@ export function CandlesChart({
         o.label,
         chart.addLineSeries({
           color: o.color,
-          lineWidth: 1,
+          lineWidth: o.dashed ? 2 : 1,
+          lineStyle: o.dashed ? LineStyle.Dashed : LineStyle.Solid,
           lastValueVisible: true,
           priceLineVisible: false,
-          crosshairMarkerVisible: true,
+          crosshairMarkerVisible: !o.dashed,
         }),
       );
     }
