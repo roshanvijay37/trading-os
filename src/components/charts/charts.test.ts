@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeCandles } from "./CandlesChart";
+import { sanitizeCandles, sanitizeLinePoints } from "./CandlesChart";
 import { nearestByX, nearestIndex } from "./svgHover";
 
 describe("sanitizeCandles", () => {
@@ -24,6 +24,29 @@ describe("sanitizeCandles", () => {
       { time: NaN, open: 1, high: 1, low: 1, close: 1 },
     ]);
     expect(out.map((x) => x.time)).toEqual([10]);
+  });
+});
+
+describe("sanitizeLinePoints", () => {
+  it("sorts ascending by time", () => {
+    const out = sanitizeLinePoints([{ time: 30, value: 1 }, { time: 10, value: 2 }, { time: 20, value: 3 }]);
+    expect(out.map((p) => p.time)).toEqual([10, 20, 30]);
+  });
+
+  it("dedupes by time, keeping the last occurrence", () => {
+    const out = sanitizeLinePoints([{ time: 10, value: 1 }, { time: 20, value: 2 }, { time: 10, value: 9 }]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ time: 10, value: 9 });
+  });
+
+  it("drops points with missing/NaN time or value", () => {
+    const out = sanitizeLinePoints([
+      { time: 10, value: 1 },
+      { time: 0, value: 1 },
+      { time: 20, value: NaN },
+      { time: NaN, value: 1 },
+    ]);
+    expect(out.map((p) => p.time)).toEqual([10]);
   });
 });
 

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { LineChart, Activity, Clock, Calendar } from "lucide-react";
-import { CandlesChart } from "../components/charts/CandlesChart";
+import { CandlesChart, type OverlayLine } from "../components/charts/CandlesChart";
 import { Flash } from "../components/ui/Flash";
 import { Skeleton } from "../components/ui/Skeleton";
 import { backtestApi } from "../services/api";
+import { calculateEMA } from "../lib/strategies/engine";
 
 interface Candle {
   timestamp: number;
@@ -84,6 +85,13 @@ export function Chart() {
   const [holidays, setHolidays] = useState<{ date: string; name: string }[]>([]);
   const [marketOpen, setMarketOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState("");
+  // EMA 5 / EMA 20 — the same two indicators EMA5T's live/paper bot uses for its alert rule and
+  // trend gate (server/src/services/emaStrategy.js), computed here with the identical canonical
+  // math (src/lib/strategies/engine.ts's calculateEMA). Shown on whatever symbol/timeframe is
+  // currently selected — a general-purpose overlay, not a claim that this IS the bot's live signal
+  // (the bot trades the futures contract specifically; this page charts the index).
+  const [showEma5, setShowEma5] = useState(true);
+  const [showEma20, setShowEma20] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const symbols = [
@@ -195,6 +203,29 @@ export function Chart() {
   }));
   const hasVolume = candles.some((c) => (c.volume || 0) > 0);
 
+  // calculateEMA returns a series shorter than the input (no value until `period` closes exist);
+  // offset re-aligns it back onto the matching candle's own timestamp.
+  const overlays: OverlayLine[] = [];
+  const closes = chartCandles.map((c) => c.close);
+  if (showEma5 && closes.length >= 5) {
+    const values = calculateEMA(closes, 5);
+    const offset = closes.length - values.length;
+    overlays.push({
+      label: "EMA 5",
+      color: "#f59e0b",
+      data: values.map((value, i) => ({ time: chartCandles[offset + i].time, value })),
+    });
+  }
+  if (showEma20 && closes.length >= 20) {
+    const values = calculateEMA(closes, 20);
+    const offset = closes.length - values.length;
+    overlays.push({
+      label: "EMA 20",
+      color: "#3b82f6",
+      data: values.map((value, i) => ({ time: chartCandles[offset + i].time, value })),
+    });
+  }
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-5">
@@ -238,6 +269,27 @@ export function Chart() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowEma5((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-2 text-2xs font-medium transition ${
+              showEma5 ? "border-warn/30 bg-warn-dim text-warn" : "border-border-subtle bg-surface text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-warn" />
+            EMA 5
+          </button>
+          <button
+            onClick={() => setShowEma20((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-2 text-2xs font-medium transition ${
+              showEma20 ? "border-info/30 bg-info-dim text-info" : "border-border-subtle bg-surface text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-info" />
+            EMA 20
+          </button>
         </div>
 
         {lastUpdate && (
@@ -287,6 +339,7 @@ export function Chart() {
             showVolume={hasVolume}
             timeVisible={resolution !== "D"}
             fitKey={`${symbol}:${resolution}`}
+            overlays={overlays}
           />
 
           <div className="mt-3 flex items-center justify-between text-2xs text-zinc-700">

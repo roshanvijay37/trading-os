@@ -22,6 +22,18 @@ export interface CandlePoint {
   volume?: number;
 }
 
+export interface LinePoint {
+  time: number;
+  value: number;
+}
+
+export interface OverlayLine {
+  /** Identifies the series across renders (also shown in the on-chart legend/toggle UI). */
+  label: string;
+  color: string;
+  data: LinePoint[];
+}
+
 /** Dedupe by time + ascending sort + NaN guard — setData throws otherwise (FYERS fetches can overlap). */
 export function sanitizeCandles(candles: CandlePoint[]): CandlePoint[] {
   const map = new Map<number, CandlePoint>();
@@ -33,12 +45,24 @@ export function sanitizeCandles(candles: CandlePoint[]): CandlePoint[] {
   return Array.from(map.values()).sort((a, b) => a.time - b.time);
 }
 
+/** Same dedupe/sort/NaN-guard contract as sanitizeCandles, for overlay line series. */
+export function sanitizeLinePoints(points: LinePoint[]): LinePoint[] {
+  const map = new Map<number, LinePoint>();
+  for (const p of points) {
+    if (!p.time || !Number.isFinite(p.time)) continue;
+    if (typeof p.value !== "number" || Number.isNaN(p.value)) continue;
+    map.set(p.time, p);
+  }
+  return Array.from(map.values()).sort((a, b) => a.time - b.time);
+}
+
 export function CandlesChart({
   candles,
   height = 420,
   showVolume = true,
   timeVisible = true,
   fitKey = "",
+  overlays = [],
 }: {
   candles: CandlePoint[];
   height?: number;
@@ -46,14 +70,19 @@ export function CandlesChart({
   timeVisible?: boolean;
   /** Change this (e.g. `${symbol}:${resolution}`) to re-fit the visible range to the new data. */
   fitKey?: string;
+  /** Indicator overlay lines (e.g. EMA). Series are (re)created whenever the SET of labels
+   * changes (cheap — same as a theme/timeVisible change); data updates independently. */
+  overlays?: OverlayLine[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const overlaySeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const lastFitKeyRef = useRef<string | null>(null);
   const [hover, setHover] = useState<CandlePoint | null>(null);
   const theme = useTheme();
+  const overlayKey = overlays.map((o) => `${o.label}:${o.color}`).join("|");
 
   // Create/destroy the chart. StrictMode-safe: cleanup fully removes the chart. Recreated (not
   // just recolored) on theme change — lightweight-charts has no "update palette" API.
@@ -89,6 +118,20 @@ export function CandlesChart({
       chart.priceScale("").applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
     }
 
+    const overlaySeries = new Map<string, ISeriesApi<"Line">>();
+    for (const o of overlays) {
+      overlaySeries.set(
+        o.label,
+        chart.addLineSeries({
+          color: o.color,
+          lineWidth: 1,
+          lastValueVisible: true,
+          priceLineVisible: false,
+          crosshairMarkerVisible: true,
+        }),
+      );
+    }
+
     chart.subscribeCrosshairMove((param) => {
       if (!param.time) {
         setHover(null);
@@ -108,6 +151,7 @@ export function CandlesChart({
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
+    overlaySeriesRef.current = overlaySeries;
     lastFitKeyRef.current = null; // force a fit after (re)creation
 
     return () => {
@@ -115,9 +159,10 @@ export function CandlesChart({
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      overlaySeriesRef.current = new Map();
       setHover(null);
     };
-  }, [showVolume, timeVisible, theme]);
+  }, [showVolume, timeVisible, theme, overlayKey]);
 
   // Feed data without recreating the chart, preserving zoom/pan between polls.
   useEffect(() => {
@@ -139,11 +184,18 @@ export function CandlesChart({
       );
     }
 
+    for (const o of overlays) {
+      const series = overlaySeriesRef.current.get(o.label);
+      if (!series) continue;
+      const pts = sanitizeLinePoints(o.data);
+      series.setData(pts.map((p) => ({ time: p.time as Time, value: p.value })));
+    }
+
     if (data.length > 0 && lastFitKeyRef.current !== fitKey) {
       chart.timeScale().fitContent();
       lastFitKeyRef.current = fitKey;
     }
-  }, [candles, fitKey]);
+  }, [candles, fitKey, overlays]);
 
   return (
     <div className="relative">
