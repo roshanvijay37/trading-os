@@ -3,10 +3,12 @@
  * Merged Backtest + Visual Backtest
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createChart, ColorType, IChartApi, Time, LineStyle } from "lightweight-charts";
-import { Play, RotateCcw, TrendingUp, TrendingDown, Shield, BarChart3, Table, LineChart, Eye } from "lucide-react";
+import { Play, RotateCcw, TrendingUp, TrendingDown, Shield, BarChart3, Table, LineChart, Eye, Download, Filter } from "lucide-react";
 import { backtestApi } from "../services/api";
+import { downloadBacktestPdf } from "../lib/backtestPdfReport";
+import { computeBacktestAnalytics, filterTradesByDate, type DateFilterPreset } from "../lib/backtestAnalytics";
 
 interface Trade {
   id: number;
@@ -22,6 +24,7 @@ interface Trade {
   barsHeld: number;
   sl?: number; // index level of the stop-loss (for the candle-chart overlay)
   target?: number; // index level of the target
+  riskAtEntry?: number; // rupees risked at entry — feeds R-multiple stats
 }
 
 interface EquityPoint {
@@ -116,6 +119,41 @@ export function BacktestLab() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"both" | "table" | "chart" | "candles">("both");
   const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
+  // Post-hoc filter over an already-completed run's trades — re-slices a long multi-year result
+  // (e.g. "this year only") instantly, client-side, without re-running the backtest.
+  const [dateFilter, setDateFilter] = useState<DateFilterPreset>("ALL");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  // Post-hoc date filter: re-slice the already-completed run's trades client-side, then
+  // recompute every stat for just that window — no new backend call, no re-running the sim.
+  // Declared before the effects below (which depend on it) since a dependency array is evaluated
+  // synchronously during render, unlike an effect's own body.
+  const filteredTrades = useMemo(() => {
+    if (!result) return [];
+    return filterTradesByDate(result.trades || [], dateFilter, customFrom, customTo);
+  }, [result, dateFilter, customFrom, customTo]);
+
+  // The account's equity going INTO the filtered window — the equity value right after whatever
+  // trade immediately precedes the window's first included trade, or the original starting
+  // capital if the window starts at (or before) the very first trade in the run.
+  const baselineCapital = useMemo(() => {
+    if (!result || dateFilter === "ALL" || filteredTrades.length === 0) return capital;
+    const allTrades = result.trades || [];
+    const allEquity = result.equityCurve || [];
+    const idx = allTrades.findIndex((t) => t.id === filteredTrades[0].id);
+    if (idx <= 0) return capital;
+    return allEquity[idx - 1]?.equity ?? capital;
+  }, [result, filteredTrades, dateFilter, capital]);
+
+  const filteredAnalytics = useMemo(() => {
+    if (dateFilter === "ALL") return null;
+    return computeBacktestAnalytics(filteredTrades, baselineCapital);
+  }, [dateFilter, filteredTrades, baselineCapital]);
+
+  const sum = dateFilter === "ALL" ? result?.summary : filteredAnalytics?.summary;
+  const adv = dateFilter === "ALL" ? result?.advanced : filteredAnalytics?.advanced;
+  const displayedEquityCurve = dateFilter === "ALL" ? (result?.equityCurve || []) : (filteredAnalytics?.equityCurve || []);
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -197,7 +235,7 @@ export function BacktestLab() {
 
   useEffect(() => {
     if (!result || !chartContainerRef.current || viewMode === "table") return;
-    if (!Array.isArray(result.equityCurve) || result.equityCurve.length === 0) return;
+    if (!Array.isArray(displayedEquityCurve) || displayedEquityCurve.length === 0) return;
 
     if (chartRef.current) {
       chartRef.current.remove();
@@ -227,7 +265,7 @@ export function BacktestLab() {
 
       // Sanitize equity curve: validate every point, convert ISO dates to Unix timestamps (seconds),
       // deduplicate by time, and sort ascending.
-      const rawLineData = result.equityCurve
+      const rawLineData = displayedEquityCurve
         .filter((pt: any): pt is EquityPoint => {
           const ts = pt.date ? Math.floor(new Date(pt.date).getTime() / 1000) : NaN;
           const value = typeof pt.equity === "number" && !isNaN(pt.equity) ? pt.equity : NaN;
@@ -251,8 +289,8 @@ export function BacktestLab() {
       }
 
       // Sanitize markers: only include trades with valid entryTime and entryPrice.
-      const markers = Array.isArray(result.trades)
-        ? result.trades
+      const markers = Array.isArray(filteredTrades)
+        ? filteredTrades
             .filter((trade: Trade) => trade.entryTime && typeof trade.entryPrice === "number" && !isNaN(trade.entryPrice))
             .map((trade: Trade) => ({
               time: Math.floor(new Date(trade.entryTime).getTime() / 1000) as Time,
@@ -290,12 +328,13 @@ export function BacktestLab() {
     } catch (err) {
       console.error("[BacktestLab] Chart error:", err);
     }
-  }, [result, viewMode]);
+  }, [result, viewMode, displayedEquityCurve, filteredTrades]);
 
-  // When a new result loads, preselect the first trade so its SL/target show on the candle chart.
+  // When a new result loads (or the filter changes), preselect the first VISIBLE trade so its
+  // SL/target show on the candle chart.
   useEffect(() => {
-    setSelectedTradeId(result?.trades?.[0]?.id ?? null);
-  }, [result]);
+    setSelectedTradeId(filteredTrades?.[0]?.id ?? null);
+  }, [result, filteredTrades]);
 
   // Candlestick chart: the INDEX price series with per-trade entry/exit markers, plus the SL and
   // target levels of the SELECTED trade drawn as short segments spanning entry→exit. Candles and
@@ -343,8 +382,9 @@ export function BacktestLab() {
       if (candleData.length === 0) return;
       candleSeries.setData(candleData);
 
-      // Entry (▲ long / ▼ short) + exit (● green win / red loss) markers for every trade.
-      const markers = (result.trades || [])
+      // Entry (▲ long / ▼ short) + exit (● green win / red loss) markers — only for trades
+      // currently within the applied date filter (candles themselves still span the full run).
+      const markers = (filteredTrades || [])
         .filter((t) => t.entryTime && t.exitTime)
         .flatMap((t) => {
           const win = (t.pnl ?? 0) >= 0;
@@ -359,7 +399,7 @@ export function BacktestLab() {
       if (markers.length) candleSeries.setMarkers(markers);
 
       // SL (red) + target (green) of the selected trade, spanning its entry→exit.
-      const sel = (result.trades || []).find((t) => t.id === selectedTradeId);
+      const sel = (filteredTrades || []).find((t) => t.id === selectedTradeId);
       if (sel && sel.entryTime && sel.exitTime) {
         const et = Math.floor(new Date(sel.entryTime).getTime() / 1000);
         const xt = Math.floor(new Date(sel.exitTime).getTime() / 1000);
@@ -392,10 +432,26 @@ export function BacktestLab() {
     } catch (err) {
       console.error("[BacktestLab] Candle chart error:", err);
     }
-  }, [result, viewMode, selectedTradeId]);
+  }, [result, viewMode, selectedTradeId, filteredTrades]);
 
-  const sum = result?.summary;
-  const adv = result?.advanced;
+  // Shareable PDF: aggregate performance numbers only — no strategy name, timeframe, rule
+  // mechanics, exit-reason/time-of-day breakdowns, or per-trade log (see backtestPdfReport.ts
+  // for exactly what's deliberately left out and why). Reflects whatever filter is currently
+  // applied, so "download PDF" always matches what's on screen.
+  const handleDownloadPdf = () => {
+    if (!result || !sum) return;
+    const periodFrom = dateFilter === "ALL" ? fromDate : filteredTrades[0]?.exitTime.slice(0, 10) || fromDate;
+    const periodTo = dateFilter === "ALL" ? toDate : filteredTrades[filteredTrades.length - 1]?.exitTime.slice(0, 10) || toDate;
+    downloadBacktestPdf({
+      summary: sum,
+      advanced: adv,
+      equityCurve: displayedEquityCurve,
+      symbol,
+      fromDate: periodFrom,
+      toDate: periodTo,
+      capital: dateFilter === "ALL" ? capital : baselineCapital,
+    });
+  };
 
   return (
     <div className="space-y-5">
@@ -507,25 +563,76 @@ export function BacktestLab() {
         <div className="rounded-panel border border-loss/20 bg-loss-dim px-3 py-2 text-2xs text-loss">{error}</div>
       )}
 
+      {/* Date Filter — re-slices the already-completed run's trades/stats client-side */}
+      {result && (
+        <div className="flex flex-wrap items-center gap-2 rounded-panel border border-border-subtle bg-panel px-3 py-2">
+          <span className="flex items-center gap-1.5 text-2xs text-zinc-500">
+            <Filter size={11} /> View period
+          </span>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value as DateFilterPreset)}
+            className="rounded-panel border border-border-subtle bg-surface px-2 py-1 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+          >
+            <option value="ALL">All time</option>
+            <option value="THIS_YEAR">This year</option>
+            <option value="LAST_12M">Last 12 months</option>
+            <option value="LAST_3M">Last 3 months</option>
+            <option value="CUSTOM">Custom range</option>
+          </select>
+          {dateFilter === "CUSTOM" && (
+            <>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="rounded-panel border border-border-subtle bg-surface px-2 py-1 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+              />
+              <span className="text-2xs text-zinc-600">to</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="rounded-panel border border-border-subtle bg-surface px-2 py-1 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+              />
+            </>
+          )}
+          {dateFilter !== "ALL" && (
+            <span className="text-2xs text-zinc-600">
+              {filteredTrades.length} of {result.trades?.length ?? 0} trades shown
+            </span>
+          )}
+        </div>
+      )}
+
       {/* View Toggle */}
       {result && (
-        <div className="flex gap-1.5">
-          {[
-            { key: "both", label: "Both", icon: Eye },
-            { key: "candles", label: "Candles", icon: BarChart3 },
-            { key: "table", label: "Table", icon: Table },
-            { key: "chart", label: "Equity", icon: LineChart },
-          ].map((v) => (
-            <button
-              key={v.key}
-              onClick={() => setViewMode(v.key as any)}
-              className={`flex items-center gap-1.5 rounded-panel border px-3 py-1.5 text-2xs transition ${
-                viewMode === v.key ? "border-border-hover bg-surface text-zinc-200" : "border-border-subtle bg-panel text-zinc-500 hover:border-border-hover"
-              }`}
-            >
-              <v.icon size={11} /> {v.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-1.5">
+          <div className="flex gap-1.5">
+            {[
+              { key: "both", label: "Both", icon: Eye },
+              { key: "candles", label: "Candles", icon: BarChart3 },
+              { key: "table", label: "Table", icon: Table },
+              { key: "chart", label: "Equity", icon: LineChart },
+            ].map((v) => (
+              <button
+                key={v.key}
+                onClick={() => setViewMode(v.key as any)}
+                className={`flex items-center gap-1.5 rounded-panel border px-3 py-1.5 text-2xs transition ${
+                  viewMode === v.key ? "border-border-hover bg-surface text-zinc-200" : "border-border-subtle bg-panel text-zinc-500 hover:border-border-hover"
+                }`}
+              >
+                <v.icon size={11} /> {v.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleDownloadPdf}
+            title="Download a shareable PDF — performance numbers only, no strategy details"
+            className="flex items-center gap-1.5 rounded-panel border border-border-subtle bg-panel px-3 py-1.5 text-2xs text-zinc-400 transition hover:border-border-hover hover:text-zinc-200"
+          >
+            <Download size={11} /> Download PDF
+          </button>
         </div>
       )}
 
@@ -751,7 +858,7 @@ export function BacktestLab() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.isArray(result.trades) && result.trades.map((t: Trade) => (
+                    {Array.isArray(filteredTrades) && filteredTrades.map((t: Trade) => (
                       <tr key={t.id} onClick={() => setSelectedTradeId(t.id)} className={`cursor-pointer border-b border-border-subtle transition ${selectedTradeId === t.id ? "bg-surface" : "hover:bg-surface/50"}`}>
                         <td className="px-2 py-2 text-zinc-600">{t.id}</td>
                         <td className="px-2 py-2">
