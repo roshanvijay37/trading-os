@@ -4,7 +4,6 @@
  */
 
 import {
-  BookOpen,
   Bot,
   CandlestickChart,
   LineChart,
@@ -27,5 +26,6 @@ export const navigation: NavItemDef[] = [
   { to: "/options", label: "Options", icon: CandlestickChart, group: "Trading Desk", keywords: "options terminal chain workspace desk" },
   { to: "/backtest", label: "Backtest Lab", icon: TestTube, group: "Research", keywords: "backtest history simulate equity trades" },
   { to: "/market-intelligence", label: "Market Intel", icon: Radar, group: "Research", keywords: "pcr max pain vix iv rank breadth fii dii gex intelligence" },
-  { to: "/journal", label: "Journal", icon: BookOpen, group: "Records", keywords: "trades journal log notes reports performance discipline win rate" },
+  // Journal: removed from the menu for now (not needed yet) — the /journal route and page are
+  // still intact, just unlisted here. Re-add an entry when it's wanted again.
 ];
