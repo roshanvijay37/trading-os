@@ -10,6 +10,7 @@ import {
 } from "../services/blackScholes.js";
 // Shared 5-EMA + alert rule — same definition the live engine uses (single source of truth).
 import { calculateEMA, detectAlert } from "../services/signalCore.js";
+import { computeAdvancedStats } from "../services/backtestStats.js";
 
 const router = express.Router();
 
@@ -369,6 +370,7 @@ export function runBacktest(candles, config) {
         target: round2(indexTarget),
         entryBar: i,
         entryTime: candle.datetime,
+        riskAtEntry: round2(optionRiskPerUnit * qty), // rupees risked at this qty — feeds R-multiple stats
       };
     }
 
@@ -393,6 +395,7 @@ export function runBacktest(candles, config) {
       target: side === "LONG" ? round2(entryPrice + idxTargetDist) : round2(entryPrice - idxTargetDist),
       entryBar: i,
       entryTime: candle.datetime,
+      riskAtEntry: round2(idxStop * qty), // rupees risked at this qty — feeds R-multiple stats
     };
   }
 
@@ -546,6 +549,7 @@ export function runBacktest(candles, config) {
           capitalAfter: Math.round(currentCapital * 100) / 100,
           sl: position.sl,        // index level — same price scale as the candles, for the chart overlay
           target: position.target,
+          riskAtEntry: position.riskAtEntry,
           ...(position.mode === "BS" ? { optionType: position.optionType, strike: position.strike, indexEntry: position.indexEntry } : {}),
         });
 
@@ -640,6 +644,7 @@ export function runBacktest(candles, config) {
       capitalAfter: Math.round(currentCapital * 100) / 100,
       sl: position.sl,
       target: position.target,
+      riskAtEntry: position.riskAtEntry,
       ...(position.mode === "BS" ? { optionType: position.optionType, strike: position.strike, indexEntry: position.indexEntry } : {}),
     });
   }
@@ -648,12 +653,20 @@ export function runBacktest(candles, config) {
   const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
   const avgWin = wins > 0 ? trades.filter((t) => t.pnl > 0).reduce((s, t) => s + t.pnl, 0) / wins : 0;
   const avgLoss = losses > 0 ? trades.filter((t) => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0) / losses : 0;
-  const profitFactor = avgLoss !== 0 ? Math.abs(avgWin / avgLoss) : 0;
   const expectancy = totalTrades > 0 ? (totalPnL / totalTrades) : 0;
   const winPct = totalTrades > 0 ? wins / totalTrades : 0;
   const lossPct = totalTrades > 0 ? losses / totalTrades : 0;
   const avgLossAbs = Math.abs(avgLoss);
   const expectancyRatio = avgLossAbs > 0 ? ((winPct * avgWin) - (lossPct * avgLossAbs)) / avgLossAbs : 0;
+
+  // Post-processing analytics over the finished trade log — streaks, R-multiples, Sharpe/Sortino,
+  // CAGR/Calmar, yearly/hour/day-of-week breakdowns, etc. See backtestStats.js for definitions.
+  const advanced = computeAdvancedStats({
+    trades,
+    candles,
+    initialCapital: capital,
+    maxDrawdownPercent: maxDrawdown,
+  });
 
   return {
     summary: {
@@ -664,7 +677,11 @@ export function runBacktest(candles, config) {
       totalReturn: Math.round(totalReturn * 100) / 100,
       totalPnL: Math.round(totalPnL * 100) / 100,
       maxDrawdown: Math.round(maxDrawdown * 100) / 100,
-      profitFactor: Math.round(profitFactor * 100) / 100,
+      // profitFactor is now the STANDARD definition (gross profit / gross loss), computed in
+      // backtestStats.js — a prior version of this field was actually avgWin/avgLoss (that's
+      // payoffRatio, kept alongside it below under its correct name).
+      profitFactor: advanced.profitFactor,
+      payoffRatio: advanced.payoffRatio,
       avgWin: Math.round(avgWin * 100) / 100,
       avgLoss: Math.round(avgLoss * 100) / 100,
       expectancy: Math.round(expectancy * 100) / 100,
@@ -673,6 +690,7 @@ export function runBacktest(candles, config) {
       maxConsecutiveLosses,
       pricingModel: isBS ? "BLACK_SCHOLES" : "INDEX",
     },
+    advanced,
     // Echo the effective option assumptions so the UI can show exactly what was simulated.
     optionModel: isBS
       ? {

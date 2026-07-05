@@ -52,10 +52,29 @@ interface BacktestResult {
     totalReturn: number;
     totalPnL: number;
     maxDrawdown: number;
-    profitFactor: number;
+    profitFactor: number; // gross profit / gross loss (standard definition)
+    payoffRatio: number; // avg win / avg loss (what this codebase used to mislabel as profitFactor)
     avgWin: number;
     avgLoss: number;
     finalCapital: number;
+  };
+  advanced?: {
+    streaks: {
+      maxConsecutiveWins: number;
+      maxConsecutiveLosses: number;
+      currentStreak: number; // signed: +3 = on a 3-win streak, -2 = on a 2-loss streak
+      winStreakHistogram: Record<string, number>;
+      lossStreakHistogram: Record<string, number>;
+    };
+    extremes: { largestWin: number; largestLoss: number };
+    duration: { avgBarsHeldWin: number; avgBarsHeldLoss: number; avgBarsHeldAll: number };
+    exitReasons: Record<string, { count: number; totalPnL: number; avgPnL: number }>;
+    rMultiple: { avg: number; min: number; max: number; coveredTrades: number };
+    riskAdjusted: { sharpe: number; sortino: number; cagr: number; calmar: number; recoveryFactor: number };
+    kellyPercent: number;
+    yearly: { year: string; trades: number; winRate: number; totalPnL: number }[];
+    byHourIST: { hour: number; trades: number; winRate: number; totalPnL: number }[];
+    byDayOfWeek: { day: string; trades: number; winRate: number; totalPnL: number }[];
   };
   trades: Trade[];
   equityCurve: EquityPoint[];
@@ -376,6 +395,7 @@ export function BacktestLab() {
   }, [result, viewMode, selectedTradeId]);
 
   const sum = result?.summary;
+  const adv = result?.advanced;
 
   return (
     <div className="space-y-5">
@@ -530,6 +550,168 @@ export function BacktestLab() {
             <SummaryCard label="Max Drawdown" value={`${sum.maxDrawdown.toFixed(2)}%`} icon={Shield} color="loss" />
           </div>
 
+          {adv && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-zinc-400">Performance Ratios</h3>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <SummaryCard label="Profit Factor" value={sum.profitFactor.toFixed(2)} icon={sum.profitFactor >= 1 ? TrendingUp : TrendingDown} color={sum.profitFactor >= 1 ? "gain" : "loss"} />
+                  <SummaryCard label="Payoff Ratio" value={sum.payoffRatio.toFixed(2)} icon={BarChart3} />
+                  <SummaryCard label="Avg R-Multiple" value={`${adv.rMultiple.avg >= 0 ? "+" : ""}${adv.rMultiple.avg.toFixed(2)}R`} icon={adv.rMultiple.avg >= 0 ? TrendingUp : TrendingDown} color={adv.rMultiple.avg >= 0 ? "gain" : "loss"} />
+                  <SummaryCard label="Kelly % (advisory)" value={`${adv.kellyPercent.toFixed(1)}%`} icon={Shield} />
+                </div>
+                <p className="mt-1.5 text-3xs text-zinc-600">
+                  Profit Factor = gross profit ÷ gross loss. Payoff Ratio = avg win ÷ avg loss. R-multiple normalizes P&amp;L by the risk taken per trade ({adv.rMultiple.coveredTrades}/{sum.totalTrades} trades have a recorded risk amount). Kelly % is the raw full-Kelly figure — practitioners typically size at half-Kelly or less, not this number directly.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-zinc-400">Risk-Adjusted Returns</h3>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <SummaryCard label="Sharpe" value={adv.riskAdjusted.sharpe.toFixed(2)} icon={TrendingUp} />
+                  <SummaryCard label="Sortino" value={adv.riskAdjusted.sortino.toFixed(2)} icon={TrendingUp} />
+                  <SummaryCard label="CAGR" value={`${adv.riskAdjusted.cagr.toFixed(2)}%`} icon={adv.riskAdjusted.cagr >= 0 ? TrendingUp : TrendingDown} color={adv.riskAdjusted.cagr >= 0 ? "gain" : "loss"} />
+                  <SummaryCard label="Calmar" value={adv.riskAdjusted.calmar.toFixed(2)} icon={Shield} />
+                  <SummaryCard label="Recovery Factor" value={adv.riskAdjusted.recoveryFactor.toFixed(2)} icon={Shield} />
+                </div>
+                <p className="mt-1.5 text-3xs text-zinc-600">
+                  Sharpe/Sortino are annualized from daily P&amp;L (252-trading-day convention), relative to starting capital. CAGR is annualized over the tested date range. Calmar = CAGR ÷ Max Drawdown. Recovery Factor = Total Return % ÷ Max Drawdown %.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-zinc-400">Streaks</h3>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <SummaryCard label="Max Consec. Wins" value={adv.streaks.maxConsecutiveWins} icon={TrendingUp} color="gain" />
+                  <SummaryCard label="Max Consec. Losses" value={adv.streaks.maxConsecutiveLosses} icon={TrendingDown} color="loss" />
+                  <SummaryCard
+                    label="Current Streak"
+                    value={adv.streaks.currentStreak === 0 ? "—" : `${adv.streaks.currentStreak > 0 ? "+" : ""}${adv.streaks.currentStreak}`}
+                    icon={adv.streaks.currentStreak >= 0 ? TrendingUp : TrendingDown}
+                    color={adv.streaks.currentStreak >= 0 ? "gain" : "loss"}
+                  />
+                  <SummaryCard label="Largest Win" value={`₹${adv.extremes.largestWin.toLocaleString("en-IN")}`} icon={TrendingUp} color="gain" />
+                  <SummaryCard label="Largest Loss" value={`₹${adv.extremes.largestLoss.toLocaleString("en-IN")}`} icon={TrendingDown} color="loss" />
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <StreakHistogramTable title="Losing streaks (length → occurrences)" histogram={adv.streaks.lossStreakHistogram} tone="loss" />
+                  <StreakHistogramTable title="Winning streaks (length → occurrences)" histogram={adv.streaks.winStreakHistogram} tone="gain" />
+                </div>
+              </div>
+
+              <div className="rounded-panel border border-border bg-panel p-4">
+                <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-zinc-400">Exit Reason Breakdown</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-2xs">
+                    <thead>
+                      <tr className="border-b border-border text-zinc-600">
+                        <th className="px-2 py-2 text-left font-medium">Reason</th>
+                        <th className="px-2 py-2 text-right font-medium">Count</th>
+                        <th className="px-2 py-2 text-right font-medium">Avg P&amp;L</th>
+                        <th className="px-2 py-2 text-right font-medium">Total P&amp;L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(adv.exitReasons).map(([reason, r]) => (
+                        <tr key={reason} className="border-b border-border-subtle">
+                          <td className="px-2 py-2 text-zinc-300">{reason}</td>
+                          <td className="px-2 py-2 text-right text-zinc-400">{r.count}</td>
+                          <td className={`px-2 py-2 text-right font-mono ${r.avgPnL >= 0 ? "text-gain" : "text-loss"}`}>₹{r.avgPnL.toLocaleString("en-IN")}</td>
+                          <td className={`px-2 py-2 text-right font-mono ${r.totalPnL >= 0 ? "text-gain" : "text-loss"}`}>₹{r.totalPnL.toLocaleString("en-IN")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-3xs text-zinc-600">
+                  Avg hold: {adv.duration.avgBarsHeldWin.toFixed(1)} bars on wins, {adv.duration.avgBarsHeldLoss.toFixed(1)} bars on losses ({adv.duration.avgBarsHeldAll.toFixed(1)} overall).
+                </p>
+              </div>
+
+              {adv.yearly.length > 1 && (
+                <div className="rounded-panel border border-border bg-panel p-4">
+                  <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-zinc-400">Yearly Consistency</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-2xs">
+                      <thead>
+                        <tr className="border-b border-border text-zinc-600">
+                          <th className="px-2 py-2 text-left font-medium">Year</th>
+                          <th className="px-2 py-2 text-right font-medium">Trades</th>
+                          <th className="px-2 py-2 text-right font-medium">Win Rate</th>
+                          <th className="px-2 py-2 text-right font-medium">P&amp;L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adv.yearly.map((y) => (
+                          <tr key={y.year} className="border-b border-border-subtle">
+                            <td className="px-2 py-2 text-zinc-300">{y.year}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400">{y.trades}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400">{y.winRate.toFixed(1)}%</td>
+                            <td className={`px-2 py-2 text-right font-mono ${y.totalPnL >= 0 ? "text-gain" : "text-loss"}`}>₹{y.totalPnL.toLocaleString("en-IN")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-3xs text-zinc-600">Is the edge consistent every year, or carried by one good year? A useful cross-check against curve-fitting.</p>
+                </div>
+              )}
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-panel border border-border bg-panel p-4">
+                  <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-zinc-400">By Entry Hour (IST)</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-2xs">
+                      <thead>
+                        <tr className="border-b border-border text-zinc-600">
+                          <th className="px-2 py-2 text-left font-medium">Hour</th>
+                          <th className="px-2 py-2 text-right font-medium">Trades</th>
+                          <th className="px-2 py-2 text-right font-medium">Win Rate</th>
+                          <th className="px-2 py-2 text-right font-medium">P&amp;L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adv.byHourIST.map((h) => (
+                          <tr key={h.hour} className="border-b border-border-subtle">
+                            <td className="px-2 py-2 text-zinc-300">{h.hour}:00</td>
+                            <td className="px-2 py-2 text-right text-zinc-400">{h.trades}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400">{h.winRate.toFixed(1)}%</td>
+                            <td className={`px-2 py-2 text-right font-mono ${h.totalPnL >= 0 ? "text-gain" : "text-loss"}`}>₹{h.totalPnL.toLocaleString("en-IN")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="rounded-panel border border-border bg-panel p-4">
+                  <h3 className="mb-3 text-2xs font-semibold uppercase tracking-wider text-zinc-400">By Day of Week</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-2xs">
+                      <thead>
+                        <tr className="border-b border-border text-zinc-600">
+                          <th className="px-2 py-2 text-left font-medium">Day</th>
+                          <th className="px-2 py-2 text-right font-medium">Trades</th>
+                          <th className="px-2 py-2 text-right font-medium">Win Rate</th>
+                          <th className="px-2 py-2 text-right font-medium">P&amp;L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adv.byDayOfWeek.map((d) => (
+                          <tr key={d.day} className="border-b border-border-subtle">
+                            <td className="px-2 py-2 text-zinc-300">{d.day}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400">{d.trades}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400">{d.winRate.toFixed(1)}%</td>
+                            <td className={`px-2 py-2 text-right font-mono ${d.totalPnL >= 0 ? "text-gain" : "text-loss"}`}>₹{d.totalPnL.toLocaleString("en-IN")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {(viewMode === "both" || viewMode === "candles") && result.candles && result.candles.length > 0 && (
             <div className="rounded-panel border border-border bg-panel p-4">
               <h3 className="mb-3 flex flex-wrap items-center justify-between gap-2 text-2xs font-semibold uppercase tracking-wider text-zinc-400">
@@ -612,6 +794,35 @@ function SummaryCard({ label, value, icon: Icon, color = "zinc" }: { label: stri
         <span className="text-2xs font-medium uppercase tracking-wider text-zinc-600">{label}</span>
       </div>
       <p className={`font-mono text-xl font-semibold ${colors[color] || "text-zinc-100"}`}>{value}</p>
+    </div>
+  );
+}
+
+function StreakHistogramTable({ title, histogram, tone }: { title: string; histogram: Record<string, number>; tone: "gain" | "loss" }) {
+  const entries = Object.entries(histogram)
+    .map(([len, count]) => ({ len: Number(len), count }))
+    .sort((a, b) => a.len - b.len);
+  return (
+    <div className="rounded-panel border border-border bg-panel p-4">
+      <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wider text-zinc-400">{title}</h4>
+      {entries.length === 0 ? (
+        <p className="text-2xs text-zinc-600">None</p>
+      ) : (
+        <div className="space-y-1">
+          {entries.map((e) => (
+            <div key={e.len} className="flex items-center gap-2 text-2xs">
+              <span className="w-16 text-zinc-500">{e.len} in a row</span>
+              <div className="h-2 flex-1 overflow-hidden rounded bg-surface">
+                <div
+                  className={`h-full ${tone === "gain" ? "bg-gain/50" : "bg-loss/50"}`}
+                  style={{ width: `${Math.min(100, (e.count / Math.max(...entries.map((x) => x.count))) * 100)}%` }}
+                />
+              </div>
+              <span className="w-8 text-right text-zinc-400">{e.count}×</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
