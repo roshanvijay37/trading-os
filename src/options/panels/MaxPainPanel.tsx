@@ -15,6 +15,8 @@ import { Panel, ProvenanceBadge, Stat, Row, Banner } from "../components/ui";
 import { expectedMoves } from "../lib/volatility";
 import { dec, int, signed, compact } from "../lib/format";
 import type { EnrichedChain } from "../types";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 
 interface PainPoint {
   strike: number;
@@ -163,6 +165,7 @@ function PainChart({ curve, maxPain, spot }: { curve: PainPoint[]; maxPain: numb
   const PADX = 8;
   const PADY = 16;
   const BASE = H - PADY;
+  const palette = getChartPalette(useTheme());
 
   const strikes = curve.map((p) => p.strike);
   const minK = Math.min(...strikes);
@@ -193,7 +196,7 @@ function PainChart({ curve, maxPain, spot }: { curve: PainPoint[]; maxPain: numb
               y={BASE - h}
               width={barW}
               height={Math.max(0, h)}
-              fill={isPain ? "#f59e0b" : "#23232a"}
+              fill={isPain ? "#f59e0b" : palette.border}
               opacity={isPain ? 0.9 : 0.7}
             />
           );
@@ -219,11 +222,11 @@ function PainChart({ curve, maxPain, spot }: { curve: PainPoint[]; maxPain: numb
           </g>
         )}
         {/* axis */}
-        <line x1={PADX} x2={W - PADX} y1={BASE} y2={BASE} stroke="#1a1a20" strokeWidth={1} />
-        <text x={PADX} y={H - 3} fill="#52525b" fontSize={9} fontFamily="monospace">
+        <line x1={PADX} x2={W - PADX} y1={BASE} y2={BASE} stroke={palette.grid} strokeWidth={1} />
+        <text x={PADX} y={H - 3} fill={palette.baseline} fontSize={9} fontFamily="monospace">
           {minK}
         </text>
-        <text x={W - PADX} y={H - 3} fill="#52525b" fontSize={9} fontFamily="monospace" textAnchor="end">
+        <text x={W - PADX} y={H - 3} fill={palette.baseline} fontSize={9} fontFamily="monospace" textAnchor="end">
           {maxK}
         </text>
       </svg>

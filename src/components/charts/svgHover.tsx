@@ -7,6 +7,8 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 
 /** Observe an element's content width (ResizeObserver). Returns [ref, width-in-px]. */
 export function useMeasuredWidth<T extends HTMLElement>(initial = 0): [RefObject<T | null>, number] {
@@ -94,6 +96,8 @@ export function SvgHoverLayer({
   hoverIndex: number | null;
   onHover: (i: number | null) => void;
 }) {
+  const theme = useTheme();
+  const palette = getChartPalette(theme);
   return (
     <g>
       {hoverIndex != null && (
@@ -103,12 +107,12 @@ export function SvgHoverLayer({
             y1={padT}
             x2={xOf(hoverIndex)}
             y2={height - padB}
-            stroke="#3e3e48"
+            stroke={palette.crosshair}
             strokeWidth={1}
             strokeDasharray="3 3"
           />
           {yOf && Number.isFinite(yOf(hoverIndex)) && (
-            <circle cx={xOf(hoverIndex)} cy={yOf(hoverIndex)} r={3} fill="#3b82f6" stroke="#08080a" strokeWidth={1} />
+            <circle cx={xOf(hoverIndex)} cy={yOf(hoverIndex)} r={3} fill="#3b82f6" stroke={palette.background} strokeWidth={1} />
           )}
         </>
       )}
@@ -164,7 +168,7 @@ export function ChartTooltip({
       {rows.map((r, i) => (
         <div key={i} className="flex items-center justify-between gap-3 text-2xs">
           <span className="text-zinc-500">{r.label}</span>
-          <span className="font-mono" style={{ color: r.color ?? "#e4e4e7" }}>
+          <span className={`font-mono ${r.color ? "" : "text-zinc-200"}`} style={r.color ? { color: r.color } : undefined}>
             {r.value}
           </span>
         </div>

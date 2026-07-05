@@ -19,6 +19,8 @@ import { ChainGate } from "../components/ChainGate";
 import { Panel, ProvenanceBadge, Select, Row, Banner } from "../components/ui";
 import { useMeasuredWidth } from "../../components/charts/svgHover";
 import { dec, pct, volPct } from "../lib/format";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 import {
   probItm,
   probOtm,
@@ -294,6 +296,7 @@ function DistributionChart({
   // preserveAspectRatio="none" stretching at narrow widths.
   const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
   const width = measuredW || CHART_W;
+  const palette = getChartPalette(useTheme());
   const geom = useMemo(() => {
     if (curve.length < 2) return null;
     const xs = curve.map((p) => p.spot);
@@ -352,19 +355,19 @@ function DistributionChart({
             <polygon points={geom.areaPts} fill="rgba(59,130,246,0.16)" />
             <polyline points={geom.linePts} fill="none" stroke="#3b82f6" strokeWidth={1.5} />
             {/* baseline */}
-            <line x1={PAD_X} y1={geom.baseY} x2={width - PAD_X} y2={geom.baseY} stroke="#23232a" strokeWidth={1} />
+            <line x1={PAD_X} y1={geom.baseY} x2={width - PAD_X} y2={geom.baseY} stroke={palette.border} strokeWidth={1} />
             {/* ±1σ markers */}
             <VLine x={geom.lo1X} color="#3b82f6" dash />
             <VLine x={geom.hi1X} color="#3b82f6" dash />
             {/* ATM marker */}
             {geom.inRangeAtm && <VLine x={geom.atmX} color="#f59e0b" dash />}
             {/* spot marker */}
-            <VLine x={geom.spotX} color="#e4e4e7" />
+            <VLine x={geom.spotX} color={palette.spot} />
           </svg>
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[9px]">
-            <LegendDot color="#e4e4e7" label={`Spot ${dec(spot, 0)}`} />
+            <LegendDot color={palette.spot} label={`Spot ${dec(spot, 0)}`} />
             <LegendDot color="#f59e0b" label={`ATM ${atmStrike}`} />
             <LegendDot color="#3b82f6" label={`±1σ ${dec(range.lower1, 0)} – ${dec(range.upper1, 0)}`} />
           </div>

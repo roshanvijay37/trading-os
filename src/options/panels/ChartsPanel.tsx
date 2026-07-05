@@ -22,6 +22,8 @@ import { ChartTooltip, SvgHoverLayer, useMeasuredWidth } from "../../components/
 import { optionsApi } from "../../services/api";
 import { dec, compact, fmtTime } from "../lib/format";
 import type { EnrichedChain } from "../types";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 
 // ---------------------------------------------------------------------------
 // History candle parsing (FYERS history: time in epoch seconds)
@@ -446,6 +448,7 @@ function Candlestick({ candles, resolution }: { candles: Candle[]; resolution: s
   const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
   const width = measuredW || SVG_W;
   const [hover, setHover] = useState<number | null>(null);
+  const palette = getChartPalette(useTheme());
   const geom = useMemo(() => {
     const chartW = width - PAD.left - PAD.right;
     const chartH = SVG_H - PAD.top - PAD.bottom;
@@ -470,8 +473,8 @@ function Candlestick({ candles, resolution }: { candles: Candle[]; resolution: s
           const price = geom.maxH - tk * geom.range;
           return (
             <g key={tk}>
-              <line x1={PAD.left} y1={y} x2={width - PAD.right} y2={y} stroke="#1a1a20" strokeWidth={1} />
-              <text x={width - PAD.right + 4} y={y + 3} fill="#3f3f46" fontSize={8}>
+              <line x1={PAD.left} y1={y} x2={width - PAD.right} y2={y} stroke={palette.grid} strokeWidth={1} />
+              <text x={width - PAD.right + 4} y={y + 3} fill={palette.axisLabel} fontSize={8}>
                 {dec(price, 1)}
               </text>
             </g>
@@ -496,7 +499,7 @@ function Candlestick({ candles, resolution }: { candles: Candle[]; resolution: s
           if (i % step !== 0) return null;
           const x = geom.xScale(i);
           return (
-            <text key={`t-${i}`} x={x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
+            <text key={`t-${i}`} x={x} y={SVG_H - 8} fill={palette.axisLabel} fontSize={8} textAnchor="middle">
               {axisLabel(c.t, resolution)}
             </text>
           );
@@ -557,6 +560,7 @@ function LineSeries({
   const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
   const width = measuredW || SVG_W;
   const [hover, setHover] = useState<number | null>(null);
+  const palette = getChartPalette(useTheme());
   const geom = useMemo(() => buildLineGeom(points, baseline, width), [points, baseline, width]);
   if (!geom) return <Empty message="Not enough points to draw yet." />;
 
@@ -569,8 +573,8 @@ function LineSeries({
       <svg viewBox={`0 0 ${width} ${SVG_H}`} className="w-full">
         {geom.gridYs.map((g, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={g.y} x2={width - PAD.right} y2={g.y} stroke="#1a1a20" strokeWidth={1} />
-            <text x={width - PAD.right + 4} y={g.y + 3} fill="#3f3f46" fontSize={8}>
+            <line x1={PAD.left} y1={g.y} x2={width - PAD.right} y2={g.y} stroke={palette.grid} strokeWidth={1} />
+            <text x={width - PAD.right + 4} y={g.y + 3} fill={palette.axisLabel} fontSize={8}>
               {valueFmt(g.value)}
             </text>
           </g>
@@ -581,7 +585,7 @@ function LineSeries({
             y1={geom.baselineY}
             x2={width - PAD.right}
             y2={geom.baselineY}
-            stroke="#52525b"
+            stroke={palette.baseline}
             strokeWidth={1}
             strokeDasharray="4 3"
           />
@@ -591,7 +595,7 @@ function LineSeries({
         <circle cx={geom.lastX} cy={geom.lastY} r={2.5} fill={color} />
         {timeAxis &&
           geom.timeTicks.map((tk, i) => (
-            <text key={i} x={tk.x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
+            <text key={i} x={tk.x} y={SVG_H - 8} fill={palette.axisLabel} fontSize={8} textAnchor="middle">
               {fmtTime(tk.t)}
             </text>
           ))}
@@ -646,6 +650,7 @@ function MultiLine({
   const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
   const width = measuredW || SVG_W;
   const [hover, setHover] = useState<number | null>(null);
+  const palette = getChartPalette(useTheme());
   const len = series[0]?.points.length ?? 0;
   const geom = useMemo(() => {
     if (len < 2) return null;
@@ -709,8 +714,8 @@ function MultiLine({
         <svg viewBox={`0 0 ${width} ${SVG_H}`} className="w-full">
           {geom.gridYs.map((g, i) => (
             <g key={i}>
-              <line x1={PAD.left} y1={g.y} x2={width - PAD.right} y2={g.y} stroke="#1a1a20" strokeWidth={1} />
-              <text x={width - PAD.right + 4} y={g.y + 3} fill="#3f3f46" fontSize={8}>
+              <line x1={PAD.left} y1={g.y} x2={width - PAD.right} y2={g.y} stroke={palette.grid} strokeWidth={1} />
+              <text x={width - PAD.right + 4} y={g.y + 3} fill={palette.axisLabel} fontSize={8}>
                 {valueFmt(g.value)}
               </text>
             </g>
@@ -722,7 +727,7 @@ function MultiLine({
             </g>
           ))}
           {geom.timeTicks.map((tk, i) => (
-            <text key={`tt-${i}`} x={tk.x} y={SVG_H - 8} fill="#3f3f46" fontSize={8} textAnchor="middle">
+            <text key={`tt-${i}`} x={tk.x} y={SVG_H - 8} fill={palette.axisLabel} fontSize={8} textAnchor="middle">
               {fmtTime(tk.t)}
             </text>
           ))}

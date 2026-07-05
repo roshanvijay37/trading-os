@@ -9,6 +9,8 @@ import { Play, RotateCcw, TrendingUp, TrendingDown, Shield, BarChart3, Table, Li
 import { backtestApi } from "../services/api";
 import { downloadBacktestPdf } from "../lib/backtestPdfReport";
 import { computeBacktestAnalytics, filterTradesByDate, type DateFilterPreset } from "../lib/backtestAnalytics";
+import { useTheme } from "../store/theme";
+import { getChartPalette } from "../lib/chartTheme";
 
 interface Trade {
   id: number;
@@ -124,6 +126,7 @@ export function BacktestLab() {
   const [dateFilter, setDateFilter] = useState<DateFilterPreset>("ALL");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const theme = useTheme();
 
   // Post-hoc date filter: re-slice the already-completed run's trades client-side, then
   // recompute every stat for just that window — no new backend call, no re-running the sim.
@@ -246,12 +249,13 @@ export function BacktestLab() {
       const container = chartContainerRef.current;
       const width = container.clientWidth || container.offsetWidth || Math.min(window.innerWidth - 64, 800);
       if (!width || width <= 0) return;
+      const palette = getChartPalette(theme);
 
       const chart = createChart(container, {
-        layout: { background: { type: ColorType.Solid, color: "#08080a" }, textColor: "#71717a" },
-        grid: { vertLines: { color: "#131318" }, horzLines: { color: "#131318" } },
-        rightPriceScale: { borderColor: "#23232a" },
-        timeScale: { borderColor: "#23232a" },
+        layout: { background: { type: ColorType.Solid, color: palette.background }, textColor: palette.text },
+        grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
+        rightPriceScale: { borderColor: palette.border },
+        timeScale: { borderColor: palette.border },
         width,
         height: 380,
       });
@@ -328,7 +332,7 @@ export function BacktestLab() {
     } catch (err) {
       console.error("[BacktestLab] Chart error:", err);
     }
-  }, [result, viewMode, displayedEquityCurve, filteredTrades]);
+  }, [result, viewMode, displayedEquityCurve, filteredTrades, theme]);
 
   // When a new result loads (or the filter changes), preselect the first VISIBLE trade so its
   // SL/target show on the candle chart.
@@ -353,12 +357,13 @@ export function BacktestLab() {
       const container = candleContainerRef.current;
       const width = container.clientWidth || container.offsetWidth || Math.min(window.innerWidth - 64, 800);
       if (!width || width <= 0) return;
+      const palette = getChartPalette(theme);
 
       const chart = createChart(container, {
-        layout: { background: { type: ColorType.Solid, color: "#08080a" }, textColor: "#71717a" },
-        grid: { vertLines: { color: "#131318" }, horzLines: { color: "#131318" } },
-        rightPriceScale: { borderColor: "#23232a" },
-        timeScale: { borderColor: "#23232a", timeVisible: true, secondsVisible: false },
+        layout: { background: { type: ColorType.Solid, color: palette.background }, textColor: palette.text },
+        grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
+        rightPriceScale: { borderColor: palette.border },
+        timeScale: { borderColor: palette.border, timeVisible: true, secondsVisible: false },
         width,
         height: 420,
       });
@@ -432,7 +437,7 @@ export function BacktestLab() {
     } catch (err) {
       console.error("[BacktestLab] Candle chart error:", err);
     }
-  }, [result, viewMode, selectedTradeId, filteredTrades]);
+  }, [result, viewMode, selectedTradeId, filteredTrades, theme]);
 
   // Shareable PDF: aggregate performance numbers only — no strategy name, timeframe, rule
   // mechanics, exit-reason/time-of-day breakdowns, or per-trade log (see backtestPdfReport.ts

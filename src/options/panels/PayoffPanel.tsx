@@ -18,6 +18,8 @@ import { computePayoff, type PayoffOpts } from "../lib/payoff";
 import { lognormalWeights } from "../lib/probability";
 import { money, dec, signed } from "../lib/format";
 import type { EnrichedChain, PayoffResult } from "../types";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 
 export function PayoffPanel() {
   return (
@@ -197,6 +199,7 @@ function PayoffChart({
   const [wrapRef, measuredW] = useMeasuredWidth<HTMLDivElement>();
   const width = measuredW || W;
   const [hover, setHover] = useState<number | null>(null);
+  const palette = getChartPalette(useTheme());
   const geom = useMemo(() => {
     const pts = result.points;
     if (pts.length < 2) return null;
@@ -313,13 +316,13 @@ function PayoffChart({
 
         {/* Zero line */}
         {zeroInView && (
-          <line x1={PAD_L} y1={geom.zeroY} x2={width - PAD_R} y2={geom.zeroY} stroke="#52525b" strokeWidth={1} />
+          <line x1={PAD_L} y1={geom.zeroY} x2={width - PAD_R} y2={geom.zeroY} stroke={palette.baseline} strokeWidth={1} />
         )}
 
         {/* X ticks */}
         {geom.ticks.map((t, i) => (
           <g key={i}>
-            <line x1={t.x} y1={H - PAD_B} x2={t.x} y2={H - PAD_B + 3} stroke="#3f3f46" strokeWidth={1} />
+            <line x1={t.x} y1={H - PAD_B} x2={t.x} y2={H - PAD_B + 3} stroke={palette.axisLabel} strokeWidth={1} />
             <text x={t.x} y={H - PAD_B + 13} textAnchor="middle" className="fill-zinc-600 font-mono" fontSize={9}>
               {t.label}
             </text>
@@ -345,7 +348,7 @@ function PayoffChart({
         ))}
 
         {/* Spot marker */}
-        <line x1={geom.spotX} y1={PAD_T} x2={geom.spotX} y2={H - PAD_B} stroke="#e4e4e7" strokeWidth={1} />
+        <line x1={geom.spotX} y1={PAD_T} x2={geom.spotX} y2={H - PAD_B} stroke={palette.spot} strokeWidth={1} />
         <text x={geom.spotX} y={H - PAD_B - 3} textAnchor="middle" className="fill-zinc-200 font-mono" fontSize={9}>
           {dec(chain.spot, 0)}
         </text>
@@ -390,7 +393,7 @@ function PayoffChart({
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px]">
         <Legend color="#3b82f6" label="Expiry P/L" />
         {showToday && <Legend color="#a78bfa" label="Today (mark-to-model)" dashed />}
-        <Legend color="#e4e4e7" label={`Spot ${dec(chain.spot, 0)}`} />
+        <Legend color={palette.spot} label={`Spot ${dec(chain.spot, 0)}`} />
         <Legend color="#f59e0b" label="Break-even" dashed />
         {showDist && geom.distArea && <Legend color="#f59e0b" label="Terminal distribution" />}
         <span className="ml-auto text-zinc-700">Green = profit · Red = loss</span>

@@ -9,6 +9,8 @@
 
 import { ColorType, createChart, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 
 export interface CandlePoint {
   /** Unix epoch SECONDS (lightweight-charts requirement). */
@@ -51,17 +53,20 @@ export function CandlesChart({
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const lastFitKeyRef = useRef<string | null>(null);
   const [hover, setHover] = useState<CandlePoint | null>(null);
+  const theme = useTheme();
 
-  // Create/destroy the chart. StrictMode-safe: cleanup fully removes the chart.
+  // Create/destroy the chart. StrictMode-safe: cleanup fully removes the chart. Recreated (not
+  // just recolored) on theme change — lightweight-charts has no "update palette" API.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const palette = getChartPalette(theme);
 
     const chart = createChart(container, {
-      layout: { background: { type: ColorType.Solid, color: "#08080a" }, textColor: "#71717a" },
-      grid: { vertLines: { color: "#131318" }, horzLines: { color: "#131318" } },
-      rightPriceScale: { borderColor: "#23232a" },
-      timeScale: { borderColor: "#23232a", timeVisible, secondsVisible: false },
+      layout: { background: { type: ColorType.Solid, color: palette.background }, textColor: palette.text },
+      grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
+      rightPriceScale: { borderColor: palette.border },
+      timeScale: { borderColor: palette.border, timeVisible, secondsVisible: false },
       autoSize: true,
     });
 
@@ -112,7 +117,7 @@ export function CandlesChart({
       volumeSeriesRef.current = null;
       setHover(null);
     };
-  }, [showVolume, timeVisible]);
+  }, [showVolume, timeVisible, theme]);
 
   // Feed data without recreating the chart, preserving zoom/pan between polls.
   useEffect(() => {

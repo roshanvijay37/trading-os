@@ -14,6 +14,18 @@
     />
     <title>TradingOS</title>
     <script>
+      // Apply the saved theme before first paint (avoids a dark->light or light->dark flash).
+      // Kept in sync with the storage key/fallback in src/store/theme.ts.
+      (function () {
+        try {
+          var t = localStorage.getItem("trading-os-theme");
+          document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
+    <script>
       // Redirect direct paths to hash-based routing for SPA.
       // Base-aware: %BASE_URL% is replaced by Vite at build time ('/' in production,
       // '/dev/' for subpath dev deploys) so the shim never bounces a subpath deploy

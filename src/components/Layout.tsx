@@ -1,4 +1,4 @@
-import { X, ChevronRight, Activity, Menu } from "lucide-react";
+import { X, ChevronRight, Activity, Menu, Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useMatch } from "react-router-dom";
 import { FyersConnect } from "./FyersConnect";
@@ -8,8 +8,25 @@ import { togglePalette } from "./commandPalette/registry";
 import { navigation } from "./navigation";
 import { useInstitutionalStore } from "../store/InstitutionalProvider";
 import { useLiveDataSync } from "../store/useLiveDataSync";
+import { useTheme, toggleTheme } from "../store/theme";
 import { pingApi, isFyersConnected } from "../services/api";
 import type { DashboardState } from "../types/institutional";
+
+function ThemeToggle() {
+  const theme = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <button
+      type="button"
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      onClick={toggleTheme}
+      className="rounded p-1.5 text-zinc-500 transition hover:bg-surface hover:text-zinc-300"
+    >
+      {isDark ? <Sun size={15} /> : <Moon size={15} />}
+    </button>
+  );
+}
 
 function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
   const match = useMatch(to === "/" ? "/" : `${to}/*`);
@@ -127,7 +144,10 @@ function Header() {
       <div className="flex items-center gap-3">
         <span className="text-2xs font-semibold uppercase tracking-wider text-zinc-500">{label}</span>
       </div>
-      <FyersConnect />
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <FyersConnect />
+      </div>
     </header>
   );
 }
@@ -236,7 +256,10 @@ export function Layout() {
             </button>
             <span className="text-sm font-semibold text-zinc-100">TradingOS</span>
           </div>
-          <FyersConnect />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <FyersConnect />
+          </div>
         </div>
       </div>
 

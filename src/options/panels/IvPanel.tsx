@@ -17,6 +17,8 @@ import { ivSmile, ivSkew, ivSummary, type SmilePoint } from "../lib/volatility";
 import { volPct, dec, signed } from "../lib/format";
 import { marketApi } from "../../services/api";
 import type { EnrichedChain } from "../types";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 
 interface IvHistory {
   current: number | null;
@@ -231,6 +233,7 @@ function SmileChart({ smile, spot, atmStrike }: { smile: SmilePoint[]; spot: num
   const H = 200;
   const PADX = 36;
   const PADY = 18;
+  const palette = getChartPalette(useTheme());
 
   const strikes = smile.map((p) => p.strike);
   const minK = Math.min(...strikes);
@@ -268,8 +271,8 @@ function SmileChart({ smile, spot, atmStrike }: { smile: SmilePoint[]; spot: num
         {/* grid + y axis */}
         {yTicks.map((tv, i) => (
           <g key={i}>
-            <line x1={PADX} x2={W - PADX} y1={y(tv)} y2={y(tv)} stroke="#1a1a20" strokeWidth={1} />
-            <text x={2} y={y(tv) + 3} fill="#52525b" fontSize={9} fontFamily="monospace">
+            <line x1={PADX} x2={W - PADX} y1={y(tv)} y2={y(tv)} stroke={palette.grid} strokeWidth={1} />
+            <text x={2} y={y(tv) + 3} fill={palette.baseline} fontSize={9} fontFamily="monospace">
               {(tv * 100).toFixed(0)}%
             </text>
           </g>
@@ -296,10 +299,10 @@ function SmileChart({ smile, spot, atmStrike }: { smile: SmilePoint[]; spot: num
           </g>
         ))}
         {/* x axis labels */}
-        <text x={PADX} y={H - 4} fill="#52525b" fontSize={9} fontFamily="monospace">
+        <text x={PADX} y={H - 4} fill={palette.baseline} fontSize={9} fontFamily="monospace">
           {minK}
         </text>
-        <text x={W - PADX} y={H - 4} fill="#52525b" fontSize={9} fontFamily="monospace" textAnchor="end">
+        <text x={W - PADX} y={H - 4} fill={palette.baseline} fontSize={9} fontFamily="monospace" textAnchor="end">
           {maxK}
         </text>
       </svg>

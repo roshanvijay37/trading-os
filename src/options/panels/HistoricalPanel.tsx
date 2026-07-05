@@ -22,6 +22,8 @@ import { useMeasuredWidth } from "../../components/charts/svgHover";
 import { dec, compact, volPct, fmtTime } from "../lib/format";
 import { marketApi } from "../../services/api";
 import type { EnrichedChain } from "../types";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 
 interface IvStats {
   current: number | null;
@@ -343,6 +345,7 @@ function SeriesChart({ snaps, series, cursorIdx }: { snaps: Snapshot[]; series: 
   const H = 140;
   const PADX = 8;
   const PADY = 12;
+  const palette = getChartPalette(useTheme());
 
   const primary = (s: Snapshot): number => {
     switch (series) {
@@ -391,15 +394,15 @@ function SeriesChart({ snaps, series, cursorIdx }: { snaps: Snapshot[]; series: 
     <div className="space-y-1" ref={wrapRef}>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`${label} sparkline`}>
         {/* baseline grid */}
-        <line x1={PADX} x2={W - PADX} y1={y((loY + hiY) / 2)} y2={y((loY + hiY) / 2)} stroke="#1a1a20" strokeWidth={1} />
+        <line x1={PADX} x2={W - PADX} y1={y((loY + hiY) / 2)} y2={y((loY + hiY) / 2)} stroke={palette.grid} strokeWidth={1} />
         {/* cursor */}
-        <line x1={cursorX} x2={cursorX} y1={PADY} y2={H - PADY} stroke="#3f3f46" strokeWidth={1} strokeDasharray="3 3" />
+        <line x1={cursorX} x2={cursorX} y1={PADY} y2={H - PADY} stroke={palette.crosshair} strokeWidth={1} strokeDasharray="3 3" />
         {/* secondary (PE OI) */}
         {secondary && <path d={path(secondary)} fill="none" stroke="#10b981" strokeWidth={1.5} />}
         {/* primary */}
         <path d={path(primary)} fill="none" stroke={series === "oi" ? "#ef4444" : "#3b82f6"} strokeWidth={1.5} />
         {/* cursor dot on primary */}
-        <circle cx={cursorX} cy={y(primary(snaps[cursorIdx]))} r={2.5} fill="#fafafa" />
+        <circle cx={cursorX} cy={y(primary(snaps[cursorIdx]))} r={2.5} fill={palette.spot} />
       </svg>
       <div className="flex items-center justify-between text-[9px] text-zinc-600">
         <span>

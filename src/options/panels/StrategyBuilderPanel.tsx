@@ -26,6 +26,8 @@ import { computePayoff, type PayoffOpts } from "../lib/payoff";
 import { useMeasuredWidth } from "../../components/charts/svgHover";
 import { money, dec, volPct, signed } from "../lib/format";
 import { onAddLeg } from "../lib/events";
+import { useTheme } from "../../store/theme";
+import { getChartPalette } from "../../lib/chartTheme";
 import type {
   EnrichedChain,
   LegAction,
@@ -474,6 +476,7 @@ function PayoffPreview({ result, chain }: { result: PayoffResult; chain: Enriche
     const bes = result.breakevens.filter((b) => b >= minX && b <= maxX).map(sx);
     return { sx, sy, zeroY, line, spotX, bes };
   }, [result.points, result.breakevens, chain.spot, width]);
+  const palette = getChartPalette(useTheme());
 
   if (!geom) return <p className="text-[9px] text-zinc-700">Not enough resolution to draw the payoff preview.</p>;
 
@@ -483,13 +486,13 @@ function PayoffPreview({ result, chain }: { result: PayoffResult; chain: Enriche
     <div ref={wrapRef}>
       <svg viewBox={`0 0 ${width} ${PV_H}`} className="w-full">
         {zeroInView && (
-          <line x1={PV_PAD_X} y1={geom.zeroY} x2={width - PV_PAD_X} y2={geom.zeroY} stroke="#3f3f46" strokeWidth={1} strokeDasharray="3 3" />
+          <line x1={PV_PAD_X} y1={geom.zeroY} x2={width - PV_PAD_X} y2={geom.zeroY} stroke={palette.axisLabel} strokeWidth={1} strokeDasharray="3 3" />
         )}
         <polyline points={geom.line} fill="none" stroke="#3b82f6" strokeWidth={1.5} />
         {geom.bes.map((x, i) => (
           <line key={i} x1={x} y1={PV_PAD_Y} x2={x} y2={PV_H - PV_PAD_Y} stroke="#f59e0b" strokeWidth={1} strokeDasharray="2 2" />
         ))}
-        <line x1={geom.spotX} y1={PV_PAD_Y} x2={geom.spotX} y2={PV_H - PV_PAD_Y} stroke="#e4e4e7" strokeWidth={1} />
+        <line x1={geom.spotX} y1={PV_PAD_Y} x2={geom.spotX} y2={PV_H - PV_PAD_Y} stroke={palette.spot} strokeWidth={1} />
       </svg>
     </div>
   );
