@@ -14,6 +14,9 @@ const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 
 // Persist sessions to file (survives server restarts)
 const SESSIONS_FILE = path.join(process.cwd(), "sessions.json");
+// OAuth CSRF state tokens, persisted the same way — a login started right before a restart
+// must not be wrongly rejected on callback (see loadState()/re-enabled check below).
+const OAUTH_STATE_FILE = path.join(process.cwd(), "oauth-state.json");
 
 function loadSessions() {
   try {
@@ -30,15 +33,47 @@ function loadSessions() {
 function saveSessions() {
   try {
     const obj = Object.fromEntries(sessions);
-    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2));
+    const json = JSON.stringify(obj, null, 2);
+    // Write-then-rename: rename is atomic on the same filesystem, so a process kill mid-write
+    // (this host is known to OOM under load) can never leave sessions.json truncated/corrupt.
+    // A corrupt file's JSON.parse would otherwise throw in loadSessions(), get swallowed, and
+    // silently return an empty map — logging out every user, including whatever session the
+    // bot itself depends on.
+    const tmpFile = `${SESSIONS_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, json);
+    fs.renameSync(tmpFile, SESSIONS_FILE);
   } catch (err) {
     console.error("[AUTH] Failed to save sessions:", err.message);
   }
 }
 
+function loadOAuthState() {
+  try {
+    if (fs.existsSync(OAUTH_STATE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(OAUTH_STATE_FILE, "utf8"));
+      return new Map(Object.entries(data));
+    }
+  } catch (err) {
+    console.error("[AUTH] Failed to load oauth state:", err.message);
+  }
+  return new Map();
+}
+
+function saveOAuthState() {
+  try {
+    const json = JSON.stringify(Object.fromEntries(stateStore), null, 2);
+    const tmpFile = `${OAUTH_STATE_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, json);
+    fs.renameSync(tmpFile, OAUTH_STATE_FILE);
+  } catch (err) {
+    console.error("[AUTH] Failed to save oauth state:", err.message);
+  }
+}
+
 // In-memory session store (persisted to file)
 const sessions = loadSessions();
-const stateStore = new Map(); // Store state tokens for validation
+// OAuth CSRF state tokens (persisted to file — see OAUTH_STATE_FILE above)
+const stateStore = loadOAuthState();
 
 // Step 1: Get FYERS login URL
 router.get("/login", (_req, res) => {
@@ -59,6 +94,7 @@ router.get("/login", (_req, res) => {
       stateStore.delete(key);
     }
   }
+  saveOAuthState();
 
   // FYERS v3 OAuth URL - use full appId (with suffix) for OAuth
   const loginUrl = `${FYERS_API_BASE}/generate-authcode?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUrl)}&response_type=code&state=${state}`;
@@ -74,18 +110,20 @@ router.post("/callback", async (req, res) => {
     return res.status(400).json({ error: "auth_code is required" });
   }
 
-  // TODO(security): OAuth state (CSRF) validation is disabled because the in-memory
-  // stateStore is lost on server restart, which would reject legitimate callbacks. Re-enable
-  // once state is persisted (e.g. Redis) so the callback is protected against CSRF /
-  // auth-code injection:
-  //   if (state && !stateStore.has(state)) {
-  //     return res.status(400).json({ error: "Invalid or expired state" });
-  //   }
-
-  // Clear used state
-  if (state) {
-    stateStore.delete(state);
+  // CSRF / auth-code-injection guard: `state` must be one WE issued via /login and not yet
+  // consumed. Without this, an attacker who completes their own FYERS login can craft a link
+  // like https://roshanvijay.com/#auth_code=<attacker_code>&state=<anything> — a victim who
+  // merely opens it gets silently connected to the attacker's FYERS identity (the frontend
+  // exchanges whatever auth_code/state is in the URL with no user interaction required). state
+  // is now persisted (OAUTH_STATE_FILE) so this check is safe across a server restart — a
+  // legitimate in-flight login started right before a restart is not wrongly rejected.
+  if (!state || !stateStore.has(state)) {
+    return res.status(400).json({ error: "Invalid or expired login attempt — please click Connect FYERS again." });
   }
+
+  // Single-use: clear immediately so the same state can never authorize a second exchange.
+  stateStore.delete(state);
+  saveOAuthState();
 
   try {
     // Exchange auth_code for access_token using SHA256 hash of secret
@@ -188,11 +226,18 @@ router.post("/session/refresh", (req, res) => {
   // Reload from disk in case server restarted
   const freshSessions = loadSessions();
   const session = freshSessions.get(sessionId);
-  
+
   if (!session) {
     return res.status(401).json({ error: "Session not found" });
   }
-  
+  // Every other session-read path (getSession, requireAuth) enforces the 24h TTL — this route
+  // must too, or a session everything else correctly treats as expired gets reported valid here.
+  if (isSessionExpired(session)) {
+    sessions.delete(sessionId);
+    saveSessions();
+    return res.status(401).json({ error: "Session expired" });
+  }
+
   // Update in-memory store
   sessions.set(sessionId, session);
   

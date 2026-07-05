@@ -52,9 +52,24 @@ export function FyersConnect() {
     const state = params.get("state");
 
     if (authCode) {
+      // CSRF guard: only proceed if `state` matches what THIS browser stored when it itself
+      // called handleLogin() below. Without this, opening an attacker-crafted link like
+      // .../#auth_code=<attacker_code>&state=<anything> would silently exchange it and connect
+      // this browser to the attacker's FYERS identity — no click beyond navigating needed. A
+      // login this browser never started has nothing to compare against, so it's rejected
+      // outright. The backend enforces the same check server-side (the real security boundary);
+      // this is defense-in-depth so a hijack attempt never even reaches the network call.
+      const expectedState = sessionStorage.getItem("fyersOAuthState");
+      sessionStorage.removeItem("fyersOAuthState");
+      if (!state || !expectedState || state !== expectedState) {
+        toast.error("FYERS login could not be verified — please click Connect FYERS again.", { id: "fyers-auth" });
+        window.history.replaceState({}, "", window.location.pathname);
+        window.location.hash = "";
+        return;
+      }
       setLoading(true);
       authApi
-        .exchangeToken(authCode, state || undefined)
+        .exchangeToken(authCode, state)
         .then((result) => {
           localStorage.setItem("fyersSessionId", result.sessionId);
           setConnected(true);
@@ -74,7 +89,10 @@ export function FyersConnect() {
     window.location.hash = "";
     setLoading(true);
     try {
-      const { loginUrl } = await authApi.getLoginUrl();
+      const { loginUrl, state } = await authApi.getLoginUrl();
+      // Stored so the callback handler above can verify the state that comes back is the one
+      // THIS browser actually requested — see the CSRF guard there for why this matters.
+      if (state) sessionStorage.setItem("fyersOAuthState", state);
       window.location.href = loginUrl;
     } catch (err: any) {
       toast.error("Failed to get login URL: " + err.message, { id: "fyers-auth" });

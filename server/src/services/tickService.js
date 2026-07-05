@@ -7,7 +7,7 @@
  */
 
 import WebSocket from "ws";
-import { startSdkDataSocket, sdkSubscribe, sdkDisconnect, isSdkActive } from "./fyersDataSocketV3.js";
+import { startSdkDataSocket, sdkSubscribe, sdkUnsubscribe, sdkDisconnect, isSdkActive } from "./fyersDataSocketV3.js";
 
 // Data-feed mode: "raw" (legacy hand-rolled WS, default) | "sdk" (official fyers-api-v3
 // dataSocket, which decodes the v3 protobuf frames). Flag-gated so production stays on the
@@ -39,6 +39,12 @@ let wsConnection = null;
 let isConnected = false;
 let reconnectTimer = null;
 let heartbeatTimer = null;
+// Timestamp of the last message received of ANY kind (tick, ack, etc.) on the raw socket. Many
+// real network failures (NAT/firewall session eviction, a silently black-holing path) never
+// deliver a FIN/RST, so the socket's own 'close'/'error' events — the only thing that currently
+// triggers a reconnect — never fire. This lets the heartbeat notice total silence and force a
+// reconnect itself, instead of requiring a human to spot stale prices and restart the bot.
+let lastMessageAt = 0;
 
 // ─── Symbol Mapping ───────────────────────────────────────────────
 const SYMBOL_MAP = {
@@ -53,6 +59,12 @@ const REVERSE_SYMBOL_MAP = {
 
 // Symbols we always keep subscribed to (indices for signal generation)
 const subscribedSymbols = new Set(Object.keys(SYMBOL_MAP));
+
+// Reference count per NON-permanent symbol (anything not in SYMBOL_MAP) so that closing one
+// position doesn't kill live ticks for a sibling position still open on the SAME symbol (EMA5T
+// can run multiple timeframes concurrently on one underlying's futures contract). A symbol is
+// only actually torn down (broker-unsubscribed, tick buffer freed) once its ref count hits 0.
+const symbolRefCounts = new Map();
 
 function normalizeSymbol(fyersSymbol) {
   return SYMBOL_MAP[fyersSymbol] || fyersSymbol;
@@ -125,6 +137,7 @@ export function connectFyersWebSocket(accessToken, appId) {
     });
 
     wsConnection.on("message", (data) => {
+      lastMessageAt = Date.now();
       try {
         const msg = JSON.parse(data.toString());
         if (msg.s === "ok") {
@@ -205,18 +218,33 @@ function storeTick(symbol, tick) {
 }
 
 // ─── Heartbeat ────────────────────────────────────────────────────
+const HEARTBEAT_INTERVAL_MS = 30000;
+// No message of ANY kind (tick, ack, ping reply) in this long — 3 heartbeat intervals — is
+// treated as a silently dead connection during market hours and forces a reconnect.
+const STALE_CONNECTION_MS = 90000;
+
 function startHeartbeat() {
   // Clear any prior interval first so a reconnect can't leave an orphaned heartbeat
   // sending pings on a dead socket.
   stopHeartbeat();
+  lastMessageAt = Date.now(); // baseline from the moment this (fresh) connection starts heartbeating
   heartbeatTimer = setInterval(() => {
-    if (wsConnection?.readyState === WebSocket.OPEN) {
-      // TODO(verify): confirm FYERS v3 WS keep-alive expects this JSON {method:"ping"}
-      // message vs a protocol-level ping frame (wsConnection.ping()). If idle disconnects
-      // are observed, switch to wsConnection.ping().
-      wsConnection.send(JSON.stringify({ method: "ping" }));
+    if (wsConnection?.readyState !== WebSocket.OPEN) return;
+    if (Date.now() - lastMessageAt > STALE_CONNECTION_MS) {
+      console.error(
+        `[TICK-SERVICE] No message received in ${STALE_CONNECTION_MS}ms — connection appears silently dead, forcing reconnect`
+      );
+      // terminate() (not close()) skips the close handshake and reliably fires the local
+      // 'close' handler immediately, which is what actually schedules the reconnect — needed
+      // because the remote end may never respond to a graceful close on a black-holed path.
+      wsConnection.terminate();
+      return;
     }
-  }, 30000); // Every 30 seconds
+    // TODO(verify): confirm FYERS v3 WS keep-alive expects this JSON {method:"ping"}
+    // message vs a protocol-level ping frame (wsConnection.ping()). If idle disconnects
+    // are observed, switch to wsConnection.ping().
+    wsConnection.send(JSON.stringify({ method: "ping" }));
+  }, HEARTBEAT_INTERVAL_MS);
 }
 
 function stopHeartbeat() {
@@ -506,9 +534,14 @@ export function clearTickData() {
 }
 
 // ─── Dynamic Symbol Subscription ──────────────────────────────────
+// Permanent index symbols (SYMBOL_MAP) are never ref-counted — they're always subscribed and
+// unsubscribeFromSymbols already refuses to remove them regardless of count.
 export function subscribeToSymbols(symbols) {
   let added = false;
   for (const symbol of symbols) {
+    if (!SYMBOL_MAP[symbol]) {
+      symbolRefCounts.set(symbol, (symbolRefCounts.get(symbol) || 0) + 1);
+    }
     if (!subscribedSymbols.has(symbol)) {
       subscribedSymbols.add(symbol);
       ensureStore(normalizeSymbol(symbol));
@@ -528,8 +561,18 @@ export function subscribeToSymbols(symbols) {
 
 export function unsubscribeFromSymbols(symbols) {
   let removed = false;
+  const actuallyRemoved = [];
   for (const symbol of symbols) {
-    if (subscribedSymbols.has(symbol) && !SYMBOL_MAP[symbol]) {
+    if (SYMBOL_MAP[symbol]) continue; // permanent index symbols are never removed
+    const remaining = Math.max(0, (symbolRefCounts.get(symbol) || 0) - 1);
+    if (remaining > 0) {
+      // Still wanted by another open position on the same symbol (e.g. a second timeframe on
+      // the same futures contract) — keep the feed alive for it, don't tear anything down.
+      symbolRefCounts.set(symbol, remaining);
+      continue;
+    }
+    symbolRefCounts.delete(symbol);
+    if (subscribedSymbols.has(symbol)) {
       subscribedSymbols.delete(symbol);
       // Reclaim the per-symbol tick buffer and latest-tick entry. Without this, every
       // symbol ever subscribed leaks up to MAX_TICKS_PER_SYMBOL tick objects forever.
@@ -537,10 +580,16 @@ export function unsubscribeFromSymbols(symbols) {
       delete tickStore[shortName];
       delete latestTick[shortName];
       removed = true;
+      actuallyRemoved.push(symbol);
     }
   }
-  if (removed && wsConnection?.readyState === WebSocket.OPEN) {
-    wsConnection.send(JSON.stringify({ method: "unsub", data: { symbols } }));
-    console.log("[TICK-SERVICE] Unsubscribed from:", symbols);
+  if (removed) {
+    if (DATA_FEED_MODE === "sdk") {
+      sdkUnsubscribe(actuallyRemoved);
+      console.log("[TICK-SERVICE] (SDK) Unsubscribed from:", actuallyRemoved);
+    } else if (wsConnection?.readyState === WebSocket.OPEN) {
+      wsConnection.send(JSON.stringify({ method: "unsub", data: { symbols: actuallyRemoved } }));
+      console.log("[TICK-SERVICE] Unsubscribed from:", actuallyRemoved);
+    }
   }
 }

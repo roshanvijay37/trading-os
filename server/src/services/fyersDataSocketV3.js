@@ -14,6 +14,15 @@ const require = createRequire(import.meta.url);
 
 let skt = null;
 let started = false;
+// The FULL current set of symbols we want subscribed, kept in sync by sdkSubscribe/sdkUnsubscribe
+// as well as the initial startSdkDataSocket() call. The 'connect' handler resubscribes from THIS
+// (not the startSdkDataSocket() call's original `symbols` param) so that a socket-level reconnect
+// the SDK triggers on its own (skt.autoreconnect) — independent of tickService's own reconnect
+// path — re-establishes everything currently wanted, not a stale snapshot from startup. Without
+// this, a genuine network drop that the SDK auto-heals silently drops any symbol subscribed
+// after startup (i.e. every currently-open position's own contract) while index ticks keep
+// flowing, masking the problem.
+let liveSymbols = [];
 
 /**
  * Remove the fyers-api-v3 package from the CommonJS require cache so the NEXT require() rebuilds
@@ -82,6 +91,7 @@ export function startSdkDataSocket({ accessToken, appId, symbols = [], onTick, o
   // Tear down any prior singleton (and purge it from the module cache) FIRST, so the token
   // passed in this call actually takes effect instead of being shadowed by the cached instance.
   teardownSdkSocket();
+  liveSymbols = Array.from(new Set(symbols));
 
   let DataSocket;
   try {
@@ -103,8 +113,10 @@ export function startSdkDataSocket({ accessToken, appId, symbols = [], onTick, o
       console.log("[DATA-SOCKET-V3] Connected");
       if (typeof onStatus === "function") onStatus(true);
       try {
-        skt.subscribe(symbols);
-        console.log("[DATA-SOCKET-V3] Subscribed:", symbols);
+        // Resubscribe from the LIVE set (updated by sdkSubscribe/sdkUnsubscribe since startup),
+        // not the `symbols` param this socket was originally started with — see `liveSymbols`.
+        skt.subscribe(liveSymbols);
+        console.log("[DATA-SOCKET-V3] Subscribed:", liveSymbols);
       } catch (e) {
         console.error("[DATA-SOCKET-V3] Subscribe failed:", e.message);
       }
@@ -140,6 +152,9 @@ export function startSdkDataSocket({ accessToken, appId, symbols = [], onTick, o
 }
 
 export function sdkSubscribe(symbols = []) {
+  for (const s of symbols) {
+    if (!liveSymbols.includes(s)) liveSymbols.push(s);
+  }
   try {
     if (skt && typeof skt.subscribe === "function") skt.subscribe(symbols);
   } catch (e) {
@@ -148,6 +163,7 @@ export function sdkSubscribe(symbols = []) {
 }
 
 export function sdkUnsubscribe(symbols = []) {
+  liveSymbols = liveSymbols.filter((s) => !symbols.includes(s));
   try {
     if (skt && typeof skt.unsubscribe === "function") skt.unsubscribe(symbols);
   } catch (e) {
@@ -163,4 +179,9 @@ export function sdkDisconnect() {
 
 export function isSdkActive() {
   return started;
+}
+
+/** The current full expected-subscription set (for tests/introspection — see `liveSymbols`). */
+export function getLiveSymbols() {
+  return [...liveSymbols];
 }

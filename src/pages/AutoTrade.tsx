@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog, Flash, Panel, SkeletonStat, Stat, toast } from "../components/ui";
 import { autoTradeApi } from "../services/api";
 import {
@@ -35,21 +35,42 @@ export function AutoTrade() {
     paperTrading: true,
     positionSizingMode: "RISK",
     fixedLots: 1,
+    // Matches the backend's CONFIG.ALLOW_CORRELATED_TRADES default (false) — blocks Bank Nifty
+    // and Nifty from both being open/pending at once until the operator opts in.
+    allowCorrelatedTrades: false,
     selectedStrategies: ["EMA5"],
     selectedInstruments: ["NIFTY", "BANKNIFTY"],
     selectedTimeframes: [5],
   });
   const [logs, setLogs] = useState<string[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [confirmAction, setConfirmAction] = useState<"estop" | "reset" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"estop" | "reset" | "go-live" | null>(null);
+  // Staleness: if the status poll keeps failing, the LIVE badge / positions / P&L would otherwise
+  // keep showing the last-good snapshot forever with no cue — an operator could reasonably read
+  // silence as "all fine" while actually blind to what the bot is really doing.
+  const [statusStale, setStatusStale] = useState(false);
+  const lastStatusAtRef = useRef<number | null>(null);
+  const STALE_THRESHOLD_MS = 15000; // 3 missed 5s polls
+  // Request-sequencing guard: an older /status response that resolves AFTER a newer one must
+  // never overwrite it (e.g. click Stop, see it succeed, then a late in-flight poll flips the
+  // badge back to "LIVE" with no error shown at all).
+  const fetchSeq = useRef(0);
 
   const fetchStatus = async () => {
+    const seq = ++fetchSeq.current;
     try {
       const data = await autoTradeApi.getStatus();
+      if (seq !== fetchSeq.current) return; // a newer request has since been issued — discard
       setStatus(data);
       setError("");
+      lastStatusAtRef.current = Date.now();
+      setStatusStale(false);
     } catch (err: any) {
+      if (seq !== fetchSeq.current) return;
       setError(err.message || "Failed to fetch status");
+      if (lastStatusAtRef.current && Date.now() - lastStatusAtRef.current > STALE_THRESHOLD_MS) {
+        setStatusStale(true);
+      }
     }
   };
 
@@ -95,6 +116,7 @@ export function AutoTrade() {
         paperTrading: status.paperTrading ?? prev.paperTrading,
         positionSizingMode: status.positionSizingMode ?? prev.positionSizingMode,
         fixedLots: status.fixedLots ?? prev.fixedLots,
+        allowCorrelatedTrades: status.allowCorrelatedTrades ?? prev.allowCorrelatedTrades,
         selectedStrategies: status.selectedStrategies ?? prev.selectedStrategies,
         selectedInstruments: status.selectedInstruments ?? prev.selectedInstruments,
         selectedTimeframes: status.selectedTimeframes ?? prev.selectedTimeframes,
@@ -166,7 +188,21 @@ export function AutoTrade() {
     }
   };
 
+  // Gate before actually saving: if this Save would flip PAPER_TRADING off (real broker orders),
+  // require an explicit confirmation first, matching Emergency Stop/Reset — previously the ONLY
+  // control that can switch the bot to live money was bundled into the generic Save Config
+  // action with no confirmation at all, so a mis-click could silently go live.
+  const handleSaveConfigClick = () => {
+    const goingLive = status?.paperTrading === true && configForm.paperTrading === false;
+    if (goingLive) {
+      setConfirmAction("go-live");
+      return;
+    }
+    handleUpdateConfig();
+  };
+
   const handleUpdateConfig = async () => {
+    setConfirmAction(null);
     setLoading(true);
     try {
       await autoTradeApi.updateConfig(configForm);
@@ -199,6 +235,15 @@ export function AutoTrade() {
           <Radio size={9} className={isRunning && !isEmergency ? "animate-pulse" : ""} />
           {isEmergency ? "EMERGENCY" : isRunning ? "LIVE" : "STANDBY"}
         </span>
+        {statusStale && (
+          <span
+            className="flex items-center gap-1.5 rounded-panel border border-warn/20 bg-warn-dim px-2.5 py-1 text-2xs font-medium text-warn"
+            title="The status poll has been failing — everything below may be out of date, not necessarily what the bot is actually doing right now."
+          >
+            <AlertTriangle size={9} />
+            STALE
+          </span>
+        )}
         <p className="text-2xs text-zinc-600">Institutional-grade automated execution. No manual intervention.</p>
       </div>
 
@@ -290,7 +335,7 @@ export function AutoTrade() {
               Strategy Configuration
             </h3>
             <button
-              onClick={handleUpdateConfig}
+              onClick={handleSaveConfigClick}
               disabled={loading}
               className="rounded-panel border border-gain/20 bg-gain-dim px-3 py-1.5 text-2xs font-semibold text-gain transition hover:bg-gain/20 disabled:opacity-50"
             >
@@ -308,6 +353,9 @@ export function AutoTrade() {
                 <option value="RISK">Risk %</option>
                 <option value="LOTS">Fixed Lots</option>
               </select>
+              <p className="mt-1 text-2xs text-zinc-600">
+                EMA5T (the live strategy) always trades exactly 1 lot per entry — this setting does not resize live orders yet.
+              </p>
             </div>
             {configForm.positionSizingMode === "RISK" ? (
               <div>
@@ -378,6 +426,20 @@ export function AutoTrade() {
                 className="h-3.5 w-3.5 rounded border-border bg-surface"
               />
               <label className="text-2xs text-zinc-600">Paper Trading</label>
+            </div>
+            <div className="flex flex-col gap-1 pt-5">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={configForm.allowCorrelatedTrades}
+                  onChange={(e) => setConfigForm({ ...configForm, allowCorrelatedTrades: e.target.checked })}
+                  className="h-3.5 w-3.5 rounded border-border bg-surface"
+                />
+                <label className="text-2xs text-zinc-600">Allow Correlated Trades (Bank Nifty + Nifty concurrently)</label>
+              </div>
+              <p className="text-2xs text-zinc-600">
+                When off, only one of the two underlyings can have an open or pending position at a time.
+              </p>
             </div>
           </div>
           <div className="mt-3">
@@ -693,6 +755,15 @@ export function AutoTrade() {
         body="This clears the emergency stop and allows the bot to trade again."
         confirmLabel="Allow trading"
         onConfirm={handleResetEmergency}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === "go-live"}
+        tone="rose"
+        title="Switch to LIVE trading"
+        body="This turns off paper trading — the bot will place REAL orders with REAL money on your FYERS account. Make sure you've reviewed the configuration before continuing."
+        confirmLabel="Go live"
+        onConfirm={handleUpdateConfig}
         onCancel={() => setConfirmAction(null)}
       />
     </div>

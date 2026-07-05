@@ -120,6 +120,7 @@ export interface BotConfig {
   paperTrading: boolean;
   positionSizingMode: string;
   fixedLots: number;
+  allowCorrelatedTrades: boolean;
   selectedStrategies: string[];
   selectedInstruments: string[];
   selectedTimeframes: number[];
@@ -141,6 +142,7 @@ export interface BotStatus {
   emergencyStop: boolean;
   positionSizingMode?: string;
   fixedLots?: number;
+  allowCorrelatedTrades?: boolean;
   selectedStrategies?: string[];
   selectedInstruments?: string[];
   selectedTimeframes?: number[];

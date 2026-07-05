@@ -92,23 +92,10 @@ export async function refreshHolidays() {
     });
     
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    
+
     const data = await response.json();
-    if (!data || !Array.isArray(data)) throw new Error("Invalid response format");
-    
-    const holidays = data
-      .filter((h) => h.tradingDate) // Only trading holidays
-      .map((h) => ({
-        date: h.tradingDate, // format: DD-MMM-YYYY
-        name: h.description || "Market Holiday",
-      }))
-      .map((h) => ({
-        // Convert DD-MMM-YYYY to YYYY-MM-DD
-        date: convertNseDate(h.date),
-        name: h.name,
-      }))
-      .filter((h) => h.date !== null);
-    
+    const holidays = parseNseHolidays(data);
+
     const year = new Date().getFullYear();
     const result = {
       year,
@@ -127,6 +114,35 @@ export async function refreshHolidays() {
     const existing = getHolidays();
     return existing;
   }
+}
+
+/**
+ * Pure: turn NSE's raw holiday-master response into our { date, name }[] shape, filtering to
+ * trading holidays with a parseable date. Throws (rather than returning []) if NSE changes its
+ * response schema or returns zero valid entries — refreshHolidays() must treat that as a failed
+ * fetch, never as "there are no holidays," so it never overwrites a good cached/default list
+ * with nothing. Exported for unit tests.
+ */
+export function parseNseHolidays(data) {
+  if (!data || !Array.isArray(data)) throw new Error("Invalid response format");
+
+  const holidays = data
+    .filter((h) => h.tradingDate) // Only trading holidays
+    .map((h) => ({
+      date: h.tradingDate, // format: DD-MMM-YYYY
+      name: h.description || "Market Holiday",
+    }))
+    .map((h) => ({
+      // Convert DD-MMM-YYYY to YYYY-MM-DD
+      date: convertNseDate(h.date),
+      name: h.name,
+    }))
+    .filter((h) => h.date !== null);
+
+  if (holidays.length === 0) {
+    throw new Error("NSE returned zero valid holidays — refusing to overwrite the existing list");
+  }
+  return holidays;
 }
 
 /**
@@ -197,8 +213,8 @@ export function isNseMarketOpen() {
   
   if (h < 9 || h > 15) return false;
   if (h === 9 && m < 15) return false;
-  if (h === 15 && m > 30) return false;
-  
+  if (h === 15 && m >= 30) return false; // matches getNseMarketStatus's close boundary exactly
+
   return true;
 }
 
@@ -233,3 +249,12 @@ export function getNseMarketStatus() {
 
 // Auto-refresh on module load (best effort)
 refreshHolidays().catch(() => {});
+
+// Also retry periodically — a transient failure at startup (or NSE blocking this host's scrapes
+// entirely, as already documented for fiiDii.js) must not leave the holiday list silently stale
+// forever until a manual restart. This also covers the calendar year rolling past whatever the
+// last successful fetch (or DEFAULT_HOLIDAYS) covers, without needing a redeploy.
+const HOLIDAY_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // once a day
+setInterval(() => {
+  refreshHolidays().catch(() => {});
+}, HOLIDAY_REFRESH_INTERVAL_MS);
