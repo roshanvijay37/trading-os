@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findEmaAlerts, type AlertCandle } from "./emaAlerts";
+import { findEmaAlerts, resolveEmaAlerts, type AlertCandle } from "./emaAlerts";
 
 // Flat candles seed both EMAs at exactly the flat close (SMA of identical values = that value,
 // and the EMA recurrence never moves away from a constant series) — this makes the arithmetic
@@ -77,5 +77,87 @@ describe("findEmaAlerts — trendGate: true (EMA5T, the default and what the liv
 
   it("returns no alerts with fewer than 20 candles (can't seed the 20-EMA)", () => {
     expect(findEmaAlerts(flat(100, 19))).toEqual([]);
+  });
+});
+
+describe("resolveEmaAlerts", () => {
+  // Deliberately hand-built candles/alerts (not derived via findEmaAlerts) — resolveEmaAlerts
+  // takes both as plain inputs, so its trigger/outcome logic can be tested in isolation from the
+  // EMA math above. c() args are (close, high, low).
+  const c = (close: number, high: number, low: number) => ({ close, high, low });
+
+  it("resolves TARGET when a later candle reaches it before SL", () => {
+    // Bullish alert @0: entry = high (110), sl = low (107), risk 3, target = 116.
+    const candles = [
+      c(108, 110, 107), // alert candle
+      c(112, 111, 109), // triggers entry (high 111 >= 110); doesn't resolve (low 109 > 107, high 111 < 116)
+      c(118, 119, 115), // target hit (high 119 >= 116); SL not touched (low 115 > 107)
+    ];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ entry: 110, sl: 107, target: 116, triggerIndex: 1, outcome: "TARGET", outcomeIndex: 2 });
+  });
+
+  it("resolves SL when a later candle hits it before target", () => {
+    const candles = [
+      c(108, 110, 107),
+      c(112, 111, 109), // triggers, doesn't resolve
+      c(105, 106, 104), // SL hit (low 104 <= 107); target not reached (high 106 < 116)
+    ];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ outcome: "SL", outcomeIndex: 2 });
+  });
+
+  it("resolves SL when a single candle's range spans BOTH levels (SL wins the tie, matching the backtest's SL-checked-first order)", () => {
+    const candles = [
+      c(108, 110, 107),
+      c(112, 111, 109),
+      c(110, 120, 100), // both SL (low 100 <= 107) and target (high 120 >= 116) are in range
+    ];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result.outcome).toBe("SL");
+  });
+
+  it("resolves OPEN when the entry has triggered but neither level has been hit yet", () => {
+    const candles = [c(108, 110, 107), c(112, 111, 109)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ triggerIndex: 1, outcome: "OPEN", outcomeIndex: null });
+  });
+
+  it("resolves NOT_TRIGGERED when price never reaches the entry level", () => {
+    const candles = [c(108, 110, 107), c(109, 109, 106), c(108, 109, 105)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null });
+  });
+
+  it("bounds the trigger search at the NEXT alert's candle — a newer alert cancels the old pending order", () => {
+    const candles = [
+      c(108, 110, 107), // idx0: alert 1 (bullish, entry 110)
+      c(109, 109, 106), // idx1: doesn't trigger idx0 (high 109 < 110)
+      c(95, 96, 90), // idx2: alert 2 (bearish) — idx0's search must stop before this
+      c(112, 111, 109), // idx3: WOULD trigger idx0's entry, but is out of bounds for it
+    ];
+    const alerts = [
+      { index: 0, type: "BULLISH" as const },
+      { index: 2, type: "BEARISH" as const },
+    ];
+    const [first] = resolveEmaAlerts(candles, alerts);
+    expect(first).toMatchObject({ triggerIndex: null, outcome: "NOT_TRIGGERED" });
+  });
+
+  it("mirrors the bearish (SHORT) formula: entry = alert low, SL = alert high, target = entry - 2x risk", () => {
+    // Bearish alert @0: entry = low (90), sl = high (95), risk 5, target = 80.
+    const candles = [
+      c(92, 95, 90),
+      c(85, 91, 84), // triggers (low 84 <= 90); doesn't resolve (high 91 < 95, low 84 > 80)
+      c(75, 83, 78), // target hit (low 78 <= 80); SL not touched (high 83 < 95)
+    ];
+    const alerts = [{ index: 0, type: "BEARISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ entry: 90, sl: 95, target: 80, triggerIndex: 1, outcome: "TARGET", outcomeIndex: 2 });
   });
 });

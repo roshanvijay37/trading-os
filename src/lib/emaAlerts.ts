@@ -21,6 +21,21 @@ export interface AlertCandle {
   low: number;
 }
 
+export type TradeOutcome = "TARGET" | "SL" | "OPEN" | "NOT_TRIGGERED";
+
+export interface ResolvedAlert {
+  alertIndex: number;
+  type: AlertType;
+  entry: number;
+  sl: number;
+  target: number;
+  /** Index of the candle whose high/low first crossed the entry level, or null if it never did. */
+  triggerIndex: number | null;
+  outcome: TradeOutcome;
+  /** Index of the candle where the outcome resolved (TARGET/SL only). */
+  outcomeIndex: number | null;
+}
+
 export interface AlertPoint {
   /** Index into the candles array passed to findEmaAlerts. */
   index: number;
@@ -68,4 +83,62 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
     if (type) alerts.push({ index: i, type });
   }
   return alerts;
+}
+
+/**
+ * Simulates each alert forward through the candle history to see what actually happened —
+ * entry = alert candle's high/low, SL = alert candle's low/high, target = entry ± 2x risk
+ * (matches autoTrader.js's EMA5T entry math exactly).
+ *
+ * Two rules mirrored from the real system, both load-bearing for correctness:
+ *  1. A resting entry order is cancelled the moment a NEWER alert appears (autoTrader.js's
+ *     manageFuturesPending: "a previous resting order... must be cancelled before arming the
+ *     new one") — so the trigger search for alert k is bounded by alert k+1's candle index.
+ *     Once actually triggered, later alerts don't affect the now-open position.
+ *  2. When a single candle's range spans BOTH the SL and target, SL wins — this matches
+ *     routes/backtest.js's if/else-if exit-check order (SL checked before target), the
+ *     conservative convention for resolving intrabar ambiguity from OHLC-only data.
+ */
+export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): ResolvedAlert[] {
+  return alerts.map((alert, k) => {
+    const alertCandle = candles[alert.index];
+    const isBullish = alert.type === "BULLISH";
+    const entry = isBullish ? alertCandle.high : alertCandle.low;
+    const sl = isBullish ? alertCandle.low : alertCandle.high;
+    const risk = Math.abs(entry - sl);
+    const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
+
+    const nextAlertIndex = k + 1 < alerts.length ? alerts[k + 1].index : candles.length;
+
+    let triggerIndex: number | null = null;
+    for (let i = alert.index + 1; i < nextAlertIndex && i < candles.length; i++) {
+      const c = candles[i];
+      if (isBullish ? c.high >= entry : c.low <= entry) {
+        triggerIndex = i;
+        break;
+      }
+    }
+
+    if (triggerIndex === null) {
+      return { alertIndex: alert.index, type: alert.type, entry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null };
+    }
+
+    let outcome: TradeOutcome = "OPEN";
+    let outcomeIndex: number | null = null;
+    for (let i = triggerIndex; i < candles.length; i++) {
+      const c = candles[i];
+      if (isBullish ? c.low <= sl : c.high >= sl) {
+        outcome = "SL";
+        outcomeIndex = i;
+        break;
+      }
+      if (isBullish ? c.high >= target : c.low <= target) {
+        outcome = "TARGET";
+        outcomeIndex = i;
+        break;
+      }
+    }
+
+    return { alertIndex: alert.index, type: alert.type, entry, sl, target, triggerIndex, outcome, outcomeIndex };
+  });
 }

@@ -5,7 +5,7 @@ import { Flash } from "../components/ui/Flash";
 import { Skeleton } from "../components/ui/Skeleton";
 import { backtestApi } from "../services/api";
 import { calculateEMA } from "../lib/strategies/engine";
-import { findEmaAlerts } from "../lib/emaAlerts";
+import { findEmaAlerts, resolveEmaAlerts } from "../lib/emaAlerts";
 
 interface Candle {
   timestamp: number;
@@ -232,8 +232,12 @@ export function Chart() {
   }
 
   const alerts = showSignals ? findEmaAlerts(chartCandles) : [];
+  // Simulates each alert forward (did price actually reach the entry, then SL or target first) —
+  // the same entry/SL/target formula and SL-checked-first tie-break the live bot's backtest uses
+  // (see src/lib/emaAlerts.ts's resolveEmaAlerts doc comment for exactly what's mirrored).
+  const resolved = resolveEmaAlerts(chartCandles, alerts);
 
-  // Small arrow only (no text label) — a label like "B"/"S" reads too easily as "Buy"/"Sell",
+  // Entry arrow only (no text label) — a label like "B"/"S" reads too easily as "Buy"/"Sell",
   // overclaiming that this is a confirmed trade rather than just an EMA5T alert candle.
   const markers: CandleMarker[] = alerts.map((a) => ({
     time: chartCandles[a.index].time,
@@ -242,23 +246,30 @@ export function Chart() {
     shape: a.type === "BULLISH" ? "arrowUp" : "arrowDown",
   }));
 
-  // SL/Target for the most recent alert only (older ones would clutter the chart with levels
-  // that may already be long resolved). Same entry/SL/target formula the live bot uses
-  // (autoTrader.js: entry = alert high/low, SL = alert low/high, target = entry ± 2x risk) —
-  // drawn from the alert candle out to the latest candle, NOT a claim that this setup is still
-  // "live" (a later alert or an actual breakout may have already superseded it).
-  const latestAlert = alerts[alerts.length - 1];
-  if (latestAlert && chartCandles.length > 0) {
-    const alertCandle = chartCandles[latestAlert.index];
+  // Outcome marker — a small circle at whichever candle actually hit target (green) or SL (red),
+  // for every alert that triggered and resolved. Positioned opposite the entry arrow (same
+  // convention BacktestLab.tsx uses for its own entry/exit marker pairs).
+  for (const r of resolved) {
+    if (r.outcome !== "TARGET" && r.outcome !== "SL") continue;
+    markers.push({
+      time: chartCandles[r.outcomeIndex!].time,
+      position: r.type === "BULLISH" ? "aboveBar" : "belowBar",
+      color: r.outcome === "TARGET" ? "#10b981" : "#ef4444",
+      shape: "circle",
+    });
+  }
+
+  // SL/Target reference lines for the most recent alert only (older ones would clutter the chart
+  // with levels that may already be long resolved) — drawn from the alert candle out to the
+  // latest candle. NOT a claim that this setup is still "live"; check the outcome marker above
+  // (if any) to see whether it already resolved.
+  const latestResolved = resolved[resolved.length - 1];
+  if (latestResolved && chartCandles.length > 0) {
+    const alertTime = chartCandles[latestResolved.alertIndex].time;
     const lastTime = chartCandles[chartCandles.length - 1].time;
-    const isBullish = latestAlert.type === "BULLISH";
-    const entry = isBullish ? alertCandle.high : alertCandle.low;
-    const sl = isBullish ? alertCandle.low : alertCandle.high;
-    const risk = Math.abs(entry - sl);
-    const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
     overlays.push(
-      { label: "SL", color: "#ef4444", dashed: true, data: [{ time: alertCandle.time, value: sl }, { time: lastTime, value: sl }] },
-      { label: "Target", color: "#10b981", dashed: true, data: [{ time: alertCandle.time, value: target }, { time: lastTime, value: target }] },
+      { label: "SL", color: "#ef4444", dashed: true, data: [{ time: alertTime, value: latestResolved.sl }, { time: lastTime, value: latestResolved.sl }] },
+      { label: "Target", color: "#10b981", dashed: true, data: [{ time: alertTime, value: latestResolved.target }, { time: lastTime, value: latestResolved.target }] },
     );
   }
 
