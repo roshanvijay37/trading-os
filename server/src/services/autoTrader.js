@@ -203,24 +203,28 @@ function saveState() {
   try {
     const config = {};
     for (const key of PERSISTED_CONFIG_KEYS) config[key] = CONFIG[key];
-    fs.writeFileSync(
-      STATE_FILE,
-      JSON.stringify(
-        {
-          openPositions,
-          todayTrades,
-          lastTradeDate,
-          processedSignals: Array.from(processedSignals),
-          pendingEntries: Array.from(pendingEntries.entries()),
-          dailyPnL,
-          dailyRealizedPnL,
-          consecutiveLosses,
-          config,
-        },
-        null,
-        2
-      )
+    const json = JSON.stringify(
+      {
+        openPositions,
+        todayTrades,
+        lastTradeDate,
+        processedSignals: Array.from(processedSignals),
+        pendingEntries: Array.from(pendingEntries.entries()),
+        dailyPnL,
+        dailyRealizedPnL,
+        consecutiveLosses,
+        config,
+      },
+      null,
+      2
     );
+    // Write to a temp file and rename over the real one — rename is atomic on the same
+    // filesystem, so a crash/OOM/kill mid-write can never leave auto-trade-state.json truncated
+    // or corrupt (which loadState's catch would otherwise silently paper over with empty
+    // defaults, forgetting every open position and pending order).
+    const tmpFile = `${STATE_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, json);
+    fs.renameSync(tmpFile, STATE_FILE);
   } catch (err) {
     console.error("[AUTO-TRADER] Save state failed:", err.message);
   }
@@ -482,7 +486,12 @@ function checkTimeFilter() {
 function checkCorrelationFilter(underlyingName) {
   if (CONFIG.ALLOW_CORRELATED_TRADES) return true;
   const hasOpenTrade = openPositions.some((p) => p.status === "OPEN" && p.underlying !== underlyingName);
-  if (hasOpenTrade) {
+  // A resting (not-yet-filled) entry on another underlying is exposure just as real as an OPEN
+  // position for this gate's purpose — without this, two correlated resting orders can both arm
+  // (neither is "open" yet when the other is checked) and both later fill, defeating
+  // ALLOW_CORRELATED_TRADES:false the moment both underlyings are selected.
+  const hasPendingOnOther = Array.from(pendingEntries.values()).some((p) => p.underlying !== underlyingName);
+  if (hasOpenTrade || hasPendingOnOther) {
     console.log(`[AUTO-TRADER] Correlation filter: already in trade on other underlying`);
     return false;
   }
@@ -603,7 +612,7 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
   const dirMult = position.side === "SHORT" ? -1 : 1;
   const gross = (exitPrice - position.avgFillPrice) * exitQty * dirMult;
   const costQty = position.origEntryQty || exitQty;
-  const costs = CONFIG.PAPER_TRADING ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER });
+  const costs = CONFIG.PAPER_TRADING ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER, side: position.side });
   const pnl = gross - costs;
   position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
   position.pnl = position.realizedPnl;
@@ -729,7 +738,12 @@ async function closePositionInner(position, session, reason) {
     try {
       slDetails = await getOrderDetails(position.slOrderId, session);
     } catch (err) {
-      console.error(`[AUTO-TRADER] Pre-exit SL status check failed for ${position.optionSymbol}:`, err.message);
+      // Abort and retry next cycle, matching the pendingExitOrderId block just above — falling
+      // through with slDetails=null would treat an UNKNOWN broker SL state as "nothing filled" and
+      // place a full-quantity market exit that could double-sell against a broker SL that actually
+      // filled (or partially filled) while this check failed.
+      console.error(`[AUTO-TRADER] Pre-exit SL status check failed for ${position.optionSymbol}; retrying next cycle:`, err.message);
+      return;
     }
     const slPrice = slDetails?.avgFillPrice || position.currentSL || position.stopLoss;
     const sl = planSlSettlement({ status: slDetails?.status, slFilled: slDetails?.filledQty, heldQty });
@@ -846,11 +860,25 @@ async function reconcileStopLossOrders(session) {
     if (position.status !== "OPEN" || !position.slOrderId) continue;
     try {
       const details = await getOrderDetails(position.slOrderId, session);
+      // A concurrent closePosition (e.g. emergencyStop's un-awaited flattenAllPositions) may have
+      // already finalized this position while the await above was in flight — re-check before
+      // acting on a now-stale read.
+      if (position.status !== "OPEN") continue;
       if (details.status === "FILLED") {
-        const exitPrice = details.avgFillPrice || position.stopLoss;
-        const exitQty = details.filledQty || position.quantity;
-        finalizeClose(position, { exitPrice, exitQty, reason: "STOPLOSS", exitOrderId: position.slOrderId });
-        console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol}`);
+        // Claim the SAME guard closePosition uses: if a concurrent close is already in progress
+        // for this position, skip rather than double-finalize (double-counted P&L, duplicate
+        // audit entry, and a corrupted dailyRealizedPnL feeding the daily-loss breaker).
+        if (closingPositionIds.has(position.id)) continue;
+        closingPositionIds.add(position.id);
+        try {
+          if (position.status !== "OPEN") continue;
+          const exitPrice = details.avgFillPrice || position.stopLoss;
+          const exitQty = details.filledQty || position.quantity;
+          finalizeClose(position, { exitPrice, exitQty, reason: "STOPLOSS", exitOrderId: position.slOrderId });
+          console.log(`[AUTO-TRADER] CLOSED by broker SL: ${position.optionSymbol}`);
+        } finally {
+          closingPositionIds.delete(position.id);
+        }
       } else if (["REJECTED", "CANCELLED", "EXPIRED"].includes(details.status)) {
         // SL order is gone — protect the position immediately with a market exit.
         console.error(`[AUTO-TRADER] SL order ${position.slOrderId} ${details.status}; flattening ${position.optionSymbol}`);
@@ -885,25 +913,44 @@ export function planReconciliation(openLocal, netPositions) {
     netQtyBySymbol.set(np.symbol, (netQtyBySymbol.get(np.symbol) || 0) + q);
     npBySymbol.set(np.symbol, np);
   }
+  // The broker's net-position figure is PER SYMBOL, but local OPEN positions on the same symbol
+  // can legitimately be >1 (e.g. two different timeframes both trading the same underlying's
+  // futures contract concurrently — autoTrader.margin.test.js's own fixtures anticipate up to 6
+  // concurrent positions). The broker has no way to tell us which local position owns which share
+  // of a combined net quantity, so group by symbol and treat >1 as ambiguous rather than silently
+  // attributing the WHOLE aggregate qty to every position that happens to share the symbol.
+  const localsBySymbol = new Map();
+  for (const pos of openLocal || []) {
+    if (!localsBySymbol.has(pos.optionSymbol)) localsBySymbol.set(pos.optionSymbol, []);
+    localsBySymbol.get(pos.optionSymbol).push(pos);
+  }
+
   const toClose = [];
   const toKeep = [];
-  for (const pos of openLocal || []) {
-    const brokerQty = netQtyBySymbol.get(pos.optionSymbol);
+  for (const [symbol, positions] of localsBySymbol) {
+    const brokerQty = netQtyBySymbol.get(symbol);
     // EMA5T trades futures both LONG and SHORT — a genuinely open SHORT reports a NEGATIVE
     // netQty at the broker, so only exactly 0 (or absent) means flat. Treating <= 0 as flat
     // (the old options-only-BUYS assumption) would silently reconcile a live open short to
     // CLOSED, losing all tracking/monitoring/SL of a real position.
     if (!brokerQty) {
-      const np = npBySymbol.get(pos.optionSymbol);
+      const np = npBySymbol.get(symbol);
       const realized = np ? Number(np.realized_profit ?? np.pl ?? np.realizedPnl ?? 0) || 0 : 0;
-      toClose.push({ position: pos, realized });
+      // Flat at the broker: every local position on this symbol is genuinely closed, however many
+      // there are. The broker only reports one realized figure for the whole (now-closed) net
+      // exposure, so split it evenly rather than crediting/debiting it to just one of them.
+      const share = positions.length > 0 ? realized / positions.length : 0;
+      for (const position of positions) toClose.push({ position, realized: share });
     } else {
-      // Sanity-check the sign matches the position's recorded side. A mismatch is never treated
-      // as flat/closed — an anomalous sign is still a live position that needs monitoring — it's
-      // only flagged so the operator can see it, never silently swallowed.
-      const expectedSign = pos.side === "SHORT" ? -1 : 1;
-      const signMismatch = Math.sign(brokerQty) !== expectedSign;
-      toKeep.push({ position: pos, brokerQty: Math.abs(brokerQty), signMismatch });
+      const ambiguousGroup = positions.length > 1;
+      for (const position of positions) {
+        // Sanity-check the sign matches the position's recorded side. A mismatch is never treated
+        // as flat/closed — an anomalous sign is still a live position that needs monitoring — it's
+        // only flagged so the operator can see it, never silently swallowed.
+        const expectedSign = position.side === "SHORT" ? -1 : 1;
+        const signMismatch = Math.sign(brokerQty) !== expectedSign;
+        toKeep.push({ position, brokerQty: Math.abs(brokerQty), signMismatch, ambiguousGroup });
+      }
     }
   }
   return { toClose, toKeep };
@@ -945,6 +992,24 @@ async function ensureStopLoss(position, session) {
       paperTrading: CONFIG.PAPER_TRADING,
       auditLogger: logAudit,
     });
+    // A concurrent closePosition (e.g. emergencyStop's flattenAllPositions) may have already
+    // finalized this position while placeStopLossOrder's broker round-trip was in flight. Writing
+    // slOrderId now would orphan a genuinely-live broker order on a position nothing will ever
+    // look at again (finalizeClose never clears slOrderId, and every later check gates on
+    // status === "OPEN"). Cancel it immediately instead of tracking it.
+    if (position.status !== "OPEN") {
+      logAudit({ type: "SL_REARM_ORPHANED", optionSymbol: position.optionSymbol, slOrderId: slOrder.orderId, stopPrice });
+      console.error(`[AUTO-TRADER] SL armed for ${position.optionSymbol} after it was already closed — cancelling orphaned order ${slOrder.orderId}`);
+      if (!CONFIG.PAPER_TRADING) {
+        try {
+          await cancelOrder(slOrder.orderId, session, logAudit);
+        } catch (err) {
+          console.error(`[AUTO-TRADER] Could not cancel orphaned SL ${slOrder.orderId} for ${position.optionSymbol} — MANUAL REVIEW NEEDED:`, err.message);
+          logAudit({ type: "SL_ORPHAN_CANCEL_FAILED", optionSymbol: position.optionSymbol, slOrderId: slOrder.orderId, error: err.message });
+        }
+      }
+      return;
+    }
     position.slOrderId = slOrder.orderId;
     logAudit({ type: "SL_REARMED", optionSymbol: position.optionSymbol, slOrderId: position.slOrderId, stopPrice });
     console.log(`[AUTO-TRADER] Re-armed missing broker SL for ${position.optionSymbol} @ ₹${Number(stopPrice).toFixed(2)}`);
@@ -1020,23 +1085,30 @@ async function reconcilePositionsWithBroker(session) {
     console.log(`[AUTO-TRADER] Reconciled FLAT at broker → CLOSED: ${position.optionSymbol} (realized ₹${position.realizedPnl.toFixed(2)})`);
   }
 
-  for (const { position, brokerQty, signMismatch } of toKeep) {
+  for (const { position, brokerQty, signMismatch, ambiguousGroup } of toKeep) {
     if (signMismatch) {
       logAudit({ type: "RECONCILE_SIDE_MISMATCH", optionSymbol: position.optionSymbol, localSide: position.side, brokerQty });
       console.error(`[AUTO-TRADER] Reconcile: broker qty sign doesn't match recorded side for ${position.optionSymbol} (side=${position.side}, brokerQty=${brokerQty}) — kept open, needs manual review.`);
     }
-    if (brokerQty !== position.quantity) {
+    if (ambiguousGroup) {
+      logAudit({ type: "RECONCILE_AMBIGUOUS_GROUP", optionSymbol: position.optionSymbol, localQty: position.quantity, aggregateBrokerQty: brokerQty });
+      console.error(`[AUTO-TRADER] Reconcile: multiple local positions share ${position.optionSymbol} — cannot attribute the aggregate broker qty (${brokerQty}) to any one of them; quantity NOT auto-corrected, needs manual review.`);
+    } else if (!signMismatch && brokerQty !== position.quantity) {
       logAudit({ type: "RECONCILE_QTY_MISMATCH", optionSymbol: position.optionSymbol, localQty: position.quantity, brokerQty });
       position.quantity = brokerQty;
     }
-    // Re-stream this option's ticks (subscriptions don't survive a restart) and make sure a
-    // broker SL is in place.
+    // Re-stream this option's ticks (subscriptions don't survive a restart) regardless.
     try {
       subscribeToSymbols([position.optionSymbol]);
     } catch (err) {
       console.error(`[AUTO-TRADER] Reconcile: resubscribe failed for ${position.optionSymbol}:`, err.message);
     }
-    await ensureStopLoss(position, session);
+    // Never auto-place a real broker order (a fresh SL) against data we already know is
+    // unreliable — a wrong-side or wrong-qty stop is worse than a flagged gap waiting on manual
+    // review. Positions in either state still keep whatever SL they already had.
+    if (!signMismatch && !ambiguousGroup) {
+      await ensureStopLoss(position, session);
+    }
   }
 
   reconcileOk = true;
@@ -1152,7 +1224,11 @@ async function processCandles(underlying, session) {
     for (const tf of getTimeframes()) {
       const candles = await fetchCandlesWithTickFallback(futSymbol, session, tf);
       if (candles.length < 6) continue;
-      latestData[underlying.name] = {
+      // Keyed by (underlying, timeframe) — with multiple timeframes selected (the UI allows
+      // checking several at once), keying by underlying alone let each timeframe's pass overwrite
+      // the previous one, so getHealthSnapshot's feedStale check only ever saw whichever
+      // timeframe was processed LAST, silently blind to a stale earlier one.
+      latestData[`${underlying.name}:${tf}`] = {
         candles,
         lastUpdated: new Date().toISOString(),
         ltp: candles[candles.length - 1][4],
@@ -1421,10 +1497,23 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const risk = Math.abs(level - sl);
   if (risk <= 0) return;
 
+  // This exact alert (same bar, same direction) already became a position on a prior cycle.
+  // detectAlertCandle keeps reporting the SAME bar (same timestamp) for as long as it remains
+  // candles[length-2] — i.e. every ~30s poll until the NEXT candle closes — and Step 1 above
+  // already deleted pendingEntries for this key the moment it filled, so `existing` is now
+  // undefined and the "no change" guard above can't catch this. Without this check, the very
+  // next poll after a fill would arm an identical duplicate resting order at the same level.
+  const signalId = `${key}-${alert.timestamp}-${dir}`;
+  if (processedSignals.has(signalId)) return;
+
   // A previous resting order for the OLD level must be cancelled before arming the new one.
   if (existing) {
     const cancelled = await cancelPendingEntryOrder(existing, paperTrading, session);
     if (!cancelled.ok) return; // couldn't confirm the old order is gone — don't overwrite it yet
+    // Drop the now-cancelled record BEFORE the margin check below — otherwise its marginEst is
+    // still counted (it's keyed by `key`, about to be overwritten anyway) on top of the new
+    // entry's own marginReq, double-counting this same slot's margin and needlessly blocking arms.
+    pendingEntries.delete(key);
   }
 
   const target = dir === "LONG" ? level + 2 * risk : level - 2 * risk;
@@ -1487,6 +1576,32 @@ function getCurrentMarketStatus() {
   return getNseMarketStatus();
 }
 
+// The "trading day" boundary must be IST, not the server host's local timezone — checkTimeFilter/
+// isSquareOffTime already compute IST explicitly for the same reason (a UTC or other-TZ host would
+// otherwise roll the day over at the wrong wall-clock moment). d.getTime() is an absolute,
+// TZ-independent instant; shifting it by the fixed IST offset and reading off its UTC calendar date
+// yields the IST calendar date regardless of the server's own timezone.
+function getISTDateKey(d = new Date()) {
+  return new Date(d.getTime() + 330 * 60000).toISOString().slice(0, 10);
+}
+
+// Single place that resets every per-day counter/collection. Used by BOTH tradingLoop's own
+// day-boundary check and startAutoTrader's pre-loop check — they used to reset a different subset
+// (startAutoTrader never cleared pendingEntries/activeAlerts/processedSignals/closed positions),
+// which meant a restart spanning a day boundary set lastTradeDate to "today" without clearing them,
+// silently disabling tradingLoop's own (more complete) reset for the rest of that day.
+function resetDailyCounters(today) {
+  todayTrades = 0;
+  lastTradeDate = today;
+  dailyPnL = 0;
+  dailyRealizedPnL = 0;
+  consecutiveLosses = 0;
+  activeAlerts.clear();
+  openPositions = openPositions.filter((p) => p.status !== "CLOSED");
+  processedSignals.clear();
+  pendingEntries.clear(); // resting stop entries never carry across days
+}
+
 // ΓöÇΓöÇΓöÇ MAIN LOOP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function tradingLoop(session) {
   if (!isRunning) return;
@@ -1501,17 +1616,9 @@ async function tradingLoop(session) {
   // would silently freeze the bot while it still reports isRunning=true and pm2 sees a live process.
   let rescheduleMs = CONFIG.POLL_INTERVAL_MS;
   try {
-    const today = new Date().toDateString();
+    const today = getISTDateKey();
     if (lastTradeDate !== today) {
-      todayTrades = 0;
-      lastTradeDate = today;
-      dailyPnL = 0;
-      dailyRealizedPnL = 0;
-      consecutiveLosses = 0;
-      activeAlerts.clear();
-      openPositions = openPositions.filter((p) => p.status !== "CLOSED");
-      processedSignals.clear();
-      pendingEntries.clear(); // resting stop entries never carry across days
+      resetDailyCounters(today);
       console.log(`[AUTO-TRADER] New day - all counters reset`);
       saveState();
     }
@@ -1568,88 +1675,100 @@ async function tradingLoop(session) {
 // ─── PUBLIC API ───────────────────────────────────────────────────────
 export async function startAutoTrader(sessionId) {
   if (isRunning) return { status: "ALREADY_RUNNING" };
-  const { getSession } = await import("../routes/auth.js");
-  const session = getSession(sessionId);
-  if (!session) throw new Error("Invalid or expired session");
-  currentSession = session;
-  // PAPER mode sizes against a realistic simulated capital — the real balance can be below one option
-  // lot, which blocks every trade at the margin gate. LIVE mode uses the actual broker balance.
-  if (CONFIG.PAPER_TRADING) {
-    CONFIG.CAPITAL = CONFIG.PAPER_CAPITAL > 0 ? CONFIG.PAPER_CAPITAL : CONFIG.CAPITAL;
-    console.log(`[AUTO-TRADER] Paper capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
-  } else {
-    // LIVE: size and risk-limit against the REAL balance. If it can't be fetched (429 / expired token
-    // / genuinely 0), REFUSE to start rather than run with a stale CONFIG.CAPITAL — which could be the
-    // ₹10L paper value from a prior paper session. Both position sizing and the daily-loss breaker key
-    // off CONFIG.CAPITAL, so a wrong value silently mis-scales real-money risk.
-    const actualCapital = await fetchAvailableFunds(session);
-    if (!(actualCapital > 0)) {
-      throw new Error(
-        "Cannot start LIVE trading: broker funds unavailable (0 or fetch failed — often a rate-limit). Reconnect FYERS and retry."
-      );
-    }
-    CONFIG.CAPITAL = actualCapital;
-    console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
-  }
-  try {
-    const positions = await fyersApiCall("/positions", session);
-    console.log(`[AUTO-TRADER] Existing positions: ${positions.netPositions?.length || 0}`);
-  } catch (err) {
-    console.log("[AUTO-TRADER] Could not fetch existing positions");
-  }
-
-  // Start the live FYERS tick feed. The engine uses aggregateOHLC()/getLatestTick() as its
-  // PRIMARY data source, but nothing else ever initiates the upstream WebSocket (the only
-  // caller was the manual POST /api/ticks/connect route, which neither the frontend nor
-  // startup invokes). Without this the feed stays disconnected and every cycle silently
-  // falls back to the REST history/quotes API. Index symbols (NIFTY/BANKNIFTY) are always
-  // subscribed by the tick service; option symbols are subscribed per-position in
-  // openPosition()/closePosition().
-  // NOTE: the tick store needs ~30 min of ticks to build 6 complete 5m candles, so the
-  // first part of each session legitimately uses the REST fallback until ticks accumulate.
-  try {
-    connectFyersWebSocket(session.accessToken, FYERS_APP_ID);
-    console.log("[AUTO-TRADER] Live tick feed connection initiated");
-  } catch (err) {
-    console.error("[AUTO-TRADER] Tick feed connect failed (will use REST fallback):", err.message);
-  }
-  console.log(
-    `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | TF: ${getTimeframes().join("/")}m | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
-  );
+  // Claim isRunning IMMEDIATELY — before the first await — not after the whole startup sequence
+  // completes. The dynamic import below already yields to the event loop, so a later claim leaves
+  // a window where TWO concurrent Start calls can both pass the guard above (double-scheduling two
+  // independent tradingLoop timer chains), and where setPaperTrading()/updateConfig()'s "only while
+  // stopped" mode-switch guard (which checks isRunning) doesn't cover the capital-sizing decision
+  // a few lines below — letting a concurrent mode flip desync CONFIG.CAPITAL (sized for the OLD
+  // mode) from CONFIG.PAPER_TRADING (the NEW mode). Reset on any early failure so a rejected start
+  // never leaves the bot stuck reporting isRunning=true.
   isRunning = true;
-  // Preserve same-day risk counters across a restart so circuit breakers (daily-loss,
-  // consecutive-losses, max-trades) are not silently reset mid-session. loadState() has
-  // already restored them; only roll over when the persisted state is from a prior day.
-  const today = new Date().toDateString();
-  if (lastTradeDate !== today) {
-    todayTrades = 0;
-    dailyPnL = 0;
-    dailyRealizedPnL = 0;
-    consecutiveLosses = 0;
-    lastTradeDate = today;
+  try {
+    const { getSession } = await import("../routes/auth.js");
+    const session = getSession(sessionId);
+    if (!session) throw new Error("Invalid or expired session");
+    currentSession = session;
+    // PAPER mode sizes against a realistic simulated capital — the real balance can be below one option
+    // lot, which blocks every trade at the margin gate. LIVE mode uses the actual broker balance.
+    if (CONFIG.PAPER_TRADING) {
+      CONFIG.CAPITAL = CONFIG.PAPER_CAPITAL > 0 ? CONFIG.PAPER_CAPITAL : CONFIG.CAPITAL;
+      console.log(`[AUTO-TRADER] Paper capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+    } else {
+      // LIVE: size and risk-limit against the REAL balance. If it can't be fetched (429 / expired token
+      // / genuinely 0), REFUSE to start rather than run with a stale CONFIG.CAPITAL — which could be the
+      // ₹10L paper value from a prior paper session. Both position sizing and the daily-loss breaker key
+      // off CONFIG.CAPITAL, so a wrong value silently mis-scales real-money risk.
+      const actualCapital = await fetchAvailableFunds(session);
+      if (!(actualCapital > 0)) {
+        throw new Error(
+          "Cannot start LIVE trading: broker funds unavailable (0 or fetch failed — often a rate-limit). Reconnect FYERS and retry."
+        );
+      }
+      CONFIG.CAPITAL = actualCapital;
+      console.log(`[AUTO-TRADER] Capital: ₹${CONFIG.CAPITAL.toFixed(2)}`);
+    }
+    try {
+      const positions = await fyersApiCall("/positions", session);
+      console.log(`[AUTO-TRADER] Existing positions: ${positions.netPositions?.length || 0}`);
+    } catch (err) {
+      console.log("[AUTO-TRADER] Could not fetch existing positions");
+    }
+
+    // Start the live FYERS tick feed. The engine uses aggregateOHLC()/getLatestTick() as its
+    // PRIMARY data source, but nothing else ever initiates the upstream WebSocket (the only
+    // caller was the manual POST /api/ticks/connect route, which neither the frontend nor
+    // startup invokes). Without this the feed stays disconnected and every cycle silently
+    // falls back to the REST history/quotes API. Index symbols (NIFTY/BANKNIFTY) are always
+    // subscribed by the tick service; option symbols are subscribed per-position in
+    // openPosition()/closePosition().
+    // NOTE: the tick store needs ~30 min of ticks to build 6 complete 5m candles, so the
+    // first part of each session legitimately uses the REST fallback until ticks accumulate.
+    try {
+      connectFyersWebSocket(session.accessToken, FYERS_APP_ID);
+      console.log("[AUTO-TRADER] Live tick feed connection initiated");
+    } catch (err) {
+      console.error("[AUTO-TRADER] Tick feed connect failed (will use REST fallback):", err.message);
+    }
+    console.log(
+      `[AUTO-TRADER] Starting... Strategies: ${CONFIG.SELECTED_STRATEGIES.join(",")} | Instruments: ${CONFIG.SELECTED_INSTRUMENTS.join(",")} | TF: ${getTimeframes().join("/")}m | Risk: ${CONFIG.RISK_PERCENT}% | MaxLoss: ${CONFIG.MAX_RISK_PER_DAY_PERCENT}% | Paper: ${CONFIG.PAPER_TRADING} | Sizing: ${CONFIG.POSITION_SIZING_MODE}`
+    );
+    // Preserve same-day risk counters across a restart so circuit breakers (daily-loss,
+    // consecutive-losses, max-trades) are not silently reset mid-session. loadState() has
+    // already restored them; only roll over when the persisted state is from a prior day — and
+    // when it does, reset the SAME full set tradingLoop's own day-boundary check does (see
+    // resetDailyCounters), so a restart spanning a day boundary can't leave pendingEntries/
+    // activeAlerts/processedSignals stale for the rest of that day.
+    const today = getISTDateKey();
+    if (lastTradeDate !== today) {
+      resetDailyCounters(today);
+    }
+
+    // Verify locally-tracked positions against the broker BEFORE the loop can act. This prevents
+    // a phantom position (closed at the broker while we were down) from triggering a naked exit,
+    // and re-arms the broker SL + tick subscription for anything still genuinely held. Blocks new
+    // entries (reconcileOk stays false) if it can't complete.
+    await reconcilePositionsWithBroker(session);
+
+    tradingLoop(session);
+    return {
+      status: "STARTED",
+      config: {
+        capital: CONFIG.CAPITAL,
+        riskPercent: CONFIG.RISK_PERCENT,
+        paperTrading: CONFIG.PAPER_TRADING,
+        positionSizingMode: CONFIG.POSITION_SIZING_MODE,
+        fixedLots: CONFIG.FIXED_LOTS,
+        selectedStrategies: CONFIG.SELECTED_STRATEGIES,
+        selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
+        selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
+      },
+      startedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    isRunning = false;
+    throw err;
   }
-
-  // Verify locally-tracked positions against the broker BEFORE the loop can act. This prevents
-  // a phantom position (closed at the broker while we were down) from triggering a naked exit,
-  // and re-arms the broker SL + tick subscription for anything still genuinely held. Blocks new
-  // entries (reconcileOk stays false) if it can't complete.
-  await reconcilePositionsWithBroker(session);
-
-  tradingLoop(session);
-  return {
-    status: "STARTED",
-    config: {
-      capital: CONFIG.CAPITAL,
-      riskPercent: CONFIG.RISK_PERCENT,
-      paperTrading: CONFIG.PAPER_TRADING,
-      positionSizingMode: CONFIG.POSITION_SIZING_MODE,
-      fixedLots: CONFIG.FIXED_LOTS,
-      selectedStrategies: CONFIG.SELECTED_STRATEGIES,
-      selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
-      selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
-    },
-    startedAt: new Date().toISOString(),
-  };
 }
 
 export function stopAutoTrader() {
@@ -1678,6 +1797,27 @@ async function flattenAllPositions(reason = "EMERGENCY") {
     console.log("[AUTO-TRADER] No active session to flatten positions");
     return;
   }
+  // Cancel every resting EMA5T stop-entry order FIRST. An emergency stop must guarantee no NEW
+  // position can appear after it returns — closing what's already OPEN is not enough. Without
+  // this, a resting order left armed at the broker can still fill later with the trading loop no
+  // longer running to notice: a completely untracked, unmonitored live position.
+  for (const [key, p] of pendingEntries) {
+    try {
+      const cancelled = await cancelPendingEntryOrder(p, CONFIG.PAPER_TRADING, currentSession);
+      if (cancelled.ok) {
+        pendingEntries.delete(key);
+        logAudit({ type: "EMA5T_PENDING_CANCELLED", key, reason });
+      } else {
+        console.error(`[AUTO-TRADER] ${reason}: could not confirm cancellation of resting entry ${key} — MANUAL REVIEW NEEDED`);
+        logAudit({ type: "EMA5T_PENDING_CANCEL_FAILED", key, reason });
+      }
+    } catch (err) {
+      console.error(`[AUTO-TRADER] ${reason}: error cancelling resting entry ${key}:`, err.message);
+      logAudit({ type: "EMA5T_PENDING_CANCEL_FAILED", key, reason, error: err.message });
+    }
+  }
+  saveState();
+
   const open = openPositions.filter((p) => p.status === "OPEN");
   if (open.length === 0) return;
   console.log(`[AUTO-TRADER] Flattening ${open.length} position(s) due to ${reason}`);

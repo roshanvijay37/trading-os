@@ -92,4 +92,40 @@ describe("planReconciliation", () => {
     const { toKeep } = planReconciliation(open, net);
     expect(toKeep[0].signMismatch).toBe(false);
   });
+
+  // Two different timeframes can legitimately hold concurrent OPEN positions on the SAME
+  // underlying's futures contract — the broker only reports one NET qty per symbol, with no way to
+  // tell which local position owns which share of it. Silently attributing the whole aggregate to
+  // BOTH would corrupt whichever one's quantity gets overwritten.
+  it("flags (not silently attributes) an ambiguous broker qty when multiple local positions share a symbol", () => {
+    const open = [
+      local("NSE:BANKNIFTY26JULFUT", 30, { side: "LONG" }),
+      local("NSE:BANKNIFTY26JULFUT", 30, { side: "LONG" }),
+    ];
+    const net = [{ symbol: "NSE:BANKNIFTY26JULFUT", netQty: 60 }];
+    const { toClose, toKeep } = planReconciliation(open, net);
+    expect(toClose).toHaveLength(0);
+    expect(toKeep).toHaveLength(2);
+    expect(toKeep[0].ambiguousGroup).toBe(true);
+    expect(toKeep[1].ambiguousGroup).toBe(true);
+  });
+
+  it("does not flag ambiguousGroup for a single position per symbol", () => {
+    const open = [local("NSE:NIFTY26JULFUT", 65, { side: "LONG" })];
+    const net = [{ symbol: "NSE:NIFTY26JULFUT", netQty: 65 }];
+    const { toKeep } = planReconciliation(open, net);
+    expect(toKeep[0].ambiguousGroup).toBe(false);
+  });
+
+  it("splits realized P&L evenly across multiple local positions flat at the broker on the same symbol", () => {
+    const open = [
+      local("NSE:BANKNIFTY26JULFUT", 30, { side: "LONG" }),
+      local("NSE:BANKNIFTY26JULFUT", 30, { side: "LONG" }),
+    ];
+    const net = [{ symbol: "NSE:BANKNIFTY26JULFUT", netQty: 0, realized_profit: 1000 }];
+    const { toClose } = planReconciliation(open, net);
+    expect(toClose).toHaveLength(2);
+    expect(toClose[0].realized).toBe(500);
+    expect(toClose[1].realized).toBe(500);
+  });
 });

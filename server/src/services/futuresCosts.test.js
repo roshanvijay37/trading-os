@@ -59,4 +59,24 @@ describe("computeFuturesCosts", () => {
     const withExplicit = computeFuturesCosts(50000, 50100, 30, { brokeragePerOrder: 20 });
     expect(withDefault).toBeCloseTo(withExplicit, 8);
   });
+
+  // A SHORT's entry is the SELL leg (opens with a sell) and its exit is the BUY leg (covers with a
+  // buy) — the reverse of a LONG. Without `side`, the function defaulted to treating the first arg
+  // as always-BUY and the second as always-SELL, taxing every SHORT trade's legs backwards.
+  it("swaps buy/sell leg attribution for side: SHORT (entry price is the SELL leg, exit is the BUY leg)", () => {
+    const entryPrice = 50000, exitPrice = 49800, qty = 30; // a profitable SHORT: exit < entry
+    const long = computeFuturesCosts(entryPrice, exitPrice, qty); // treated as LONG-equivalent (default)
+    const short = computeFuturesCosts(entryPrice, exitPrice, qty, { side: "SHORT" });
+    // For a SHORT, STT (sell-side) should be driven by entryPrice (the actual sell leg), not
+    // exitPrice — i.e. it should equal what a LONG call would get if entry/exit were swapped.
+    const swapped = computeFuturesCosts(exitPrice, entryPrice, qty); // exit/entry reversed, no side
+    expect(short).toBeCloseTo(swapped, 8);
+    expect(short).not.toBeCloseTo(long, 2);
+  });
+
+  it("side: LONG (or omitted) keeps the original entry=buy / exit=sell attribution", () => {
+    const withLongSide = computeFuturesCosts(50000, 50100, 30, { side: "LONG" });
+    const withoutSide = computeFuturesCosts(50000, 50100, 30);
+    expect(withLongSide).toBeCloseTo(withoutSide, 8);
+  });
 });

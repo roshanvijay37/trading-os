@@ -63,7 +63,12 @@ export function isTokenErrorData(data) {
  */
 export function isRetryableError(err) {
   if (!err) return false;
-  if (err.name === "AbortError") return true; // request timeout (AbortSignal.timeout)
+  // AbortSignal.timeout() fires with name "TimeoutError" per spec (NOT "AbortError" — that name is
+  // reserved for a manual AbortController.abort()). Every broker call in this codebase is bounded
+  // via AbortSignal.timeout(10000), so missing this name misclassified every single broker-call
+  // timeout as non-retryable, defeating retry (and the orderTag duplicate-order recovery check)
+  // on the exact class of failure — a hung connection — retry exists for.
+  if (err.name === "AbortError" || err.name === "TimeoutError") return true;
   if (err instanceof TypeError) return true; // network/connection failure — fetch() itself threw
   if (typeof err.status === "number") return err.status === 429 || err.status >= 500;
   return false;
@@ -249,8 +254,12 @@ async function placeOrderWithRetry(orderBody, orderTag, session, auditLogger, sy
       return await fyersApiCall(PLACE_ORDER_ENDPOINT, session, { ...orderBody, orderTag }, "POST");
     } catch (err) {
       lastErr = err;
-      if (attempt === attempts || !isRetryableError(err)) throw err;
 
+      // Recover via orderTag on EVERY failure — including the FINAL attempt and non-retryable
+      // ones — before ever giving up. The request may have reached the broker before the response
+      // was lost regardless of whether we're about to retry; skipping this check on the last
+      // attempt (as before) meant giving up right when the ambiguous failure was most recent and
+      // most likely to have actually landed, silently orphaning a live order.
       const existingId = await findOrderIdByTag(orderTag, session);
       if (existingId) {
         if (auditLogger) {
@@ -258,6 +267,8 @@ async function placeOrderWithRetry(orderBody, orderTag, session, auditLogger, sy
         }
         return { id: existingId }; // the prior "failed" attempt actually landed — do not re-POST
       }
+
+      if (attempt === attempts || !isRetryableError(err)) throw err;
 
       const backoff = Math.min(4000, 500 * 2 ** (attempt - 1));
       const jitter = backoff * (0.5 + Math.random() * 0.5);
