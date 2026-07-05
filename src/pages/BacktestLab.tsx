@@ -27,6 +27,7 @@ interface Trade {
   sl?: number; // index level of the stop-loss (for the candle-chart overlay)
   target?: number; // index level of the target
   riskAtEntry?: number; // rupees risked at entry — feeds R-multiple stats
+  timeframe?: string; // set only on a combined multi-timeframe run — which resolution produced this trade
 }
 
 interface EquityPoint {
@@ -126,6 +127,9 @@ export function BacktestLab() {
   const [dateFilter, setDateFilter] = useState<DateFilterPreset>("ALL");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  // Set only when the current `result` came from runMultiTimeframeBacktest — drives the
+  // per-timeframe breakdown block and its own PDF/table framing.
+  const [isMultiTimeframe, setIsMultiTimeframe] = useState(false);
   const theme = useTheme();
 
   // Post-hoc date filter: re-slice the already-completed run's trades client-side, then
@@ -206,6 +210,7 @@ export function BacktestLab() {
     if (!fromDate || !toDate) return;
     setLoading(true);
     setError(null);
+    setIsMultiTimeframe(false);
     try {
       const res = await backtestApi.run({
         symbol,
@@ -235,6 +240,93 @@ export function BacktestLab() {
       setLoading(false);
     }
   };
+
+  // Runs EMA5T on 15m/30m/60m independently (the backend only ever simulates one resolution per
+  // call), then merges all three timeframes' trades chronologically and recomputes every stat
+  // from scratch over the combined, time-ordered sequence — via the same computeBacktestAnalytics
+  // used by the date-filter feature, so equity compounds correctly across the merged timeline
+  // rather than each timeframe compounding its own capital independently.
+  //
+  // Known simplification: each timeframe's Max Trades/Day and Daily Loss Limit gates are enforced
+  // independently per timeframe here, not against one shared daily budget the way the live bot's
+  // single scanner would — so combined trade count/frequency likely runs a little higher than true
+  // live behaviour would produce.
+  const MULTI_TIMEFRAMES = ["15", "30", "60"];
+  const runMultiTimeframeBacktest = async () => {
+    if (!fromDate || !toDate) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const perTf = await Promise.all(
+        MULTI_TIMEFRAMES.map((tf) =>
+          backtestApi.run({
+            symbol,
+            resolution: tf,
+            fromDate,
+            toDate,
+            strategy: "EMA5T",
+            capital,
+            riskPercent,
+            targetMultiplier: targetMult,
+            slippage: slippage / 100,
+            capitalMode,
+            pricingModel: "INDEX",
+            instrumentSource,
+            maxTradesPerDay,
+            maxRiskPerDayPercent,
+            positionSizingMode,
+            fixedLots,
+          })
+        )
+      );
+
+      const allTrades = perTf
+        .flatMap((r, i) => (r.trades || []).map((t: Trade) => ({ ...t, timeframe: MULTI_TIMEFRAMES[i] })))
+        .sort((a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime())
+        .map((t, i) => ({ ...t, id: i + 1 })); // re-number: ids collided across the 3 separate runs
+
+      const analytics = computeBacktestAnalytics(allTrades, capital);
+      // The finest timeframe's candles make the most legible chart backdrop; entry/exit markers
+      // still plot correctly at their real timestamps regardless of which timeframe they came from.
+      const baseRun = perTf[0];
+
+      setResult({
+        success: true,
+        symbol,
+        instrumentSource,
+        tradedSymbol: baseRun.tradedSymbol,
+        trades: allTrades,
+        equityCurve: analytics.equityCurve,
+        summary: analytics.summary,
+        advanced: analytics.advanced,
+        candles: baseRun.candles,
+      });
+      setIsMultiTimeframe(true);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Multi-timeframe backtest failed");
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trades-per-timeframe breakdown for the combined run — shown alongside the blended totals so
+  // the contribution of each of the 3 timeframes is visible, not just the merged summary.
+  const timeframeBreakdown = useMemo(() => {
+    if (!isMultiTimeframe || !result) return [];
+    return MULTI_TIMEFRAMES.map((tf) => {
+      const tfTrades = (result.trades || []).filter((t) => t.timeframe === tf);
+      const wins = tfTrades.filter((t) => t.pnl > 0).length;
+      const totalPnL = tfTrades.reduce((s, t) => s + t.pnl, 0);
+      return {
+        tf,
+        trades: tfTrades.length,
+        winRate: tfTrades.length ? Math.round((wins / tfTrades.length) * 1000) / 10 : 0,
+        totalPnL: Math.round(totalPnL * 100) / 100,
+      };
+    });
+  }, [isMultiTimeframe, result]);
 
   useEffect(() => {
     if (!result || !chartContainerRef.current || viewMode === "table") return;
@@ -557,7 +649,15 @@ export function BacktestLab() {
             <button onClick={runBacktest} disabled={loading || resolvingRange} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">
               {loading ? "Running..." : resolvingRange ? "Resolving..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run</span>}
             </button>
-            <button onClick={() => { setResult(null); setError(null); }} className="rounded-panel border border-border-subtle bg-surface p-2 text-zinc-500 hover:text-zinc-300">
+            <button
+              onClick={runMultiTimeframeBacktest}
+              disabled={loading || resolvingRange}
+              title="Runs EMA5T on 15m + 30m + 60m independently, then merges the trades chronologically into one combined result"
+              className="flex-1 rounded-panel border border-info/20 bg-info-dim py-2 text-2xs font-medium text-info transition hover:bg-info/20 disabled:opacity-50"
+            >
+              {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run All (15+30+60)</span>}
+            </button>
+            <button onClick={() => { setResult(null); setError(null); setIsMultiTimeframe(false); }} className="rounded-panel border border-border-subtle bg-surface p-2 text-zinc-500 hover:text-zinc-300">
               <RotateCcw size={12} />
             </button>
           </div>
@@ -655,6 +755,29 @@ export function BacktestLab() {
               </>
             )}
           </div>
+
+          {isMultiTimeframe && (
+            <div className="space-y-2 rounded-panel border border-info/20 bg-info-dim px-3 py-2 text-2xs">
+              <p className="text-info">
+                <span className="font-semibold">Combined 15m + 30m + 60m.</span> Each timeframe ran independently
+                (its own Max Trades/Day and Daily Loss Limit budget), then merged chronologically — combined trade
+                frequency likely runs a little higher than the live bot's single shared daily budget would allow.
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {timeframeBreakdown.map((b) => (
+                  <div key={b.tf} className="rounded-panel border border-border-subtle bg-panel px-2 py-1.5">
+                    <div className="text-2xs text-zinc-500">{b.tf}m</div>
+                    <div className="font-mono text-zinc-200">{b.trades} trades</div>
+                    <div className={`font-mono ${b.winRate >= 50 ? "text-gain" : "text-loss"}`}>{b.winRate}% win</div>
+                    <div className={`font-mono ${b.totalPnL >= 0 ? "text-gain" : "text-loss"}`}>
+                      {b.totalPnL >= 0 ? "+" : ""}{b.totalPnL.toFixed(0)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryCard label="Total Trades" value={sum.totalTrades} icon={BarChart3} />
             <SummaryCard label="Win Rate" value={`${sum.winRate.toFixed(1)}%`} icon={sum.winRate >= 50 ? TrendingUp : TrendingDown} color={sum.winRate >= 50 ? "gain" : "loss"} />
