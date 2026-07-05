@@ -116,3 +116,43 @@ describe("runBacktest position sizing (RISK vs LOTS)", () => {
     expect(riskResult.trades[0].qty).not.toBe(lotsResult.trades[0].qty);
   });
 });
+
+// Regression for a bug reported against the live app: routes/backtest.js's POST /run handler
+// destructured req.body but never included `slippage` in it, nor forwarded it into the
+// runBacktest(candles, config) call — so the UI's "Slippage %" field silently had zero effect
+// no matter what the user set (confirmed: 1% and 5% produced byte-identical results). runBacktest
+// itself always applied slippage correctly; the field was just dropped one layer up, in the
+// route handler. These tests pin the underlying behaviour the route depends on: config.slippage
+// must measurably change entry/exit prices and P&L.
+describe("runBacktest slippage", () => {
+  const candles = buildDeclineRallyCandles();
+  const baseConfig = {
+    symbol: "NSE:NIFTYBANK-INDEX",
+    strategy: "EMA5",
+    capital: 1000000,
+    riskPercent: 1,
+    targetMultiplier: 2,
+    pricingModel: "INDEX",
+    applyLiveFilters: true,
+  };
+
+  it("a larger slippage widens the entry price away from the raw breakout level", () => {
+    const low = runBacktest(candles, { ...baseConfig, slippage: 0.0001 });
+    const high = runBacktest(candles, { ...baseConfig, slippage: 0.05 });
+    expect(low.trades.length).toBeGreaterThan(0);
+    expect(high.trades.length).toBeGreaterThan(0);
+    expect(low.trades[0].entryPrice).not.toBe(high.trades[0].entryPrice);
+  });
+
+  it("higher slippage produces a different (worse or equal) total P&L than near-zero slippage", () => {
+    const zero = runBacktest(candles, { ...baseConfig, slippage: 0 });
+    const five = runBacktest(candles, { ...baseConfig, slippage: 0.05 }); // 5% — matches the user's report
+    expect(zero.summary.totalPnL).not.toBe(five.summary.totalPnL);
+  });
+
+  it("defaults to 0.02% when slippage is omitted from config (matches the route handler's default)", () => {
+    const omitted = runBacktest(candles, baseConfig);
+    const explicit = runBacktest(candles, { ...baseConfig, slippage: 0.0002 });
+    expect(omitted.trades[0].entryPrice).toBe(explicit.trades[0].entryPrice);
+  });
+});

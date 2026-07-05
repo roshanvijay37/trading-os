@@ -736,6 +736,7 @@ router.post("/run", async (req, res) => {
     slBuffer = 0.005,
     targetMultiplier = 2,
     maxHoldBars = 12,
+    slippage = 0.0002, // 0.02% — was never forwarded to runBacktest below, so the UI's Slippage % had no effect
     // Pricing-model controls (see runBacktest). pricingModel defaults to INDEX so existing
     // callers are unaffected.
     pricingModel = "INDEX",
@@ -806,6 +807,7 @@ router.post("/run", async (req, res) => {
       slBuffer,
       targetMultiplier,
       maxHoldBars,
+      slippage,
       capitalMode: req.body.capitalMode || "COMPOUND",
       pricingModel,
       annualizedIV,

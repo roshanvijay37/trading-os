@@ -259,12 +259,13 @@ export function Chart() {
     });
   }
 
-  // SL/Target reference lines for the most recent alert only (older ones would clutter the chart
-  // with levels that may already be long resolved) — drawn from the alert candle out to the
-  // latest candle. NOT a claim that this setup is still "live"; check the outcome marker above
-  // (if any) to see whether it already resolved.
+  // SL/Target reference lines ONLY for a still-OPEN latest alert (triggered, not yet resolved) —
+  // that's the one case with no outcome dot yet, so a reference is actually useful. A resolved
+  // alert (TARGET/SL) already got its dot from the loop above; showing lines on top of that dot
+  // would make the most recent trade look different from every older one. NOT_TRIGGERED gets
+  // neither (nothing happened yet beyond the entry arrow).
   const latestResolved = resolved[resolved.length - 1];
-  if (latestResolved && chartCandles.length > 0) {
+  if (latestResolved && latestResolved.outcome === "OPEN" && chartCandles.length > 0) {
     const alertTime = chartCandles[latestResolved.alertIndex].time;
     const lastTime = chartCandles[chartCandles.length - 1].time;
     overlays.push(

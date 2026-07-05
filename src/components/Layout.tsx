@@ -169,12 +169,6 @@ export function Layout() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const grouped = navigation.reduce<Record<string, typeof navigation>>((acc, item) => {
-    if (!acc[item.group]) acc[item.group] = [];
-    acc[item.group].push(item);
-    return acc;
-  }, {});
-
   const sidebarContent = (
     <div className="flex h-full flex-col">
       {/* Logo */}
@@ -188,19 +182,13 @@ export function Layout() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 space-y-4 overflow-y-auto p-3">
-        {Object.entries(grouped).map(([group, items]) => (
-          <div key={group}>
-            <p className="mb-1 px-2.5 text-2xs font-semibold uppercase tracking-wider text-zinc-700">
-              {group}
-            </p>
-            <div className="space-y-0.5">
-              {items.map((item) => (
-                <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon as React.ElementType} />
-              ))}
-            </div>
-          </div>
+      {/* Navigation — a single flat list; with only 5 pages, splitting them into named
+          sections (Operations/Trading Desk/Research) added visual clutter without helping
+          scanability. navigation.ts's `group` field is still used for command-palette search
+          keywords, just not rendered as a sidebar header anymore. */}
+      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+        {navigation.map((item) => (
+          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon as React.ElementType} />
         ))}
       </nav>
 
