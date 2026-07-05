@@ -81,6 +81,12 @@ export function BacktestLab() {
   // separate backtest-only assumption).
   const [maxTradesPerDay, setMaxTradesPerDay] = useState(10);
   const [maxRiskPerDayPercent, setMaxRiskPerDayPercent] = useState(2);
+  // Position sizing: "RISK" scales qty with riskPercent/stop distance (this engine's original
+  // behaviour). EMA5T never does that live — autoTrader.js hardcodes exactly 1 lot every trade,
+  // regardless of risk%. Default to "LOTS"/1 here so a fresh backtest matches what the bot
+  // actually trades; "RISK" is kept for the older risk-scaled comparison mode.
+  const [positionSizingMode, setPositionSizingMode] = useState<"RISK" | "LOTS">("LOTS");
+  const [fixedLots, setFixedLots] = useState(1);
   // EMA5T only: INDEX has years of history but isn't the literal traded instrument; FUTURES is
   // the actual live contract, with real availability that varies by contract (see resolveFuturesRange).
   const [instrumentSource, setInstrumentSource] = useState<"INDEX" | "FUTURES">("INDEX");
@@ -157,6 +163,8 @@ export function BacktestLab() {
         instrumentSource,
         maxTradesPerDay,
         maxRiskPerDayPercent,
+        positionSizingMode,
+        fixedLots,
       });
       setResult(res);
     } catch (err: any) {
@@ -424,9 +432,23 @@ export function BacktestLab() {
             <input type="number" value={capital} onChange={(e) => setCapital(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
-            <label className="mb-1 block text-2xs text-zinc-600">Risk %</label>
-            <input type="number" step="0.1" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+            <label className="mb-1 block text-2xs text-zinc-600">Position Sizing</label>
+            <select value={positionSizingMode} onChange={(e) => setPositionSizingMode(e.target.value as "RISK" | "LOTS")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
+              <option value="LOTS">Fixed Lots (matches live)</option>
+              <option value="RISK">Risk % (scales with capital)</option>
+            </select>
           </div>
+          {positionSizingMode === "RISK" ? (
+            <div>
+              <label className="mb-1 block text-2xs text-zinc-600">Risk %</label>
+              <input type="number" step="0.1" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-2xs text-zinc-600">Lots Per Trade</label>
+              <input type="number" min="1" max="100" value={fixedLots} onChange={(e) => setFixedLots(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Target R:R</label>
             <input type="number" step="0.1" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />

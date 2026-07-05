@@ -197,6 +197,11 @@ export const backtestApi = {
     // separate backtest-only assumption.
     maxTradesPerDay?: number;
     maxRiskPerDayPercent?: number;
+    // Position sizing: "RISK" scales qty with riskPercent/stop distance (this engine's original
+    // behaviour); "LOTS" trades a fixed qty (lotSize × fixedLots) every time, matching EMA5T's
+    // actual live sizing — the bot never scales with risk%, always exactly 1 lot by default.
+    positionSizingMode?: "RISK" | "LOTS";
+    fixedLots?: number;
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",

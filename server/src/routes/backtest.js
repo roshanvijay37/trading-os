@@ -246,6 +246,15 @@ export function runBacktest(candles, config) {
     maxTradesPerDay = 10,
     maxRiskPerDayPercent = 2,     // halt new entries once daily P&L <= -this% of capital
     marginSafetyMultiplier = 2,   // option-buying capital cap = premium * this (autoTrader MARGIN_SAFETY)
+    // ── Position sizing ──────────────────────────────────────────────────────────────────
+    // "RISK"  → size qty from riskPercent/stop distance (the engine's long-standing default).
+    // "LOTS"  → trade a FIXED qty every time (lotSize × fixedLots), ignoring risk%/stop distance.
+    //           Mirrors the live bot exactly: autoTrader.js's EMA5T entry is hardcoded to
+    //           exactly underlying.lotSize (1 lot) regardless of CONFIG.RISK_PERCENT — "RISK"
+    //           mode here does NOT match what the live bot actually trades; use "LOTS" (with
+    //           fixedLots matching the live default of 1) for a true live-parity backtest.
+    positionSizingMode = "RISK",
+    fixedLots = 1,
   } = config;
 
   const isBS = pricingModel === "BLACK_SCHOLES";
@@ -342,7 +351,9 @@ export function runBacktest(candles, config) {
       const slMid = bsPrice({ type: optionType, spot: sl, strike, t, r: bs.riskFreeRate, sigma: iv });
       const slPremium = Math.max(0, slMid * (1 - bs.halfSpread));
       const optionRiskPerUnit = Math.max(0.05, entryPremium - slPremium);
-      let qty = Math.floor(riskAmount / optionRiskPerUnit / bs.lotSize) * bs.lotSize;
+      let qty = positionSizingMode === "LOTS"
+        ? bs.lotSize * fixedLots
+        : Math.floor(riskAmount / optionRiskPerUnit / bs.lotSize) * bs.lotSize;
       // Never deploy more premium than available capital.
       // C3/margin-parity: cap deployed premium by capital × the live margin-safety multiplier.
       const marginMult = applyLiveFilters ? (Number(marginSafetyMultiplier) > 0 ? marginSafetyMultiplier : 1) : 1;
@@ -367,7 +378,11 @@ export function runBacktest(candles, config) {
       : round2(rawEntry * (1 - slippage));
     const idxStop = side === "LONG" ? entryPrice - sl : sl - entryPrice;
     if (idxStop <= 0) return null;
-    const qty = Math.floor(riskAmount / idxStop);
+    // LOTS: fixed qty every trade (lotSize × fixedLots) — matches EMA5T's actual live sizing,
+    // which never scales with riskPercent. RISK: original risk-based sizing, unchanged.
+    const qty = positionSizingMode === "LOTS"
+      ? symDefaults.lotSize * fixedLots
+      : Math.floor(riskAmount / idxStop);
     if (qty <= 0) return null;
     const idxTargetDist = idxStop * targetMultiplier;
     return {
@@ -792,6 +807,8 @@ router.post("/run", async (req, res) => {
       maxTradesPerDay: req.body.maxTradesPerDay,
       maxRiskPerDayPercent: req.body.maxRiskPerDayPercent,
       marginSafetyMultiplier: req.body.marginSafetyMultiplier,
+      positionSizingMode: req.body.positionSizingMode,
+      fixedLots: req.body.fixedLots,
     });
 
     res.json({
@@ -985,6 +1002,8 @@ router.post("/run-multi", async (req, res) => {
       maxTradesPerDay: req.body.maxTradesPerDay,
       maxRiskPerDayPercent: req.body.maxRiskPerDayPercent,
       marginSafetyMultiplier: req.body.marginSafetyMultiplier,
+      positionSizingMode: req.body.positionSizingMode,
+      fixedLots: req.body.fixedLots,
     });
       results.push({
         strategy: strat,
