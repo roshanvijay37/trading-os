@@ -34,6 +34,14 @@ export interface OverlayLine {
   data: LinePoint[];
 }
 
+export interface CandleMarker {
+  time: number;
+  position: "aboveBar" | "belowBar" | "inBar";
+  color: string;
+  shape: "arrowUp" | "arrowDown" | "circle" | "square";
+  text?: string;
+}
+
 /** Dedupe by time + ascending sort + NaN guard — setData throws otherwise (FYERS fetches can overlap). */
 export function sanitizeCandles(candles: CandlePoint[]): CandlePoint[] {
   const map = new Map<number, CandlePoint>();
@@ -63,6 +71,7 @@ export function CandlesChart({
   timeVisible = true,
   fitKey = "",
   overlays = [],
+  markers = [],
 }: {
   candles: CandlePoint[];
   height?: number;
@@ -73,6 +82,8 @@ export function CandlesChart({
   /** Indicator overlay lines (e.g. EMA). Series are (re)created whenever the SET of labels
    * changes (cheap — same as a theme/timeVisible change); data updates independently. */
   overlays?: OverlayLine[];
+  /** Per-candle markers (e.g. signal alerts) drawn on the candlestick series itself. */
+  markers?: CandleMarker[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -191,11 +202,18 @@ export function CandlesChart({
       series.setData(pts.map((p) => ({ time: p.time as Time, value: p.value })));
     }
 
+    // setMarkers requires ascending time order, same as setData.
+    const sortedMarkers = markers
+      .filter((m) => m.time && Number.isFinite(m.time))
+      .sort((a, b) => a.time - b.time)
+      .map((m) => ({ ...m, time: m.time as Time }));
+    candleSeries.setMarkers(sortedMarkers);
+
     if (data.length > 0 && lastFitKeyRef.current !== fitKey) {
       chart.timeScale().fitContent();
       lastFitKeyRef.current = fitKey;
     }
-  }, [candles, fitKey, overlays]);
+  }, [candles, fitKey, overlays, markers]);
 
   return (
     <div className="relative">

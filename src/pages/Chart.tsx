@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { LineChart, Activity, Clock, Calendar } from "lucide-react";
-import { CandlesChart, type OverlayLine } from "../components/charts/CandlesChart";
+import { CandlesChart, type OverlayLine, type CandleMarker } from "../components/charts/CandlesChart";
 import { Flash } from "../components/ui/Flash";
 import { Skeleton } from "../components/ui/Skeleton";
 import { backtestApi } from "../services/api";
 import { calculateEMA } from "../lib/strategies/engine";
+import { findEmaAlerts } from "../lib/emaAlerts";
 
 interface Candle {
   timestamp: number;
@@ -92,6 +93,10 @@ export function Chart() {
   // (the bot trades the futures contract specifically; this page charts the index).
   const [showEma5, setShowEma5] = useState(true);
   const [showEma20, setShowEma20] = useState(true);
+  // Marks candles matching EMA5T's alert rule (5-EMA alert + 20-EMA trend gate — see
+  // src/lib/emaAlerts.ts). Same honesty caveat as the EMA lines above: a general application of
+  // the rule to whatever's on screen, not a live readout of the bot's own signal state.
+  const [showSignals, setShowSignals] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const symbols = [
@@ -226,6 +231,17 @@ export function Chart() {
     });
   }
 
+  // Small arrow only (no text label) — a label like "B"/"S" reads too easily as "Buy"/"Sell",
+  // overclaiming that this is a confirmed trade rather than just an EMA5T alert candle.
+  const markers: CandleMarker[] = showSignals
+    ? findEmaAlerts(chartCandles).map((a) => ({
+        time: chartCandles[a.index].time,
+        position: a.type === "BULLISH" ? "belowBar" : "aboveBar",
+        color: a.type === "BULLISH" ? "#10b981" : "#ef4444",
+        shape: a.type === "BULLISH" ? "arrowUp" : "arrowDown",
+      }))
+    : [];
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-5">
@@ -290,6 +306,19 @@ export function Chart() {
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-info" />
             EMA 20
           </button>
+          <button
+            onClick={() => setShowSignals((v) => !v)}
+            title="EMA5T alert candles (5-EMA alert + 20-EMA trend gate) — not a claim about the bot's live signal state on this symbol/timeframe"
+            className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-2 text-2xs font-medium transition ${
+              showSignals ? "border-border-hover bg-surface text-zinc-200" : "border-border-subtle bg-surface text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <span className="flex items-center gap-0.5">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-gain" />
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-loss" />
+            </span>
+            Signals
+          </button>
         </div>
 
         {lastUpdate && (
@@ -340,6 +369,7 @@ export function Chart() {
             timeVisible={resolution !== "D"}
             fitKey={`${symbol}:${resolution}`}
             overlays={overlays}
+            markers={markers}
           />
 
           <div className="mt-3 flex items-center justify-between text-2xs text-zinc-700">
