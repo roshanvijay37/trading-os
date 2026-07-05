@@ -215,7 +215,7 @@ function VolBody({ chain }: { chain: EnrichedChain }) {
           <Empty message="No implied vol source available to project expected moves." />
         ) : (
           <>
-            <div className="mb-3 grid grid-cols-3 gap-2">
+            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <MoveCell label="Daily (1d)" pts={moves.daily} pctVal={moves.dailyPct} />
               <MoveCell label="Weekly (7d)" pts={moves.weekly} pctVal={moves.weeklyPct} />
               <MoveCell

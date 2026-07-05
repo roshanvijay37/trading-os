@@ -159,7 +159,7 @@ function FlowBody({ chain }: { chain: EnrichedChain }) {
       </div>
 
       {/* Premium flow totals */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <FlowStat label="Total Premium" value={money(total)} sub="Σ vol × LTP (per-unit)" tone="zinc" />
         <FlowStat label="Call Premium" value={money(ceTurnover)} sub={`${dec(cePct, 1)}% of flow`} tone="rose" />
         <FlowStat label="Put Premium" value={money(peTurnover)} sub={`${dec(pePct, 1)}% of flow`} tone="green" />

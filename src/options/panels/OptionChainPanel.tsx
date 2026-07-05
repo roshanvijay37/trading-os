@@ -216,11 +216,11 @@ function ChainTable({
               <td className="px-1 py-1 text-center">
                 <button
                   onClick={() => onTogglePin(row.strike)}
-                  className="group inline-flex items-center gap-1"
+                  className="group inline-flex items-center gap-1 px-1 py-1.5"
                   title="Pin strike"
                 >
                   <Star
-                    size={9}
+                    size={11}
                     className={pinned.has(row.strike) ? "fill-warn text-warn" : "text-zinc-700 group-hover:text-zinc-500"}
                   />
                   <span className={`font-mono font-semibold ${row.isAtm ? "text-info" : "text-zinc-300"}`}>{row.strike}</span>

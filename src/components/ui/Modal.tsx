@@ -47,23 +47,25 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-md rounded-panel border border-border bg-panel shadow-panel outline-none"
+        className="flex max-h-[85vh] w-full max-w-md flex-col rounded-panel border border-border bg-panel shadow-panel outline-none"
       >
         {(title != null) && (
-          <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-2">
             <h3 className="text-2xs font-semibold uppercase tracking-wider text-zinc-400">{title}</h3>
             <button
               onClick={onClose}
               aria-label="Close dialog"
-              className="ml-auto rounded p-0.5 text-zinc-500 transition hover:text-zinc-200"
+              className="-mr-1 ml-auto rounded p-2 text-zinc-500 transition hover:text-zinc-200"
             >
-              <X size={13} />
+              <X size={15} />
             </button>
           </div>
         )}
-        <div className="p-3">{children}</div>
+        {/* Only this region scrolls — header/footer stay put, so a long body never pushes
+            the close/confirm buttons off a short (e.g. landscape phone) viewport. */}
+        <div className="flex-1 overflow-y-auto p-3">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-border-subtle px-3 py-2">{footer}</div>
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border-subtle px-3 py-2">{footer}</div>
         )}
       </div>
     </div>,

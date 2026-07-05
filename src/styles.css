@@ -164,6 +164,24 @@ textarea {
   }
 }
 
+/* Mobile legibility floor. The app's dense "trading terminal" text scale (text-2xs, plus the
+   text-[8px]/[9px]/[10px] arbitrary sizes used throughout the options panels) is tuned for a
+   desktop monitor and reads too small on a phone. Bump both up below the sm breakpoint — desktop
+   density is untouched. Selector wins the cascade tie by source order (comes after
+   @tailwind utilities above), no !important needed. */
+@media (max-width: 639px) {
+  .text-2xs {
+    font-size: 12.5px;
+    line-height: 17px;
+  }
+  .text-\[8px\],
+  .text-\[9px\],
+  .text-\[10px\] {
+    font-size: 11px;
+    line-height: 15px;
+  }
+}
+
 /* Keyboard-only focus ring. Unlayered on purpose: ties .outline-none's specificity
    and wins by source order, while mouse focus stays outline-free via :focus-visible. */
 :focus-visible {

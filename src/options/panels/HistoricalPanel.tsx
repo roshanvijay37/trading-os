@@ -161,7 +161,7 @@ function HistoryBody({ chain }: { chain: EnrichedChain }) {
               Building history — {iv.samples} sample{iv.samples === 1 ? "" : "s"} stored. IV Rank / Percentile are
               withheld until the lookback is meaningful, rather than shown as a misleading number.
             </Banner>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <Stat label="Current VIX" value={iv.current != null ? dec(iv.current, 2) : "—"} tone="blue" />
               <Stat label="Min seen" value={iv.min != null ? dec(iv.min, 2) : "—"} />
               <Stat label="Max seen" value={iv.max != null ? dec(iv.max, 2) : "—"} />

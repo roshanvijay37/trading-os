@@ -104,7 +104,7 @@ function SentimentBody({ chain }: { chain: EnrichedChain }) {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Row label="Verdict" value={result.label} valueClass={LABEL_TEXT[result.label]} />
           <Row label="Confidence" value={`${Math.round(result.confidence * 100)}%`} valueClass="text-zinc-200" />
           <Row label="Active signals" value={String(result.factors.length)} valueClass="text-zinc-200" />
