@@ -12,6 +12,23 @@ import { computeBacktestAnalytics, filterTradesByDate, type DateFilterPreset } f
 import { useTheme } from "../store/theme";
 import { getChartPalette } from "../lib/chartTheme";
 
+// entryTime/exitTime are UTC ISO timestamps from the backend — format explicitly in IST (the
+// market's own timezone) rather than the viewer's local timezone, since a trade's date/time only
+// makes sense relative to the IST trading session it happened in.
+function formatTradeDateTime(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 interface Trade {
   id: number;
   entryTime: string;
@@ -976,6 +993,7 @@ export function BacktestLab() {
                   <thead>
                     <tr className="border-b border-border text-zinc-600">
                       <th className="px-2 py-2 text-left font-medium">#</th>
+                      <th className="px-2 py-2 text-left font-medium">Entry Time (IST)</th>
                       <th className="px-2 py-2 text-left font-medium">Side</th>
                       <th className="px-2 py-2 text-right font-medium">Entry</th>
                       <th className="px-2 py-2 text-right font-medium">Exit</th>
@@ -989,6 +1007,7 @@ export function BacktestLab() {
                     {Array.isArray(filteredTrades) && filteredTrades.map((t: Trade) => (
                       <tr key={t.id} onClick={() => setSelectedTradeId(t.id)} className={`cursor-pointer border-b border-border-subtle transition ${selectedTradeId === t.id ? "bg-surface" : "hover:bg-surface/50"}`}>
                         <td className="px-2 py-2 text-zinc-600">{t.id}</td>
+                        <td className="px-2 py-2 whitespace-nowrap font-mono text-zinc-400" title={`Exit: ${formatTradeDateTime(t.exitTime)} IST`}>{formatTradeDateTime(t.entryTime)}</td>
                         <td className="px-2 py-2">
                           <span className={`rounded px-1.5 py-0.5 text-2xs font-medium ${t.side === "LONG" ? "bg-gain-dim text-gain" : "bg-loss-dim text-loss"}`}>{t.side}</span>
                         </td>
