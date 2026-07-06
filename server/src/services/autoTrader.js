@@ -1347,14 +1347,27 @@ async function processCandles(underlying, session) {
 }
 
 // ─── DATA FETCHING ────────────────────────────────────────────────────
+// A wall-clock-hours window derived from candle count (tf * HISTORY_CANDLES) assumes the market
+// trades continuously. NSE only trades ~6.25h/day, so that formula can fail to reach the PREVIOUS
+// session at all right after a weekend/holiday — e.g. 15m x 80 candles = 20 hours back from
+// Monday's open lands on SUNDAY, entirely missing Friday's session. An alert candle at one
+// session's close breaking out at the next session's open is a completely normal EMA5T setup —
+// that gap silently made it invisible to live/paper trading (processCandles just sees <6 candles
+// and skips, no error). Look back a generous number of CALENDAR days instead: 21 days comfortably
+// spans any weekend or holiday cluster and yields well over HISTORY_CANDLES(80) real trading
+// candles for every selected timeframe (15/30/60m) — FYERS returns only the actual market candles
+// within the range, so the wider window costs nothing but a slightly larger response.
+const LOOKBACK_CALENDAR_DAYS = 21;
+
+/** Pure: the epoch-seconds start of fetchLatestCandles' lookback window. Exported for unit tests. */
+export function computeHistoryFromTs(nowSec = Math.floor(Date.now() / 1000)) {
+  return nowSec - LOOKBACK_CALENDAR_DAYS * 24 * 60 * 60;
+}
+
 async function fetchLatestCandles(symbol, session, timeframeMinutes) {
   const tf = timeframeMinutes;
   const now = Math.floor(Date.now() / 1000);
-  // Scale the lookback window with the timeframe so every resolution yields enough candles for
-  // the EMA/alert/breakout logic. A flat 1h window only gives ~4 fifteen-minute candles (and 1
-  // hourly), far short of the >=6 the engine needs; HISTORY_CANDLES worth of continuous time is
-  // generous and FYERS returns only the actual market candles within the range.
-  const from = now - tf * 60 * HISTORY_CANDLES;
+  const from = computeHistoryFromTs(now);
   const url = `${FYERS_DATA_BASE}/history?symbol=${encodeURIComponent(symbol)}&resolution=${tf}&date_format=0&range_from=${from}&range_to=${now}&cont_flag=1`;
   const data = await fyersDataFetch(url, session);
   return data.candles || [];
