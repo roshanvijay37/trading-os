@@ -380,9 +380,16 @@ export function runBacktest(candles, config) {
     }
 
     // INDEX mode — original arithmetic preserved (slippage on entry, qty by index points).
+    // If the breakout candle's OPEN already cleared rawEntry, the market gapped straight through
+    // it — the real fill happens at (or near) the open, not the stale nominal alert level.
+    // Matches checkEntryOrderFill's identical gap check in autoTrader.js (single source of truth
+    // for entry-fill behavior). Target/idxStop below are derived FROM entryPrice, so gap-adjusting
+    // it here automatically scales the target to the REAL entry — no separate adjustment needed.
+    const gappedThrough = side === "LONG" ? candle.open >= rawEntry : candle.open <= rawEntry;
+    const fillBase = gappedThrough ? candle.open : rawEntry;
     const entryPrice = side === "LONG"
-      ? round2(rawEntry * (1 + slippage))
-      : round2(rawEntry * (1 - slippage));
+      ? round2(fillBase * (1 + slippage))
+      : round2(fillBase * (1 - slippage));
     const idxStop = side === "LONG" ? entryPrice - sl : sl - entryPrice;
     if (idxStop <= 0) return null;
     // LOTS: fixed qty every trade (lotSize × fixedLots) — matches EMA5T's actual live sizing,

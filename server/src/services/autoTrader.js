@@ -1440,10 +1440,31 @@ export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, lev
     const crossed = dir === "LONG" ? latestCandle[2] >= level : latestCandle[3] <= level;
     if (!crossed) return { status: "PENDING", filledQty: 0 };
     const slip = 0.0005; // same stop-fill slippage the 6-year validation charged
-    const avgFillPrice = dir === "LONG" ? level * (1 + slip) : level * (1 - slip);
+    // If the candle's OPEN already cleared the level, the market gapped straight through it —
+    // a real resting stop order fills at (or near) the open, not at the stale nominal level.
+    // Without this, paper mode always pretends the fill happened right at the alert level
+    // regardless of how big the actual gap was, understating gap risk entirely.
+    const open = latestCandle[1];
+    const gappedThrough = dir === "LONG" ? open >= level : open <= level;
+    const fillBase = gappedThrough ? open : level;
+    const avgFillPrice = dir === "LONG" ? fillBase * (1 + slip) : fillBase * (1 - slip);
     return { status: "FILLED", avgFillPrice, filledQty: qty };
   }
   return getOrderDetails(entryOrderId, session);
+}
+
+/**
+ * Recompute the profit target from the ACTUAL fill price at entry — the stop-loss stays at the
+ * alert candle's fixed structural level (its low/high, matching the real resting SL order placed
+ * there), but the target must scale with the real entry: on a gap, the entry moves away from the
+ * fixed stop (real risk grows) while a target still anchored to the stale nominal alert level
+ * would sit closer to the new entry, quietly shrinking the achieved reward below the intended
+ * ratio. If the fill happened right at the nominal level (no gap), this reproduces the original
+ * target exactly. Exported for unit tests.
+ */
+export function computeGapAdjustedTarget(dir, entryFillPrice, stopLoss, targetMultiplier = 2) {
+  const risk = Math.abs(entryFillPrice - stopLoss);
+  return dir === "LONG" ? entryFillPrice + risk * targetMultiplier : entryFillPrice - risk * targetMultiplier;
 }
 
 /**
@@ -1510,6 +1531,9 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
       const qty = Math.min(filledQty || underlying.lotSize, underlying.lotSize);
       const isPartial = qty < underlying.lotSize;
       const entryFillPrice = fillCheck.avgFillPrice || p.level;
+      // Gap-adjust the target to the REAL fill (see computeGapAdjustedTarget) — never leave it
+      // anchored to the stale nominal alert level.
+      const adjustedTarget = computeGapAdjustedTarget(p.dir, entryFillPrice, p.stopLoss);
 
       // All local state mutations happen BEFORE the one saveState() below, so a crash right
       // after can never persist "signal processed" without the position it created (which would
@@ -1531,14 +1555,14 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
         avgFillPrice: entryFillPrice,
         entryPrice: p.level,
         stopLoss: p.stopLoss,
-        target: p.target,
+        target: adjustedTarget,
         currentSL: p.stopLoss,
         unrealizedPnl: 0,
         realizedPnl: 0,
         pnl: 0,
         status: "OPEN",
         entryTime: new Date().toISOString(),
-        signal: { type: p.dir, strategy: "EMA5T", timeframe: tf, entryPrice: p.level, stopLoss: p.stopLoss, target: p.target, underlying: underlying.name },
+        signal: { type: p.dir, strategy: "EMA5T", timeframe: tf, entryPrice: p.level, stopLoss: p.stopLoss, target: adjustedTarget, underlying: underlying.name },
         underlying: underlying.name,
       };
       openPositions.push(position);
@@ -1549,8 +1573,8 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
         /* best-effort */
       }
       storeSignal({ ...position.signal, quantity: qty, optionSymbol: futSymbol, timestamp: p.alertTimestamp });
-      logAudit({ type: "POSITION_OPENED", kind: "FUT", strategy: "EMA5T", orderId: position.id, optionSymbol: futSymbol, side: p.dir, qty, entry: entryFillPrice, stopLoss: p.stopLoss, target: p.target, timeframe: tf });
-      console.log(`[AUTO-TRADER] EMA5T ${paperTrading ? "PAPER" : "LIVE"} ${p.dir} ${futSymbol} @ ${entryFillPrice.toFixed(2)} (SL ${p.stopLoss}, target ${p.target.toFixed(2)}, ${tf}m)`);
+      logAudit({ type: "POSITION_OPENED", kind: "FUT", strategy: "EMA5T", orderId: position.id, optionSymbol: futSymbol, side: p.dir, qty, entry: entryFillPrice, stopLoss: p.stopLoss, target: adjustedTarget, nominalTarget: p.target, timeframe: tf });
+      console.log(`[AUTO-TRADER] EMA5T ${paperTrading ? "PAPER" : "LIVE"} ${p.dir} ${futSymbol} @ ${entryFillPrice.toFixed(2)} (SL ${p.stopLoss}, target ${adjustedTarget.toFixed(2)}, ${tf}m)`);
       recalcDailyPnL();
       saveState();
 

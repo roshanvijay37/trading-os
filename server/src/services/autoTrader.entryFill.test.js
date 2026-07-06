@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkEntryOrderFill, cancelPendingEntryOrder } from "./autoTrader.js";
+import { checkEntryOrderFill, cancelPendingEntryOrder, computeGapAdjustedTarget } from "./autoTrader.js";
 
 // checkEntryOrderFill is the ONLY paper/live branch point in the unified EMA5T resting-entry
 // lifecycle (see manageFuturesPending's doc comment) — everything else in that lifecycle runs
@@ -58,6 +58,56 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: null, dir: "SHORT", level: 54950, latestCandle, qty: 30 });
     expect(result.status).toBe("PENDING");
     expect(result.filledQty).toBe(0);
+  });
+
+  // Regression: a resting stop-entry that GAPS through its level (the candle's own open is
+  // already past it) used to always fill at level*(1±slip) regardless of how big the real gap
+  // was — silently understating gap risk. The fill should be based on the candle's OPEN once the
+  // market has gapped straight through, not the stale nominal level.
+  it("FILLS a LONG at the candle's OPEN (with slippage) when the open already gapped past the level", async () => {
+    const gapCandle = [1_700_000_000, 55000, 55200, 54950, 55100, 1000]; // open 55000 > level 54800
+    const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 54800, latestCandle: gapCandle, qty: 30 });
+    expect(result.status).toBe("FILLED");
+    expect(result.avgFillPrice).toBeCloseTo(55000 * 1.0005, 5);
+  });
+
+  it("FILLS a SHORT at the candle's OPEN (with slippage) when the open already gapped past the level", async () => {
+    const gapCandle = [1_700_000_000, 55000, 55050, 54800, 54900, 1000]; // open 55000 < level 55300
+    const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 55300, latestCandle: gapCandle, qty: 30 });
+    expect(result.status).toBe("FILLED");
+    expect(result.avgFillPrice).toBeCloseTo(55000 * 0.9995, 5);
+  });
+
+  it("still fills at the LEVEL (not the open) when the open has NOT gapped past it", async () => {
+    // open 55000 is below the LONG level 55100 — no gap, fill must stay anchored to the level.
+    const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, latestCandle, qty: 30 });
+    expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
+  });
+});
+
+// Regression: stopLoss/target used to be copied straight from the nominal alert level computed
+// at ARM time, never recomputed against the ACTUAL fill — so a gap silently shrank the achieved
+// risk:reward (real risk grows as the entry moves away from the fixed stop, while an unadjusted
+// target sits closer to the new entry). The stop stays at the alert candle's fixed structural
+// level; the target scales with the real entry to preserve the intended ratio.
+describe("computeGapAdjustedTarget", () => {
+  it("reproduces the original nominal target when the fill happened exactly at the alert level (no gap)", () => {
+    // LONG: level 55100, stop 55000 (risk 100) -> nominal target 55100 + 100*2 = 55300.
+    expect(computeGapAdjustedTarget("LONG", 55100, 55000)).toBe(55300);
+  });
+
+  it("scales the target up for a LONG when the fill gapped above the nominal level", () => {
+    // Real entry 55300 (gapped up), stop unchanged at 55000 -> real risk 300, target 55300+600=55900.
+    expect(computeGapAdjustedTarget("LONG", 55300, 55000)).toBe(55900);
+  });
+
+  it("scales the target down for a SHORT when the fill gapped below the nominal level", () => {
+    // Real entry 54700 (gapped down), stop unchanged at 55000 -> real risk 300, target 54700-600=54100.
+    expect(computeGapAdjustedTarget("SHORT", 54700, 55000)).toBe(54100);
+  });
+
+  it("respects a custom target multiplier", () => {
+    expect(computeGapAdjustedTarget("LONG", 100, 90, 3)).toBe(130); // risk 10 * 3 = 30
   });
 });
 
