@@ -781,6 +781,14 @@ async function closePositionInner(position, session, reason) {
       console.error(`[AUTO-TRADER] Broker SL partial-filled ${sl.slLegQty}/${heldQty} on ${position.optionSymbol}; exiting only the remainder`);
       heldQty = settleLeg(position, slPrice, sl.slLegQty, "BROKER_SL_PARTIAL");
     }
+    // Already confirmed DEAD at the broker (never filled, or the un-filled remainder after a
+    // partial) — there is nothing left to cancel. Clear it now instead of letting the block below
+    // attempt a doomed re-cancel of an order that's already terminal: that cancel would fail,
+    // and its catch aborts this WHOLE close without ever clearing slOrderId — stranding the
+    // position with no protective stop and repeating the identical failure every future cycle.
+    if (slDetails && ["REJECTED", "CANCELLED", "EXPIRED"].includes(slDetails.status)) {
+      position.slOrderId = null;
+    }
   }
 
   // Cancel any still-live broker SL before placing our own exit (a filled/gone order just no-ops).
@@ -955,6 +963,7 @@ export function planReconciliation(openLocal, netPositions) {
 
   const toClose = [];
   const toKeep = [];
+  const unknownBrokerPositions = [];
   for (const [symbol, positions] of localsBySymbol) {
     const brokerQty = netQtyBySymbol.get(symbol);
     // EMA5T trades futures both LONG and SHORT — a genuinely open SHORT reports a NEGATIVE
@@ -981,7 +990,20 @@ export function planReconciliation(openLocal, netPositions) {
       }
     }
   }
-  return { toClose, toKeep };
+
+  // Reconciliation so far only ever checks LOCAL positions against the broker. A broker symbol
+  // with a genuinely open net quantity that we have NO local record of at all (most likely a
+  // crash between a confirmed fill and the following saveState()) would otherwise never surface —
+  // it's real capital at risk that the bot doesn't know exists. We can't safely auto-adopt it (no
+  // known strategy/timeframe/target/SL context to reconstruct), so just report it; the caller
+  // decides how to react (block new entries until a human resolves it).
+  for (const [symbol, brokerQty] of netQtyBySymbol) {
+    if (brokerQty !== 0 && !localsBySymbol.has(symbol)) {
+      unknownBrokerPositions.push({ symbol, brokerQty });
+    }
+  }
+
+  return { toClose, toKeep, unknownBrokerPositions };
 }
 
 /**
@@ -1086,7 +1108,19 @@ async function reconcilePositionsWithBroker(session) {
     return;
   }
 
-  const { toClose, toKeep } = planReconciliation(openLocal, netPositions);
+  const { toClose, toKeep, unknownBrokerPositions } = planReconciliation(openLocal, netPositions);
+
+  // A broker position we have NO local record of at all — most likely a crash between a confirmed
+  // fill and the following saveState(). This is real, untracked capital: no known SL/target/strategy
+  // context to safely auto-adopt it, so flag loudly and block new entries until a human resolves it,
+  // matching this function's own stated principle — "if we can't verify what we hold, we don't trade."
+  for (const u of unknownBrokerPositions) {
+    logAudit({ type: "RECONCILE_UNKNOWN_BROKER_POSITION", symbol: u.symbol, brokerQty: u.brokerQty });
+    console.error(
+      `[AUTO-TRADER] Reconcile: broker shows an OPEN position on ${u.symbol} (net qty ${u.brokerQty}) with NO local record — ` +
+        `likely a crash before this was saved. NOT auto-managed (no known SL/target) — new trades blocked until manually resolved.`
+    );
+  }
 
   for (const { position, realized } of toClose) {
     // Claim the SAME guard closePosition/reconcileStopLossOrders use: this loop awaits per-position
@@ -1148,13 +1182,20 @@ async function reconcilePositionsWithBroker(session) {
     // review. Positions in either state still keep whatever SL they already had.
     if (!signMismatch && !ambiguousGroup) {
       await ensureStopLoss(position, session);
+      // Persist a newly self-healed SL order id immediately, not just at the end of this loop —
+      // a crash before the trailing saveState() below would otherwise lose track of a real,
+      // now-live broker SL order, and the next boot's reconcile would re-arm a DUPLICATE one.
+      saveState();
     }
   }
 
-  reconcileOk = true;
+  // An unknown broker position means we could NOT fully verify what we hold — block new entries
+  // (existing tracked positions are untouched; their own SLs, if any, still protect them) until a
+  // human resolves it, matching this function's fail-safe behavior on an outright fetch failure.
+  reconcileOk = unknownBrokerPositions.length === 0;
   recalcDailyPnL();
   saveState();
-  logAudit({ type: "RECONCILE_DONE", closed: toClose.length, kept: toKeep.length });
+  logAudit({ type: "RECONCILE_DONE", closed: toClose.length, kept: toKeep.length, unknown: unknownBrokerPositions.length });
 }
 
 async function monitorPositions(session) {
@@ -1174,6 +1215,10 @@ async function monitorPositions(session) {
       // rare naked window from a failed SL placement at entry.
       if (!CONFIG.PAPER_TRADING && !position.slOrderId) {
         await ensureStopLoss(position, session);
+        // Persist immediately: a crash right after a self-healed SL is placed but before this
+        // saves would leave a real, live broker SL order untracked on disk — the next boot's
+        // reconcile would see slOrderId=null and re-arm a DUPLICATE live stop for the same position.
+        saveState();
       }
       const quote = await fetchOptionQuoteWithTickFallback(position.optionSymbol, session);
       const ltp = quote?.lp || 0;

@@ -48,8 +48,8 @@ describe("planReconciliation", () => {
   });
 
   it("handles empty/garbage inputs without throwing", () => {
-    expect(planReconciliation([], [])).toEqual({ toClose: [], toKeep: [] });
-    expect(planReconciliation(undefined, undefined)).toEqual({ toClose: [], toKeep: [] });
+    expect(planReconciliation([], [])).toEqual({ toClose: [], toKeep: [], unknownBrokerPositions: [] });
+    expect(planReconciliation(undefined, undefined)).toEqual({ toClose: [], toKeep: [], unknownBrokerPositions: [] });
   });
 
   // EMA5T trades futures both LONG and SHORT. A genuinely open SHORT reports a NEGATIVE netQty
@@ -127,5 +127,35 @@ describe("planReconciliation", () => {
     expect(toClose).toHaveLength(2);
     expect(toClose[0].realized).toBe(500);
     expect(toClose[1].realized).toBe(500);
+  });
+
+  // Reconciliation previously only ever checked LOCAL positions against the broker — a real broker
+  // position with NO local record at all (e.g. a crash between a confirmed fill and the following
+  // saveState()) would never surface. This is the direct regression test for that gap.
+  describe("unknownBrokerPositions (broker position with no local record)", () => {
+    it("flags a broker symbol with a nonzero net qty that has no local position at all", () => {
+      const open = [local("NSE:BANKNIFTY26JULFUT", 30, { side: "LONG" })];
+      const net = [
+        { symbol: "NSE:BANKNIFTY26JULFUT", netQty: 30 },
+        { symbol: "NSE:NIFTY26JULFUT", netQty: -65 }, // untracked SHORT, no local record
+      ];
+      const { unknownBrokerPositions } = planReconciliation(open, net);
+      expect(unknownBrokerPositions).toEqual([{ symbol: "NSE:NIFTY26JULFUT", brokerQty: -65 }]);
+    });
+
+    it("does not flag a broker symbol that is flat (netQty 0) with no local record", () => {
+      const open = [];
+      const net = [{ symbol: "NSE:NIFTY26JULFUT", netQty: 0 }];
+      const { unknownBrokerPositions, toClose } = planReconciliation(open, net);
+      expect(unknownBrokerPositions).toEqual([]);
+      expect(toClose).toHaveLength(0);
+    });
+
+    it("does not flag a broker symbol that has a local record, even an ambiguous/mismatched one", () => {
+      const open = [local("NSE:BANKNIFTY26JULFUT", 30, { side: "SHORT" })]; // will sign-mismatch
+      const net = [{ symbol: "NSE:BANKNIFTY26JULFUT", netQty: 30 }];
+      const { unknownBrokerPositions } = planReconciliation(open, net);
+      expect(unknownBrokerPositions).toEqual([]);
+    });
   });
 });

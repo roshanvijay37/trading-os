@@ -9,6 +9,27 @@ const appId = process.env.FYERS_APP_ID;
 const secretId = process.env.FYERS_SECRET_ID;
 const redirectUrl = process.env.FYERS_REDIRECT_URL || "http://127.0.0.1:5173";
 
+// Single-operator identity gate (see requireAuth / the /callback check below). Normalized once at
+// module load — comparisons elsewhere assume this is already trimmed + uppercased.
+const OPERATOR_FYERS_ID = process.env.OPERATOR_FYERS_ID?.trim().toUpperCase() || null;
+if (!OPERATOR_FYERS_ID) {
+  console.warn(
+    "[AUTH] OPERATOR_FYERS_ID is not set — any FYERS account that completes login can control this bot " +
+      "(emergency-stop, config, positions). Set OPERATOR_FYERS_ID to your FYERS user ID to restrict access."
+  );
+}
+
+/**
+ * Pure: does this session's stored fy_id match the configured single-operator ID? Returns true
+ * when no operator id is configured (gate disabled, preserving prior behavior by default). Shared
+ * by the /callback check (refuses to CREATE a non-operator session) and requireAuth (defense in
+ * depth against any session that exists by some other path). Exported for unit tests.
+ */
+export function isOperatorSession(session, operatorFyersId = OPERATOR_FYERS_ID) {
+  if (!operatorFyersId) return true;
+  return String(session?.userId || "").trim().toUpperCase() === operatorFyersId;
+}
+
 // FYERS API base URL
 const FYERS_API_BASE = "https://api-t1.fyers.in/api/v3";
 
@@ -150,15 +171,32 @@ router.post("/callback", async (req, res) => {
 
     const { access_token, refresh_token } = tokenData;
 
-    // Get user profile using the access token
-    const profileResponse = await fetch(
-      `${FYERS_API_BASE}/profile?client_id=${appId}&access_token=${access_token}`,
-    );
+    // Get user profile using the access token. FYERS v3 authenticates via the
+    // `Authorization: appId:accessToken` header (same as every other v3 call in this codebase) —
+    // NOT query-string params, which is the old/incorrect style this used to send and which FYERS
+    // consistently rejected with HTTP 400, leaving every session's identity permanently "unknown".
+    const profileResponse = await fetch(`${FYERS_API_BASE}/profile`, {
+      headers: { Authorization: `${appId}:${access_token}` },
+    });
     const profileData = await profileResponse.json();
     if (!profileResponse.ok || profileData.s !== "ok") {
       // Token was obtained but identity lookup failed — log it rather than silently creating
       // a session with userId "unknown" (which corrupts downstream P&L/audit attribution).
       console.warn(`[AUTH] Profile fetch failed (${profileResponse.status}) — session identity will be 'unknown'`);
+    }
+
+    const userId = profileData.data?.fy_id || "unknown";
+
+    // Single-operator gate: this app runs one person's live trading bot. Without this, anyone who
+    // completes their OWN FYERS login gets a valid session that can hit /emergency-stop, mutate
+    // risk config, or read positions — because bot state is process-wide, not scoped to a specific
+    // user. Fail CLOSED: if identity can't be verified (profile fetch failed → "unknown") or it
+    // doesn't match, refuse the session rather than assume it's fine.
+    if (!isOperatorSession({ userId })) {
+      console.warn(`[AUTH] Rejected login from non-operator FYERS account (got "${userId}")`);
+      return res.status(403).json({
+        error: "This app is configured for a single FYERS account. A different FYERS account tried to connect.",
+      });
     }
 
     // Create session
@@ -167,7 +205,7 @@ router.post("/callback", async (req, res) => {
       id: sessionId,
       accessToken: access_token,
       refreshToken: refresh_token,
-      userId: profileData.data?.fy_id || "unknown",
+      userId,
       userName: profileData.data?.name || "FYERS User",
       email: profileData.data?.email_id || "",
       broker: "FYERS",
@@ -413,6 +451,14 @@ export function requireAuth(req, res, next) {
     // Avoid logging session-id prefixes or the full session-key list (account identifiers).
     console.log("[AUTH] 401 - Invalid or expired session");
     return res.status(401).json({ error: "Invalid or expired session" });
+  }
+
+  // Defense in depth: /callback already refuses to CREATE a session for a non-operator FYERS
+  // account, but this catches any session that might exist by some other path (e.g. one persisted
+  // in sessions.json from before OPERATOR_FYERS_ID was configured).
+  if (!isOperatorSession(session)) {
+    console.log("[AUTH] 403 - Session belongs to a non-operator FYERS account");
+    return res.status(403).json({ error: "This session does not belong to the configured operator account." });
   }
 
   // Attach FYERS config to request
