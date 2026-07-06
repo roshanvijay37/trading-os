@@ -59,7 +59,12 @@ function saveHolidays(data) {
   try {
     const dir = path.dirname(HOLIDAYS_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(HOLIDAYS_FILE, JSON.stringify(data, null, 2));
+    // Write-then-rename (same pattern as sessions.json/oauth-state.json): a process kill mid-write
+    // can never leave holidays.json truncated — a corrupt file would otherwise throw in
+    // loadHolidays() and silently fall back to DEFAULT_HOLIDAYS, masking a real day-of-week bug.
+    const tmpFile = `${HOLIDAYS_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+    fs.renameSync(tmpFile, HOLIDAYS_FILE);
     cachedHolidays = data;
   } catch (err) {
     console.error("[HOLIDAYS] Failed to save holidays:", err.message);

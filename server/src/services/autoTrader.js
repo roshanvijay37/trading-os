@@ -519,6 +519,17 @@ export function computeCommittedMargin(positions, pending) {
   return openMargin + pendingMargin;
 }
 
+/**
+ * True if an OPEN position already exists for this exact underlying+timeframe key. Used to stop
+ * a fresh EMA5T alert from arming a second concurrent position on a slot that's already filled —
+ * see the call site in manageFuturesPendingInner. Pure (positions injectable) for unit testing.
+ */
+export function hasOpenPositionForKey(positions, underlyingName, timeframe) {
+  return (positions || []).some(
+    (p) => p.status === "OPEN" && p.underlying === underlyingName && p.signal?.timeframe === timeframe
+  );
+}
+
 async function fetchOptionQuote(optionSymbol, session) {
   try {
     const url = `${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(optionSymbol)}`;
@@ -594,7 +605,7 @@ export function planSlSettlement({ status, slFilled, heldQty }) {
  * tick unsubscribe. Used by closePosition, the broker-SL-already-filled path, and
  * reconcileStopLossOrders so the CLOSED bookkeeping can never diverge between them.
  */
-function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
+function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId, paperTrading = CONFIG.PAPER_TRADING }) {
   position.status = "CLOSED";
   position.exitTime = new Date().toISOString();
   position.exitReason = reason;
@@ -608,11 +619,14 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId }) {
   // Paper mode has no real costs. The round-trip cost is charged ONCE for the whole position (on
   // the original entry qty), so a multi-leg exit — where earlier legs were realized GROSS via
   // settleLeg — never double-counts brokerage / buy-side charges.
+  // `paperTrading` defaults to a fresh CONFIG read for callers with no closePositionInner-style
+  // snapshot of their own (reconcileStopLossOrders) — closePositionInner passes its OWN snapshot
+  // explicitly so this can't disagree with decisions already made earlier in the same close.
   // Direction-aware: SHORT futures profit when exit < entry.
   const dirMult = position.side === "SHORT" ? -1 : 1;
   const gross = (exitPrice - position.avgFillPrice) * exitQty * dirMult;
   const costQty = position.origEntryQty || exitQty;
-  const costs = CONFIG.PAPER_TRADING ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER, side: position.side });
+  const costs = paperTrading ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER, side: position.side });
   const pnl = gross - costs;
   position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
   position.pnl = position.realizedPnl;
@@ -689,6 +703,13 @@ export async function closePosition(position, session, reason) {
 async function closePositionInner(position, session, reason) {
   if (position.status !== "OPEN") return;
 
+  // Snapshot once: CONFIG.PAPER_TRADING can flip mid-close (operator stops the bot, changes mode,
+  // restarts) across this function's many awaits. Reading it fresh at each point below could let a
+  // paper position's exit re-check LIVE (placing a REAL market order that would actually OPEN a new
+  // position, since the paper position was never at the broker) or vice versa. Every decision in
+  // this close — including the finalizeClose calls below — uses this one snapshot.
+  const paperTrading = CONFIG.PAPER_TRADING;
+
   let heldQty = position.entryQty ?? position.quantity;
 
   // ─── Settle any exit order a PREVIOUS closePosition attempt left in flight ─────────────
@@ -696,7 +717,7 @@ async function closePositionInner(position, session, reason) {
   // pendingExitOrderId is persisted with the position). Without this, a retry would place a
   // SECOND market sell while the first may have filled: an oversell into a naked short. If
   // the broker is unreachable, abort and retry next cycle — the id stays on the position.
-  if (position.pendingExitOrderId && !CONFIG.PAPER_TRADING) {
+  if (position.pendingExitOrderId && !paperTrading) {
     let det = null;
     try {
       det = await getOrderDetails(position.pendingExitOrderId, session);
@@ -710,6 +731,7 @@ async function closePositionInner(position, session, reason) {
         exitQty: heldQty,
         reason,
         exitOrderId: det.orderId,
+        paperTrading,
       });
       return;
     }
@@ -733,7 +755,7 @@ async function closePositionInner(position, session, reason) {
   }
 
   // ─── C1: never double-exit into a naked short. Account for what the broker SL has ALREADY sold ──
-  if (position.slOrderId && !CONFIG.PAPER_TRADING) {
+  if (position.slOrderId && !paperTrading) {
     let slDetails = null;
     try {
       slDetails = await getOrderDetails(position.slOrderId, session);
@@ -750,7 +772,7 @@ async function closePositionInner(position, session, reason) {
     if (slDetails && sl.fullSlClose) {
       // Broker SL already closed the WHOLE position — settle on it, place NO market order.
       console.log(`[AUTO-TRADER] Broker SL already closed ${position.optionSymbol}; settling without a second exit`);
-      finalizeClose(position, { exitPrice: slPrice, exitQty: heldQty, reason: "STOPLOSS", exitOrderId: position.slOrderId });
+      finalizeClose(position, { exitPrice: slPrice, exitQty: heldQty, reason: "STOPLOSS", exitOrderId: position.slOrderId, paperTrading });
       return;
     }
     if (slDetails && sl.slLegQty > 0) {
@@ -771,13 +793,19 @@ async function closePositionInner(position, session, reason) {
       // be live at the broker and must stay tracked.
       position.slOrderId = null;
     } catch (err) {
-      console.error(`[AUTO-TRADER] Could not cancel SL order ${position.slOrderId}:`, err.message);
+      // Abort and retry next cycle, matching the pendingExitOrderId/slDetails guards above —
+      // falling through here would place a market exit while the broker SL might STILL be live
+      // (the cancel failed, not because it already filled). If the market exit fills first, this
+      // position gets marked CLOSED and reconcileStopLossOrders stops watching it — so if the
+      // stale SL fires later, it opens an untracked, unintended position against a flat book.
+      console.error(`[AUTO-TRADER] Could not cancel SL order ${position.slOrderId}; retrying next cycle:`, err.message);
+      return;
     }
   }
 
   if (heldQty <= 0) {
     // Nothing left to exit (the broker SL filled it all) — finalize without a second order.
-    finalizeClose(position, { exitPrice: position.currentLTP || position.avgFillPrice, exitQty: 0, reason, exitOrderId: position.id });
+    finalizeClose(position, { exitPrice: position.currentLTP || position.avgFillPrice, exitQty: 0, reason, exitOrderId: position.id, paperTrading });
     return;
   }
 
@@ -791,7 +819,7 @@ async function closePositionInner(position, session, reason) {
     // (removed) option-buying flow this wrapper was originally built for.
     side: futuresOrderSide(position.side, "EXIT"),
     session,
-    paperTrading: CONFIG.PAPER_TRADING,
+    paperTrading,
     paperFillPrice,
     auditLogger: logAudit,
   });
@@ -805,7 +833,7 @@ async function closePositionInner(position, session, reason) {
   const fill = await waitForFill(exitOrder.orderId, session, {
     timeoutMs: CONFIG.ORDER_FILL_TIMEOUT_MS,
     pollMs: CONFIG.ORDER_POLL_INTERVAL_MS,
-    paperTrading: CONFIG.PAPER_TRADING,
+    paperTrading,
     paperFillPrice,
     auditLogger: logAudit,
   });
@@ -815,7 +843,7 @@ async function closePositionInner(position, session, reason) {
   // If the broker is unreachable, RETURN with pendingExitOrderId still set — never re-arm an
   // SL next to a possibly-live exit order (the pair could sell the same quantity twice).
   let finalFill = fill;
-  if (!CONFIG.PAPER_TRADING && !["FILLED", "REJECTED", "CANCELLED", "EXPIRED"].includes(fill.status)) {
+  if (!paperTrading && !["FILLED", "REJECTED", "CANCELLED", "EXPIRED"].includes(fill.status)) {
     try {
       await cancelOrder(exitOrder.orderId, session, logAudit);
       const reread = await getOrderDetails(exitOrder.orderId, session);
@@ -830,7 +858,7 @@ async function closePositionInner(position, session, reason) {
   }
 
   const exitPrice = finalFill.avgFillPrice || paperFillPrice;
-  const plan = classifyExit({ paper: CONFIG.PAPER_TRADING, entryQty: heldQty, fillQty: finalFill.filledQty });
+  const plan = classifyExit({ paper: paperTrading, entryQty: heldQty, fillQty: finalFill.filledQty });
 
   // ─── C2: a partial / unfilled exit must NOT mark the position CLOSED and orphan the remainder ──
   // Realize any filled portion, keep the position OPEN with the leftover qty, re-arm a broker SL on
@@ -852,7 +880,7 @@ async function closePositionInner(position, session, reason) {
     return;
   }
 
-  finalizeClose(position, { exitPrice, exitQty: plan.exitQty, reason, exitOrderId: exitOrder.orderId });
+  finalizeClose(position, { exitPrice, exitQty: plan.exitQty, reason, exitOrderId: exitOrder.orderId, paperTrading });
 }
 
 async function reconcileStopLossOrders(session) {
@@ -1061,28 +1089,40 @@ async function reconcilePositionsWithBroker(session) {
   const { toClose, toKeep } = planReconciliation(openLocal, netPositions);
 
   for (const { position, realized } of toClose) {
-    position.status = "CLOSED";
-    position.exitReason = "RECONCILED";
-    position.exitTime = new Date().toISOString();
-    position.realizedPnl = realized || position.realizedPnl || 0;
-    position.pnl = position.realizedPnl;
-    dailyRealizedPnL += position.realizedPnl;
-    if (position.realizedPnl < 0) consecutiveLosses++;
-    else if (position.realizedPnl > 0) consecutiveLosses = 0;
-    if (position.slOrderId) {
-      try {
-        await cancelOrder(position.slOrderId, session, logAudit);
-      } catch (err) {
-        console.error(`[AUTO-TRADER] Reconcile: could not cancel orphan SL ${position.slOrderId}:`, err.message);
-      }
-    }
+    // Claim the SAME guard closePosition/reconcileStopLossOrders use: this loop awaits per-position
+    // (cancelOrder below), and reconcilePositionsWithBroker can itself run while a concurrent
+    // emergencyStop's un-awaited flattenAllPositions (or another in-flight close) is touching the
+    // same position — without this, both could mutate status/realizedPnl/dailyRealizedPnL/
+    // consecutiveLosses at once, double-counting P&L into the daily-loss breaker.
+    if (closingPositionIds.has(position.id)) continue;
+    closingPositionIds.add(position.id);
     try {
-      unsubscribeFromSymbols([position.optionSymbol]);
-    } catch (err) {
-      console.error(`[AUTO-TRADER] Reconcile: unsubscribe failed for ${position.optionSymbol}:`, err.message);
+      if (position.status !== "OPEN") continue; // already finalized by the concurrent close
+      position.status = "CLOSED";
+      position.exitReason = "RECONCILED";
+      position.exitTime = new Date().toISOString();
+      position.realizedPnl = realized || position.realizedPnl || 0;
+      position.pnl = position.realizedPnl;
+      dailyRealizedPnL += position.realizedPnl;
+      if (position.realizedPnl < 0) consecutiveLosses++;
+      else if (position.realizedPnl > 0) consecutiveLosses = 0;
+      if (position.slOrderId) {
+        try {
+          await cancelOrder(position.slOrderId, session, logAudit);
+        } catch (err) {
+          console.error(`[AUTO-TRADER] Reconcile: could not cancel orphan SL ${position.slOrderId}:`, err.message);
+        }
+      }
+      try {
+        unsubscribeFromSymbols([position.optionSymbol]);
+      } catch (err) {
+        console.error(`[AUTO-TRADER] Reconcile: unsubscribe failed for ${position.optionSymbol}:`, err.message);
+      }
+      logAudit({ type: "POSITION_RECONCILED_CLOSED", optionSymbol: position.optionSymbol, realized: position.realizedPnl });
+      console.log(`[AUTO-TRADER] Reconciled FLAT at broker → CLOSED: ${position.optionSymbol} (realized ₹${position.realizedPnl.toFixed(2)})`);
+    } finally {
+      closingPositionIds.delete(position.id);
     }
-    logAudit({ type: "POSITION_RECONCILED_CLOSED", optionSymbol: position.optionSymbol, realized: position.realizedPnl });
-    console.log(`[AUTO-TRADER] Reconciled FLAT at broker → CLOSED: ${position.optionSymbol} (realized ₹${position.realizedPnl.toFixed(2)})`);
   }
 
   for (const { position, brokerQty, signMismatch, ambiguousGroup } of toKeep) {
@@ -1331,6 +1371,13 @@ async function resolveFuturesSymbol(underlying, session) {
  * { status: "FILLED"|"PENDING"|"REJECTED"|"CANCELLED"|"EXPIRED"|"UNKNOWN", avgFillPrice?, filledQty? }.
  */
 export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, level, latestCandle, qty, session }) {
+  // Applies to BOTH modes: a pending entry with no entryOrderId was gate-skipped at arm time
+  // (checkTimeFilter/canTakeTrade/margin failed — see manageFuturesPendingInner's EMA5T_ENTRY_
+  // ORDER_SKIPPED branch), so it was never actually placed anywhere. Without this check up front,
+  // the paper branch below would judge it purely by candle-crossing and could silently "fill" a
+  // trade the correlation filter, margin cap, or daily-loss gate explicitly blocked — paper mode
+  // would then be LESS safe than live (which already short-circuits to PENDING here).
+  if (!entryOrderId) return { status: "PENDING", filledQty: 0 };
   if (paperTrading) {
     const crossed = dir === "LONG" ? latestCandle[2] >= level : latestCandle[3] <= level;
     if (!crossed) return { status: "PENDING", filledQty: 0 };
@@ -1338,7 +1385,6 @@ export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, lev
     const avgFillPrice = dir === "LONG" ? level * (1 + slip) : level * (1 - slip);
     return { status: "FILLED", avgFillPrice, filledQty: qty };
   }
-  if (!entryOrderId) return { status: "PENDING", filledQty: 0 }; // armed locally, gated out at placement time
   return getOrderDetails(entryOrderId, session);
 }
 
@@ -1451,9 +1497,19 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
       saveState();
 
       if (isPartial) {
-        // Best-effort cancel the unfilled remainder so it doesn't keep resting and fill later as
-        // an unexpected second leg on a position we're already tracking as fully formed.
-        await cancelPendingEntryOrder(p, paperTrading, session);
+        // Cancel the unfilled remainder so it doesn't keep resting and fill later as an
+        // unexpected second leg on a position we're already tracking as fully formed. Unlike
+        // every other cancel site in this file, there's no local record left to preserve on
+        // failure — pendingEntries[key] and processedSignals already dropped/claimed this alert
+        // the moment the fill was detected, above — so a failed cancel here can't be retried by
+        // anything else in the system; it's an orphaned live order with zero local reference.
+        // Loudly audit it (matching flattenAllPositions's "MANUAL REVIEW NEEDED" pattern) so it's
+        // at least visible to the operator rather than silently swallowed.
+        const cancelled = await cancelPendingEntryOrder(p, paperTrading, session);
+        if (!cancelled.ok) {
+          console.error(`[AUTO-TRADER] Could not confirm cancellation of the unfilled remainder for ${key} (entryOrderId ${p.entryOrderId}) — MANUAL REVIEW NEEDED: it may still be resting live at the broker with no local tracking.`);
+          logAudit({ type: "ORPHANED_ENTRY_REMAINDER", key, entryOrderId: p.entryOrderId, dir: p.dir, level: p.level });
+        }
       }
       // Never leave a live (or paper-parity) position without a resting protective stop for even
       // one avoidable cycle — don't wait for the next monitorPositions pass to catch it up.
@@ -1488,6 +1544,16 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
 
   // ── Step 2: arm/re-arm on a new or changed alert ──
   if (!alert) return;
+
+  // Never arm a second concurrent position on the SAME underlying+timeframe. The validated
+  // backtest (routes/backtest.js) can't take a second entry while one is open — its main loop
+  // structurally skips entry logic whenever `position` is truthy — but nothing here enforced the
+  // same rule: checkCorrelationFilter only compares DIFFERENT underlyings, and once a pending
+  // entry FILLS it's deleted from pendingEntries (Step 1), so a fresh alert on this exact key
+  // could otherwise arm and fill a second, untested-by-backtest position while the first is still
+  // open — doubling real exposure/margin on one underlying+timeframe.
+  if (hasOpenPositionForKey(openPositions, underlying.name, tf)) return;
+
   const existing = pendingEntries.get(key);
   if (existing && existing.alertTimestamp === alert.timestamp) return; // no change
 

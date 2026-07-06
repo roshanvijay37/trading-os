@@ -193,7 +193,11 @@ export function AutoTrade() {
   // control that can switch the bot to live money was bundled into the generic Save Config
   // action with no confirmation at all, so a mis-click could silently go live.
   const handleSaveConfigClick = () => {
-    const goingLive = status?.paperTrading === true && configForm.paperTrading === false;
+    // Only skip the confirmation when we KNOW the bot is already live (status.paperTrading===false).
+    // If status hasn't loaded yet (null, e.g. on first page load or a stuck /status poll), treat a
+    // requested paperTrading:false the same as a genuine paper→live flip rather than silently
+    // skipping the dialog just because we can't yet prove it isn't one.
+    const goingLive = status?.paperTrading !== false && configForm.paperTrading === false;
     if (goingLive) {
       setConfirmAction("go-live");
       return;

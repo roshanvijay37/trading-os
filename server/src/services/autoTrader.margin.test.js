@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeCommittedMargin } from "./autoTrader.js";
+import { computeCommittedMargin, hasOpenPositionForKey } from "./autoTrader.js";
 
 // EMA5T scans multiple timeframes per underlying independently and, once ALLOW_CORRELATED_TRADES
 // is enabled, both Bank Nifty and Nifty can be open at once — up to 6 concurrent positions
@@ -46,5 +46,38 @@ describe("computeCommittedMargin", () => {
     const positions = [{ status: "OPEN" }];
     const pending = new Map([["X", { entryOrderId: "ORD-3" }]]);
     expect(computeCommittedMargin(positions, pending)).toBe(0);
+  });
+});
+
+// Regression: a fresh EMA5T alert on the same underlying+timeframe as an already-OPEN position
+// used to be able to arm (and later fill) a second concurrent position on that exact slot —
+// checkCorrelationFilter only compares DIFFERENT underlyings, so nothing stopped this. The
+// validated backtest can't produce this scenario at all (its main loop skips entry logic
+// entirely while a position is open), so live/paper allowing it was untested-by-backtest exposure.
+describe("hasOpenPositionForKey", () => {
+  it("is true when an OPEN position exists for the exact underlying+timeframe", () => {
+    const positions = [{ status: "OPEN", underlying: "BANKNIFTY", signal: { timeframe: 15 } }];
+    expect(hasOpenPositionForKey(positions, "BANKNIFTY", 15)).toBe(true);
+  });
+
+  it("is false for a different underlying, even at the same timeframe", () => {
+    const positions = [{ status: "OPEN", underlying: "NIFTY", signal: { timeframe: 15 } }];
+    expect(hasOpenPositionForKey(positions, "BANKNIFTY", 15)).toBe(false);
+  });
+
+  it("is false for a different timeframe, even on the same underlying", () => {
+    const positions = [{ status: "OPEN", underlying: "BANKNIFTY", signal: { timeframe: 5 } }];
+    expect(hasOpenPositionForKey(positions, "BANKNIFTY", 15)).toBe(false);
+  });
+
+  it("ignores a CLOSED position on the same underlying+timeframe", () => {
+    const positions = [{ status: "CLOSED", underlying: "BANKNIFTY", signal: { timeframe: 15 } }];
+    expect(hasOpenPositionForKey(positions, "BANKNIFTY", 15)).toBe(false);
+  });
+
+  it("treats missing/garbage inputs as no open position", () => {
+    expect(hasOpenPositionForKey([], "BANKNIFTY", 15)).toBe(false);
+    expect(hasOpenPositionForKey(undefined, "BANKNIFTY", 15)).toBe(false);
+    expect(hasOpenPositionForKey([{ status: "OPEN", underlying: "BANKNIFTY" }], "BANKNIFTY", 15)).toBe(false); // no signal.timeframe at all
   });
 });

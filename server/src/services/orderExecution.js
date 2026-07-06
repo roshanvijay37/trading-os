@@ -156,7 +156,14 @@ async function fyersApiCall(endpoint, session, body = null, method = "GET", _ret
     if (!_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
       return fyersApiCall(endpoint, session, body, method, true);
     }
-    throw new Error(data.message || `FYERS ${endpoint} returned error`);
+    const err = new Error(data.message || `FYERS ${endpoint} returned error`);
+    // FYERS signals its rate limit (10/sec, 200/min, 100k/day) as HTTP 200 with a body-level
+    // error (code -353), not an HTTP 429 — isRetryableError only checks err.status, and this
+    // branch previously never set it, so a rate-limit hit was always treated as non-retryable
+    // and failed immediately with zero backoff (worse: FYERS blocks API access for the rest of
+    // the day after repeated per-minute breaches, so not backing off here raises that risk too).
+    if (Number(data.code) === -353) err.status = 429;
+    throw err;
   }
   return data;
 }
@@ -510,12 +517,21 @@ export async function getOrderDetails(orderId, session) {
   // heavier retry here would needlessly compound with that and eat into waitForFill's timeout
   // budget. This still meaningfully helps one-off callers (e.g. ensureStopLoss) recover from a
   // single transient blip without misreading it as "no live order."
-  const data = await withRetry(() => fyersApiCall(`/orders/${orderId}`, session), {
+  // FYERS's orderbook is a single resource (GET /orders) filtered by an "id" QUERY param — there
+  // is no /orders/:id path-segment endpoint (confirmed against the fyers-apiv3 SDK's Config class
+  // and orderbook()/get_call() implementation). The old `/orders/${orderId}` path 404'd on every
+  // call, which withRetry/waitForFill silently absorbed as "still pending" instead of a real error.
+  const data = await withRetry(() => fyersApiCall(`/orders?id=${encodeURIComponent(orderId)}`, session), {
     attempts: 2,
     baseDelayMs: 400,
     label: `getOrderDetails ${orderId}`,
   });
-  const order = data.data || {};
+  // The orderbook response wraps results in "orderBook" (confirmed via the FYERS Go SDK model
+  // OrderBookResponse.OrderBook, and matches this file's own findOrderIdByTag two functions up) —
+  // NOT a bare "data" object. `order` used to silently fall back to {} on every real call.
+  const book = data.orderBook || data.data || [];
+  const list = Array.isArray(book) ? book : [book];
+  const order = list.find((o) => String(o?.id) === String(orderId)) || list[0] || {};
   return {
     orderId,
     status: normalizeStatus(order.status),
@@ -533,10 +549,14 @@ export async function getOrderDetails(orderId, session) {
 }
 
 /**
- * One cancel attempt: REST-style DELETE first, falling back to the older POST /orders/cancel,
- * with the existing single-refresh-and-retry-on-401 behavior. Cancelling an already-cancelled or
- * already-filled order is safe to retry (unlike placing one), so the outer withRetry in
- * cancelOrder can wrap this whole attempt without any duplicate-action risk.
+ * One cancel attempt, with the existing single-refresh-and-retry-on-401 behavior. Cancelling an
+ * already-cancelled or already-filled order is safe to retry (unlike placing one), so the outer
+ * withRetry in cancelOrder can wrap this whole attempt without any duplicate-action risk.
+ * FYERS cancels via DELETE to the SAME endpoint place_order POSTs to (/orders/sync), with the
+ * order id in the JSON body — NOT a /orders/:id path segment, and there is no /orders/cancel
+ * endpoint (confirmed against the fyers-apiv3 SDK's cancel_order()/Config.orders_endpoint). The
+ * old code's two DELETE/POST attempts both targeted endpoints that don't exist, so a cancel could
+ * never actually reach the broker; the order stays live at FYERS with the local record dropped.
  */
 async function attemptCancelOrder(orderId, session, _retried = false) {
   const appId = session.appId ?? process.env.FYERS_APP_ID;
@@ -544,23 +564,13 @@ async function attemptCancelOrder(orderId, session, _retried = false) {
     "Content-Type": "application/json",
     Authorization: `${appId}:${session.accessToken}`,
   };
-  const url = `${FYERS_API_BASE}/orders/${orderId}`;
 
-  // Try REST-style DELETE first, then fall back to the older POST /orders/cancel.
-  let response = await fetch(url, {
+  const response = await fetch(`${FYERS_API_BASE}${PLACE_ORDER_ENDPOINT}`, {
     method: "DELETE",
     headers: authHeaders,
+    body: JSON.stringify({ id: orderId }),
     signal: AbortSignal.timeout(10000),
   });
-
-  if (!response.ok && (response.status === 404 || response.status === 405)) {
-    response = await fetch(`${FYERS_API_BASE}/orders/cancel`, {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify({ id: orderId }),
-      signal: AbortSignal.timeout(10000),
-    });
-  }
 
   if (!response.ok) {
     const text = await response.text();
@@ -579,7 +589,11 @@ async function attemptCancelOrder(orderId, session, _retried = false) {
     if (!_retried && isTokenErrorData(data) && (await refreshAccessToken(session))) {
       return attemptCancelOrder(orderId, session, true);
     }
-    throw new Error(data.message || `Cancel order ${orderId} failed`);
+    const err = new Error(data.message || `Cancel order ${orderId} failed`);
+    // Same FYERS rate-limit signal (body-level code -353, HTTP 200) as fyersApiCall — see that
+    // function's comment. Without this, cancelOrder's withRetry never backs off on a rate limit.
+    if (Number(data.code) === -353) err.status = 429;
+    throw err;
   }
   return { success: true, data };
 }

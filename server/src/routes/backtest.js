@@ -25,26 +25,31 @@ const dataCache = new Map();
 // share one definition (imported above).
 
 // ─── Fetch Historical Data from FYERS ─────────────────────────────
-// FYERS limits: max 100 days for intraday resolutions (1,2,3,5,10,15,20,30,45,60,120,180,240)
+// FYERS limits: max 100 days per request for intraday resolutions (1,2,3,5,10,15,20,30,45,60,120,180,240);
+// max 366 days per request for daily/weekly/monthly resolutions (D/1W/1M) — both are real, enforced
+// FYERS caps (violating either returns {code:-50, message:"Invalid input"}), not just the intraday one.
 const INTRADAY_RESOLUTIONS = ["1", "2", "3", "5", "10", "15", "20", "30", "45", "60", "120", "180", "240"];
 const MAX_DAYS_PER_REQUEST = 100;
+const MAX_DAYS_PER_REQUEST_DAILY = 366;
 const DAY_IN_SECONDS = 86400;
 
-async function fetchHistoricalData(symbol, resolution, fromTs, toTs, accessToken) {
+// Exported for unit tests (chunking behavior) — not part of the route's public API surface.
+export async function fetchHistoricalData(symbol, resolution, fromTs, toTs, accessToken) {
   const cacheKey = `${symbol}_${resolution}_${fromTs}_${toTs}`;
   if (dataCache.has(cacheKey)) return dataCache.get(cacheKey);
 
   const isIntraday = INTRADAY_RESOLUTIONS.includes(resolution);
+  const maxDays = isIntraday ? MAX_DAYS_PER_REQUEST : MAX_DAYS_PER_REQUEST_DAILY;
   const totalDays = (toTs - fromTs) / DAY_IN_SECONDS;
 
-  // If intraday and more than 100 days, chunk the requests
-  if (isIntraday && totalDays > MAX_DAYS_PER_REQUEST) {
-    console.log(`FYERS limit: ${resolution}m max ${MAX_DAYS_PER_REQUEST} days. Chunking ${totalDays} days...`);
+  // Chunk any request — intraday or daily/weekly/monthly — that exceeds its resolution's cap.
+  if (totalDays > maxDays) {
+    console.log(`FYERS limit: ${resolution} max ${maxDays} days. Chunking ${totalDays} days...`);
     let allCandles = [];
     let currentFrom = fromTs;
 
     while (currentFrom < toTs) {
-      let currentTo = currentFrom + (MAX_DAYS_PER_REQUEST * DAY_IN_SECONDS);
+      let currentTo = currentFrom + (maxDays * DAY_IN_SECONDS);
       if (currentTo > toTs) currentTo = toTs;
 
       const chunk = await fetchSingleRange(symbol, resolution, currentFrom, currentTo, accessToken);
@@ -71,7 +76,7 @@ async function fetchHistoricalData(symbol, resolution, fromTs, toTs, accessToken
     return unique;
   }
 
-  // Single request for daily or < 100 days
+  // Single request — within the resolution's per-request cap
   return fetchSingleRange(symbol, resolution, fromTs, toTs, accessToken);
 }
 
@@ -878,7 +883,9 @@ router.post("/futures-range", async (req, res) => {
     }
     const toTs = Math.floor(Date.now() / 1000);
     const fromTs = toTs - 730 * DAY_IN_SECONDS; // 2 years of headroom; cont_flag=1 can splice in more than this contract's own listing window
-    const rawCandles = await fetchSingleRange(tradedSymbol, "D", fromTs, toTs, session.accessToken);
+    // 730 days exceeds FYERS's 366-day cap for daily resolution — fetchHistoricalData chunks it
+    // (fetchSingleRange would send it as one request and FYERS would reject the whole thing).
+    const rawCandles = await fetchHistoricalData(tradedSymbol, "D", fromTs, toTs, session.accessToken);
     if (!rawCandles.length) {
       return res.status(400).json({ error: `No historical data available yet for ${tradedSymbol}.` });
     }

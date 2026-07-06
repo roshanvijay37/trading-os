@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { computeFuturesCosts } from "./futuresCosts.js";
 
-// Structural properties, not pinned real-world rates — the actual STT/exchange/stamp constants
-// are placeholders pending verification against FYERS's current F&O rate card (see the
-// TODO(verify) note in futuresCosts.js). These tests lock the SHAPE of the model so a future
-// rate-constant update can't silently break the sell-side/buy-side/brokerage-floor structure.
+// Mostly structural properties (shape of the model), but a few pin the real rate constants —
+// confirmed 2026-07-05 against FYERS's own live charges page — so a future rate change is a
+// deliberate, visible test update rather than a silent drift.
 describe("computeFuturesCosts", () => {
   it("charges brokerage + GST-on-brokerage even at zero turnover (flat qty=0 floor)", () => {
     const costs = computeFuturesCosts(0, 0, 0, { brokeragePerOrder: 20 });
@@ -28,7 +27,7 @@ describe("computeFuturesCosts", () => {
     // too), but the STT COMPONENT itself must be identical since STT only reads exit*qty.
     const sttAt = (entry, exit, qty) => {
       const sellTurnover = exit * qty;
-      return 0.0002 * sellTurnover;
+      return 0.0005 * sellTurnover;
     };
     expect(sttAt(60000, 50100, 30)).toBeCloseTo(sttAt(50000, 50100, 30), 8);
     expect(higherEntry).toBeGreaterThan(base); // still costs more overall (buy-side charges)
@@ -45,9 +44,9 @@ describe("computeFuturesCosts", () => {
     const buyTurnover = entryPrice * qty;
     const sellTurnover = exitPrice * qty;
     const brokerage = brokeragePerOrder * 2;
-    const exchTxn = 0.000019 * (buyTurnover + sellTurnover);
+    const exchTxn = 0.0000183 * (buyTurnover + sellTurnover);
     const sebi = 0.000001 * (buyTurnover + sellTurnover);
-    const stt = 0.0002 * sellTurnover;
+    const stt = 0.0005 * sellTurnover;
     const stamp = 0.00002 * buyTurnover;
     const expectedGst = 0.18 * (brokerage + exchTxn + sebi);
     const expectedTotal = brokerage + stt + exchTxn + sebi + stamp + expectedGst;

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   placeOrder,
   placeLimitEntry,
@@ -6,8 +6,10 @@ import {
   placeStopLossOrder,
   placeStopEntry,
   cancelOrder,
+  getOrderDetails,
   extractOrderId,
   isTokenErrorData,
+  isRetryableError,
   normalizeStatus,
   ORDER_TYPE,
   ORDER_SIDE,
@@ -176,5 +178,89 @@ describe("paper-trading order helpers (no broker call)", () => {
 
   it("cancelOrder short-circuits for PAPER ids", async () => {
     await expect(cancelOrder("PAPER-123", session)).resolves.toEqual({ success: true });
+  });
+});
+
+// Regression for a live-readiness audit finding: getOrderDetails and cancelOrder previously hit
+// endpoints that don't exist on FYERS's real API (GET/DELETE /orders/:id as a path segment, plus
+// a POST /orders/cancel fallback) — confirmed against the fyers-apiv3 SDK's actual Config class
+// and orderbook()/cancel_order() implementations. FYERS's orderbook is a single GET /orders
+// resource filtered by an "id" query param, wrapping results in an "orderBook" array; cancel is a
+// DELETE to the SAME /orders/sync endpoint place_order POSTs to, with the id in the JSON body.
+// Every real (non-paper) order-status check and cancel attempt silently 404'd/failed before this
+// fix — waitForFill's poll loop absorbs that as "still pending" rather than surfacing an error,
+// so a filled live position could go completely unrecognized with no stop-loss ever attached.
+describe("getOrderDetails / cancelOrder (real FYERS endpoint + response-shape correctness)", () => {
+  const realSession = { appId: "APPID", accessToken: "TOKEN" };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("getOrderDetails calls GET /orders with the id as a query param, not a path segment", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ s: "ok", orderBook: [{ id: "808", status: 2, filledQty: 30, tradedPrice: 55100 }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getOrderDetails("808", realSession);
+
+    const calledUrl = fetchMock.mock.calls[0][0];
+    expect(calledUrl).toContain("/orders?id=808");
+  });
+
+  it("getOrderDetails reads the order from the orderBook array, not a bare data object", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ s: "ok", orderBook: [{ id: "808", status: 2, filledQty: 30, tradedPrice: 55100.5 }] }),
+      })
+    );
+    const result = await getOrderDetails("808", realSession);
+    expect(result.status).toBe("FILLED");
+    expect(result.filledQty).toBe(30);
+  });
+
+  it("getOrderDetails falls back to data.data if orderBook is absent (defensive)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ s: "ok", data: [{ id: "808", status: 1 }] }),
+      })
+    );
+    const result = await getOrderDetails("808", realSession);
+    expect(result.status).toBe("CANCELLED");
+  });
+
+  it("cancelOrder (real, non-paper) sends DELETE to /orders/sync with the id in the JSON body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ s: "ok" }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await cancelOrder("808", realSession);
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/orders\/sync$/);
+    expect(opts.method).toBe("DELETE");
+    expect(JSON.parse(opts.body)).toEqual({ id: "808" });
+  });
+
+  it("a FYERS rate-limit response (HTTP 200, body code -353) is classified retryable", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ s: "error", code: -353, message: "API Limit exceeded overall per sec" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // getOrderDetails retries twice (attempts:2) before giving up — two fetch calls is the
+    // observable proof the rate-limit error was classified retryable, not failed immediately.
+    await expect(getOrderDetails("808", realSession)).rejects.toThrow(/API Limit exceeded/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("isRetryableError still treats a plain body-level error (no known rate-limit code) as non-retryable", () => {
+    expect(isRetryableError(new Error("some validation error"))).toBe(false);
   });
 });
