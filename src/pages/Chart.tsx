@@ -93,9 +93,10 @@ export function Chart() {
   // bot's live signal state, since the bot scans on its own poll cycle independently of this page.
   const [showEma5, setShowEma5] = useState(true);
   const [showEma20, setShowEma20] = useState(true);
-  // Marks candles matching EMA5T's alert rule (5-EMA alert + 20-EMA trend gate — see
-  // src/lib/emaAlerts.ts). Same honesty caveat as the EMA lines above: a general application of
-  // the rule to whatever's on screen, not a live readout of the bot's own signal state.
+  // Marks only alerts that would actually become a trade — triggered AND before the 14:00 IST
+  // entry cutoff (see the tradeable filter below, src/lib/emaAlerts.ts). Same honesty caveat as
+  // the EMA lines above: a general application of the rule to whatever's on screen, not a live
+  // readout of the bot's own signal/position state.
   const [showSignals, setShowSignals] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -265,11 +266,23 @@ export function Chart() {
     });
   }
 
-  const alerts = showSignals ? findEmaAlerts(chartCandles) : [];
+  const allAlerts = showSignals ? findEmaAlerts(chartCandles) : [];
   // Simulates each alert forward (did price actually reach the entry, then SL or target first) —
   // the same entry/SL/target formula and SL-checked-first tie-break the live bot's backtest uses
   // (see src/lib/emaAlerts.ts's resolveEmaAlerts doc comment for exactly what's mirrored).
-  const resolved = resolveEmaAlerts(chartCandles, alerts);
+  const allResolved = resolveEmaAlerts(chartCandles, allAlerts);
+
+  // Only show signals that would actually become a trade: it must have triggered (a
+  // NOT_TRIGGERED alert never opened a position) AND not be past the 14:00 IST entry cutoff
+  // (pastEntryCutoff — the bot's canTakeTrade gate refuses any new entry from that point on, so
+  // a "signal" past cutoff would sit there and get cancelled, never actually fill). Filtering
+  // alerts/resolved together (not just markers) keeps every downstream use — entry arrows,
+  // outcome dots, the "still open" SL/Target lines — consistent with the SAME tradeable set.
+  const tradeable = allResolved
+    .map((r, i) => ({ alert: allAlerts[i], resolved: r }))
+    .filter(({ resolved: r }) => r.triggerIndex !== null && !r.pastEntryCutoff);
+  const alerts = tradeable.map((t) => t.alert);
+  const resolved = tradeable.map((t) => t.resolved);
 
   // Entry arrow only (no text label) — a label like "B"/"S" reads too easily as "Buy"/"Sell",
   // overclaiming that this is a confirmed trade rather than just an EMA5T alert candle.
@@ -374,7 +387,7 @@ export function Chart() {
           </button>
           <button
             onClick={() => setShowSignals((v) => !v)}
-            title="EMA5T alert candles (5-EMA alert + 20-EMA trend gate) — not a claim about the bot's live signal state on this symbol/timeframe"
+            title="EMA5T alerts that triggered before the 14:00 IST entry cutoff — i.e. would actually become a trade. Not a claim about the bot's live signal/position state on this symbol/timeframe"
             className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-2 text-2xs font-medium transition ${
               showSignals ? "border-border-hover bg-surface text-zinc-200" : "border-border-subtle bg-surface text-zinc-500 hover:text-zinc-300"
             }`}

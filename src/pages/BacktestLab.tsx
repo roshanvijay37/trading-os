@@ -11,6 +11,7 @@ import { downloadBacktestPdf } from "../lib/backtestPdfReport";
 import { computeBacktestAnalytics, filterTradesByDate, type DateFilterPreset } from "../lib/backtestAnalytics";
 import { useTheme } from "../store/theme";
 import { getChartPalette } from "../lib/chartTheme";
+import { istTickMarkFormatter, istTimeFormatter } from "../lib/chartTime";
 
 // entryTime/exitTime are UTC ISO timestamps from the backend — format explicitly in IST (the
 // market's own timezone) rather than the viewer's local timezone, since a trade's date/time only
@@ -509,7 +510,8 @@ export function BacktestLab() {
         layout: { background: { type: ColorType.Solid, color: palette.background }, textColor: palette.text },
         grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
         rightPriceScale: { borderColor: palette.border },
-        timeScale: { borderColor: palette.border, timeVisible: true, secondsVisible: false },
+        timeScale: { borderColor: palette.border, timeVisible: true, secondsVisible: false, tickMarkFormatter: istTickMarkFormatter },
+        localization: { timeFormatter: istTimeFormatter },
         width,
         height: 420,
       });

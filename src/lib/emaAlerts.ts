@@ -16,9 +16,12 @@ import { calculateEMA } from "./strategies/engine";
 export type AlertType = "BULLISH" | "BEARISH";
 
 export interface AlertCandle {
-  // Optional: only needed for the gap-adjusted fill check in resolveEmaAlerts. Callers that omit
-  // it (e.g. existing tests) simply get no gap adjustment, never a crash.
+  // Optional: only needed for the gap-adjusted fill check and the entry-cutoff check in
+  // resolveEmaAlerts. Callers that omit either (e.g. existing tests) simply get no gap
+  // adjustment / no cutoff check, never a crash.
   open?: number;
+  /** Epoch SECONDS. Needed to determine whether the trigger candle falls at/after the entry cutoff. */
+  time?: number;
   close: number;
   high: number;
   low: number;
@@ -37,6 +40,28 @@ export interface ResolvedAlert {
   outcome: TradeOutcome;
   /** Index of the candle where the outcome resolved (TARGET/SL only). */
   outcomeIndex: number | null;
+  /**
+   * True when the trigger (fill) candle falls at/after CONFIG.MAX_TIME_ENTRY_HOUR (14:00 IST) —
+   * the live/paper bot's canTakeTrade gate refuses any new entry from that point on
+   * (server/src/services/autoTrader.js's checkTimeFilter), so a signal like this would never
+   * actually become a trade no matter how the price moved afterward. False (never blocked) when
+   * `time` wasn't supplied on the candles, or the alert never triggered at all.
+   */
+  pastEntryCutoff: boolean;
+}
+
+// Matches CONFIG.MAX_TIME_ENTRY_HOUR's default in server/src/services/autoTrader.js — no new
+// EMA5T entries at/after 14:00 IST. Hardcoded here at the same fidelity level as this file's other
+// mirrored constants (the 2x target multiplier, 0.05% stop-fill slippage): a reasonable default,
+// not a live read of the bot's actual running config.
+const MAX_TIME_ENTRY_HOUR = 14;
+
+/** IST wall-clock hour (0-23) for an epoch-SECONDS timestamp, matching checkTimeFilter's math
+ * exactly (India has no DST, so a fixed +5:30 offset is exact). */
+function istHourOf(epochSec: number): number {
+  const utcMinutesOfDay = Math.floor(epochSec / 60) % 1440;
+  const istMinutes = (utcMinutesOfDay + 330) % 1440;
+  return Math.floor(istMinutes / 60);
 }
 
 export interface AlertPoint {
@@ -93,7 +118,7 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
  * nominal entry = alert candle's high/low, SL = alert candle's low/high, target = entry ± 2x
  * risk (matches autoTrader.js's EMA5T entry math exactly).
  *
- * Three rules mirrored from the real system, all load-bearing for correctness:
+ * Four rules mirrored from the real system, all load-bearing for correctness:
  *  1. A resting entry order is cancelled the moment a NEWER alert appears (autoTrader.js's
  *     manageFuturesPending: "a previous resting order... must be cancelled before arming the
  *     new one") — so the trigger search for alert k is bounded by alert k+1's candle index.
@@ -107,6 +132,9 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
  *     recomputed from the real (gap-adjusted) entry to preserve the intended risk:reward — this
  *     mirrors checkEntryOrderFill/computeGapAdjustedTarget (autoTrader.js) and buildPosition
  *     (routes/backtest.js) exactly. Keep this in sync if any of those change.
+ *  4. A trigger at/after 14:00 IST is flagged via pastEntryCutoff — the bot's canTakeTrade gate
+ *     (checkTimeFilter) refuses any new entry from that point on, so a "signal" like this would
+ *     never actually become a trade no matter how price moved afterward.
  */
 export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): ResolvedAlert[] {
   return alerts.map((alert, k) => {
@@ -129,7 +157,7 @@ export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): 
     if (triggerIndex === null) {
       const risk = Math.abs(nominalEntry - sl);
       const target = isBullish ? nominalEntry + 2 * risk : nominalEntry - 2 * risk;
-      return { alertIndex: alert.index, type: alert.type, entry: nominalEntry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null };
+      return { alertIndex: alert.index, type: alert.type, entry: nominalEntry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null, pastEntryCutoff: false };
     }
 
     // Gap-adjusted fill (rule 3 above). `open` is optional — callers that don't supply it
@@ -140,6 +168,7 @@ export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): 
     const entry = gappedThrough ? (triggerOpen as number) : nominalEntry;
     const risk = Math.abs(entry - sl);
     const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
+    const pastEntryCutoff = triggerCandle.time !== undefined && istHourOf(triggerCandle.time) >= MAX_TIME_ENTRY_HOUR;
 
     let outcome: TradeOutcome = "OPEN";
     let outcomeIndex: number | null = null;
@@ -157,6 +186,6 @@ export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): 
       }
     }
 
-    return { alertIndex: alert.index, type: alert.type, entry, sl, target, triggerIndex, outcome, outcomeIndex };
+    return { alertIndex: alert.index, type: alert.type, entry, sl, target, triggerIndex, outcome, outcomeIndex, pastEntryCutoff };
   });
 }

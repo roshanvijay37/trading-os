@@ -202,4 +202,49 @@ describe("resolveEmaAlerts", () => {
     const [result] = resolveEmaAlerts(candles, alerts);
     expect(result).toMatchObject({ entry: 110, target: 116 });
   });
+
+  // pastEntryCutoff: mirrors checkTimeFilter (autoTrader.js) — no new EMA5T entry at/after 14:00
+  // IST. `ct()` adds a `time` (epoch seconds) on top of `cg()`'s open/close/high/low.
+  // TIME_10AM_IST / TIME_2PM_IST / TIME_3PM_IST are epoch-second instants at exactly those IST
+  // wall-clock hours (arbitrary date — only the hour-of-day matters to istHourOf).
+  const ct = (open: number, close: number, high: number, low: number, time: number) => ({ open, close, high, low, time });
+  const TIME_10AM_IST = 16200; // 1970-01-01 10:00:00 IST
+  const TIME_2PM_IST = 30600; // 1970-01-01 14:00:00 IST — AT the cutoff (blocked)
+  const TIME_3PM_IST = 34200; // 1970-01-01 15:00:00 IST — well past the cutoff
+
+  it("flags pastEntryCutoff when the trigger candle falls at/after 14:00 IST", () => {
+    const candles = [c(108, 110, 107), ct(112, 112, 111, 109, TIME_3PM_IST)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result.pastEntryCutoff).toBe(true);
+  });
+
+  it("flags pastEntryCutoff exactly AT 14:00 IST (hour >= cutoff, not just strictly after)", () => {
+    const candles = [c(108, 110, 107), ct(112, 112, 111, 109, TIME_2PM_IST)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result.pastEntryCutoff).toBe(true);
+  });
+
+  it("does not flag pastEntryCutoff when the trigger candle is well before 14:00 IST", () => {
+    const candles = [c(108, 110, 107), ct(112, 112, 111, 109, TIME_10AM_IST)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result.pastEntryCutoff).toBe(false);
+  });
+
+  it("does not flag pastEntryCutoff when candles don't supply a `time` field at all", () => {
+    const candles = [c(108, 110, 107), c(112, 111, 109)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result.pastEntryCutoff).toBe(false);
+  });
+
+  it("never flags pastEntryCutoff for a NOT_TRIGGERED alert (there is no trigger candle to check)", () => {
+    const candles = [ct(108, 108, 110, 107, TIME_3PM_IST), ct(109, 109, 109, 106, TIME_3PM_IST + 900)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result.outcome).toBe("NOT_TRIGGERED");
+    expect(result.pastEntryCutoff).toBe(false);
+  });
 });

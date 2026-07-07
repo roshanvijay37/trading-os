@@ -7,39 +7,11 @@
  * chart.addSeries(...) form does not exist in 4.2.
  */
 
-import { ColorType, createChart, LineStyle, TickMarkType, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
+import { ColorType, createChart, LineStyle, type IChartApi, type ISeriesApi, type Time } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../../store/theme";
 import { getChartPalette } from "../../lib/chartTheme";
-
-// lightweight-charts formats all axis/crosshair times using the BROWSER's local timezone by
-// default — there's no automatic notion of "the market's own timezone." Every candle here is a
-// raw IST-market timestamp, so without this, a viewer whose machine isn't set to IST sees every
-// time label offset from the real market time (the whole session looks wrong, not just part of
-// it, since it's a constant offset). Force IST explicitly everywhere a time gets rendered.
-function formatIst(timeSec: number, opts: Intl.DateTimeFormatOptions): string {
-  return new Date(timeSec * 1000).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", ...opts });
-}
-
-function istTickMarkFormatter(time: Time, tickMarkType: TickMarkType): string {
-  const timeSec = time as number;
-  switch (tickMarkType) {
-    case TickMarkType.Year:
-      return formatIst(timeSec, { year: "numeric" });
-    case TickMarkType.Month:
-      return formatIst(timeSec, { month: "short" });
-    case TickMarkType.DayOfMonth:
-      return formatIst(timeSec, { day: "numeric", month: "short" });
-    case TickMarkType.TimeWithSeconds:
-      return formatIst(timeSec, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-    default:
-      return formatIst(timeSec, { hour: "2-digit", minute: "2-digit", hour12: false });
-  }
-}
-
-function istTimeFormatter(time: Time): string {
-  return formatIst(time as number, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-}
+import { istTickMarkFormatter, istTimeFormatter } from "../../lib/chartTime";
 
 export interface CandlePoint {
   /** Unix epoch SECONDS (lightweight-charts requirement). */
