@@ -33,10 +33,21 @@ const MAX_DAYS_PER_REQUEST = 100;
 const MAX_DAYS_PER_REQUEST_DAILY = 366;
 const DAY_IN_SECONDS = 86400;
 
+// A request whose range extends to "now" or later can still gain NEW candles as the day
+// progresses (e.g. the live Chart page polls the SAME symbol/resolution/date-range every 5s,
+// expecting fresh candles). The cache key is derived from calendar-date strings that don't
+// change intraday, so caching such a request would freeze the response at whatever it was on
+// the FIRST call of the day — exactly what made the live chart stop updating. Only a range
+// that's already fully in the past is safe to cache indefinitely.
+function isRangeFinalized(toTs) {
+  return toTs <= Math.floor(Date.now() / 1000);
+}
+
 // Exported for unit tests (chunking behavior) — not part of the route's public API surface.
 export async function fetchHistoricalData(symbol, resolution, fromTs, toTs, accessToken) {
+  const cacheable = isRangeFinalized(toTs);
   const cacheKey = `${symbol}_${resolution}_${fromTs}_${toTs}`;
-  if (dataCache.has(cacheKey)) return dataCache.get(cacheKey);
+  if (cacheable && dataCache.has(cacheKey)) return dataCache.get(cacheKey);
 
   const isIntraday = INTRADAY_RESOLUTIONS.includes(resolution);
   const maxDays = isIntraday ? MAX_DAYS_PER_REQUEST : MAX_DAYS_PER_REQUEST_DAILY;
@@ -72,7 +83,7 @@ export async function fetchHistoricalData(symbol, resolution, fromTs, toTs, acce
       return true;
     });
 
-    dataCache.set(cacheKey, unique);
+    if (cacheable) dataCache.set(cacheKey, unique);
     return unique;
   }
 
@@ -81,8 +92,9 @@ export async function fetchHistoricalData(symbol, resolution, fromTs, toTs, acce
 }
 
 async function fetchSingleRange(symbol, resolution, fromTs, toTs, accessToken) {
+  const cacheable = isRangeFinalized(toTs);
   const cacheKey = `${symbol}_${resolution}_${fromTs}_${toTs}`;
-  if (dataCache.has(cacheKey)) return dataCache.get(cacheKey);
+  if (cacheable && dataCache.has(cacheKey)) return dataCache.get(cacheKey);
 
   const url = `${FYERS_DATA_BASE}/history?symbol=${encodeURIComponent(symbol)}&resolution=${resolution}&date_format=0&range_from=${fromTs}&range_to=${toTs}&cont_flag=1`;
 
@@ -102,7 +114,7 @@ async function fetchSingleRange(symbol, resolution, fromTs, toTs, accessToken) {
   }
 
   const candles = data.candles || [];
-  dataCache.set(cacheKey, candles);
+  if (cacheable) dataCache.set(cacheKey, candles);
   return candles;
 }
 

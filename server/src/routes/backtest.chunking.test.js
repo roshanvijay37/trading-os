@@ -67,3 +67,42 @@ describe("fetchHistoricalData chunking", () => {
     }
   });
 });
+
+// Regression: the live Chart page polls /backtest/run every 5s with fromDate/toDate strings
+// that don't change intraday (both are calendar dates, and toDate is always "today" while the
+// market is open) — so the cache key was identical across every poll for the whole day, and the
+// FIRST successful fetch got cached and silently served for every subsequent poll, freezing the
+// chart at whatever candles existed when the page first loaded that day. Only a range that's
+// already fully in the past (toTs <= now) is safe to cache indefinitely.
+describe("fetchHistoricalData caching (only fully-historical ranges are cached)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("does NOT cache a request whose range extends to now or later (e.g. a live chart's 'through today' poll)", async () => {
+    const fetchMock = fetchReturning([[[1000, 1, 1, 1, 1, 0]], [[2000, 1, 1, 1, 1, 0]]]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const now = Math.floor(Date.now() / 1000);
+    const toTs = now + DAY; // extends into the future — not yet finalized
+    const fromTs = toTs - 7 * DAY;
+
+    await fetchHistoricalData("NSE:NIFTYBANK-INDEX", "5", fromTs, toTs, "tok");
+    await fetchHistoricalData("NSE:NIFTYBANK-INDEX", "5", fromTs, toTs, "tok"); // identical params
+
+    expect(fetchMock.mock.calls.length).toBe(2); // second call was NOT served from cache
+  });
+
+  it("still caches a request whose range is safely in the past (repeated identical backtest runs)", async () => {
+    const fetchMock = fetchReturning([[[1000, 1, 1, 1, 1, 0]]]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const toTs = 500 * DAY; // far in the past relative to real time
+    const fromTs = toTs - 7 * DAY;
+
+    await fetchHistoricalData("NSE:NIFTYBANK-INDEX", "5", fromTs, toTs, "tok");
+    await fetchHistoricalData("NSE:NIFTYBANK-INDEX", "5", fromTs, toTs, "tok");
+
+    expect(fetchMock.mock.calls.length).toBe(1); // second call WAS served from cache
+  });
+});

@@ -333,7 +333,15 @@ async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
     aggregateOHLC(shortName, tf, HISTORY_CANDLES).map((c) => [c.time, c.open, c.high, c.low, c.close, c.volume]),
     timeframeMinutes
   );
-  if (tickRows.length >= 6) {
+  // EMA5T (the only live strategy) needs closes.slice(0,-1).length >= 20 for its trend gate, i.e.
+  // candles.length >= 21 — the old ">=6" threshold was sized for the legacy EMA5 rule and handed
+  // off to tick-only candles (aggregateOHLC resets to empty every session — see its own
+  // session-boundary comment) long before there was enough depth for EMA5T to ever fire. That
+  // silently blinded the trend gate for large, predictable stretches of every day: permanently on
+  // 30m from ~12:15 IST on (a session can never accumulate 21 x 30m candles), and for ~3h45m
+  // (~10:45-14:30 IST) on 15m. Require the SAME depth EMA5T actually needs before trusting
+  // tick-only data over the (now 21-calendar-day-deep) REST fallback.
+  if (tickRows.length >= 21) {
     logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, timeframe: tf, count: tickRows.length });
     return tickRows;
   }
@@ -489,8 +497,13 @@ function checkCorrelationFilter(underlyingName) {
   // A resting (not-yet-filled) entry on another underlying is exposure just as real as an OPEN
   // position for this gate's purpose — without this, two correlated resting orders can both arm
   // (neither is "open" yet when the other is checked) and both later fill, defeating
-  // ALLOW_CORRELATED_TRADES:false the moment both underlyings are selected.
-  const hasPendingOnOther = Array.from(pendingEntries.values()).some((p) => p.underlying !== underlyingName);
+  // ALLOW_CORRELATED_TRADES:false the moment both underlyings are selected. Only count entries
+  // that actually got placed (entryOrderId truthy) — matches computeCommittedMargin's identical
+  // filter. A gate-skipped "ghost" entry (entryOrderId:null, e.g. from a transient stale-data or
+  // margin check that failed for one cycle) has zero real exposure and can otherwise sit in
+  // pendingEntries for the rest of the day, permanently blocking every future alert on every
+  // OTHER underlying for no real reason.
+  const hasPendingOnOther = Array.from(pendingEntries.values()).some((p) => p.underlying !== underlyingName && p.entryOrderId);
   if (hasOpenTrade || hasPendingOnOther) {
     console.log(`[AUTO-TRADER] Correlation filter: already in trade on other underlying`);
     return false;
@@ -894,6 +907,14 @@ async function closePositionInner(position, session, reason) {
 async function reconcileStopLossOrders(session) {
   for (const position of openPositions) {
     if (position.status !== "OPEN" || !position.slOrderId) continue;
+    // Synthetic paper SL orders don't exist at the broker at all — never query them (matches
+    // cancelOrder's own "PAPER-" short-circuit, and ensureStopLoss's paper branch, which treats
+    // any existing paper slOrderId as always "alive"). Without this, every open paper position
+    // triggered a REAL FYERS getOrderDetails call every monitor cycle using a synthetic id never
+    // submitted to the broker — wasted API quota at best, and at worst a risk that FYERS's
+    // orderbook-filter fallback (see getOrderDetails' list[0] fallback) attributes an unrelated
+    // real order's fill status onto this paper position, corrupting or falsely closing it.
+    if (String(position.slOrderId).startsWith("PAPER-")) continue;
     try {
       const details = await getOrderDetails(position.slOrderId, session);
       // A concurrent closePosition (e.g. emergencyStop's un-awaited flattenAllPositions) may have
@@ -1507,6 +1528,14 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const paperTrading = CONFIG.PAPER_TRADING;
   const latest = candles[candles.length - 1]; // last COMPLETED candle (in-progress dropped upstream)
 
+  // Never make a fill or arm decision from stale candle data — a frozen tick feed (a known,
+  // documented failure mode: the FYERS data-socket SDK singleton can pin to a dead token and stop
+  // updating) could otherwise silently feed an old `latest` candle into checkEntryOrderFill's
+  // paper-mode fill/gap-price decision, with no freshness check ever consulted before this. Skip
+  // this cycle entirely and retry once fresh data arrives — matches how staleness is already
+  // treated elsewhere in this function (a reason to hold off, not to act).
+  if (isCandleStale(candles, tf)) return;
+
   // ── Step 1: resolve any EXISTING pending entry's fate BEFORE considering a new alert — a fill
   // must never be lost to a same-cycle overwrite by a fresh alert (see manageFuturesPending doc).
   const p = pendingEntries.get(key);
@@ -1609,13 +1638,13 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
 
     // Still resting (PENDING, nothing filled yet) — re-validate it's still worth holding. Any gate
     // tripping cancels the resting order (real cancelOrder live; a no-op for paper/never-placed).
-    const dataFresh = !isCandleStale(candles, tf);
+    // Data freshness is already guaranteed by the function's own top-of-function stale check.
     const timeOk = checkTimeFilter();
     const riskOk = canTakeTrade(underlying.name);
-    if (!timeOk || !riskOk || !dataFresh) {
+    if (!timeOk || !riskOk) {
       const cancelled = await cancelPendingEntryOrder(p, paperTrading, session);
       if (!cancelled.ok) return; // couldn't confirm — leave tracked, retry the cancel next cycle
-      const reason = !timeOk ? "TIME" : !riskOk ? "RISK_GATE" : "STALE_DATA";
+      const reason = !timeOk ? "TIME" : "RISK_GATE";
       pendingEntries.delete(key);
       saveState();
       logAudit({ type: "EMA5T_PENDING_CANCELLED", key, reason });
