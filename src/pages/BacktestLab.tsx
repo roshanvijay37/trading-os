@@ -139,6 +139,21 @@ export function BacktestLab() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"both" | "table" | "chart" | "candles">("both");
   const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
+  // Trade Log column sort — display-only (see sortedTrades below). Deliberately does NOT touch
+  // filteredTrades itself, since baselineCapital/the chart markers/the PDF date range all assume
+  // filteredTrades stays in chronological (entry) order.
+  type TradeSortColumn = "id" | "entryTime" | "side" | "entryPrice" | "exitPrice" | "pnl" | "pnlPercent" | "exitReason" | "barsHeld";
+  const [sortColumn, setSortColumn] = useState<TradeSortColumn>("id");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const handleSort = (column: TradeSortColumn) => {
+    if (column === sortColumn) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+  const sortArrow = (column: TradeSortColumn) => (sortColumn === column ? (sortDirection === "asc" ? "▲" : "▼") : "");
   // Post-hoc filter over an already-completed run's trades — re-slices a long multi-year result
   // (e.g. "this year only") instantly, client-side, without re-running the backtest.
   const [dateFilter, setDateFilter] = useState<DateFilterPreset>("ALL");
@@ -157,6 +172,28 @@ export function BacktestLab() {
     if (!result) return [];
     return filterTradesByDate(result.trades || [], dateFilter, customFrom, customTo);
   }, [result, dateFilter, customFrom, customTo]);
+
+  // Trade Log table display order ONLY — a separate array from filteredTrades so every other
+  // consumer of filteredTrades (baselineCapital, chart markers, PDF export's date range) keeps
+  // seeing chronological order regardless of how the table is currently sorted.
+  const sortedTrades = useMemo(() => {
+    const dir = sortDirection === "asc" ? 1 : -1;
+    const compare = (a: Trade, b: Trade): number => {
+      switch (sortColumn) {
+        case "id": return a.id - b.id;
+        case "entryTime": return new Date(a.entryTime).getTime() - new Date(b.entryTime).getTime();
+        case "side": return a.side.localeCompare(b.side);
+        case "entryPrice": return a.entryPrice - b.entryPrice;
+        case "exitPrice": return a.exitPrice - b.exitPrice;
+        case "pnl": return a.pnl - b.pnl;
+        case "pnlPercent": return a.pnlPercent - b.pnlPercent;
+        case "exitReason": return a.exitReason.localeCompare(b.exitReason);
+        case "barsHeld": return a.barsHeld - b.barsHeld;
+        default: return 0;
+      }
+    };
+    return [...filteredTrades].sort((a, b) => compare(a, b) * dir);
+  }, [filteredTrades, sortColumn, sortDirection]);
 
   // The account's equity going INTO the filtered window — the equity value right after whatever
   // trade immediately precedes the window's first included trade, or the original starting
@@ -992,19 +1029,37 @@ export function BacktestLab() {
                 <table className="w-full text-2xs">
                   <thead>
                     <tr className="border-b border-border text-zinc-600">
-                      <th className="px-2 py-2 text-left font-medium">#</th>
-                      <th className="px-2 py-2 text-left font-medium">Entry Time (IST)</th>
-                      <th className="px-2 py-2 text-left font-medium">Side</th>
-                      <th className="px-2 py-2 text-right font-medium">Entry</th>
-                      <th className="px-2 py-2 text-right font-medium">Exit</th>
-                      <th className="px-2 py-2 text-right font-medium">P&L</th>
-                      <th className="px-2 py-2 text-right font-medium">%</th>
-                      <th className="px-2 py-2 text-left font-medium">Reason</th>
-                      <th className="px-2 py-2 text-right font-medium">Bars</th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-left font-medium hover:text-zinc-300" onClick={() => handleSort("id")}>
+                        # <span className="text-zinc-500">{sortArrow("id")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-left font-medium hover:text-zinc-300" onClick={() => handleSort("entryTime")}>
+                        Entry Time (IST) <span className="text-zinc-500">{sortArrow("entryTime")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-left font-medium hover:text-zinc-300" onClick={() => handleSort("side")}>
+                        Side <span className="text-zinc-500">{sortArrow("side")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-right font-medium hover:text-zinc-300" onClick={() => handleSort("entryPrice")}>
+                        Entry <span className="text-zinc-500">{sortArrow("entryPrice")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-right font-medium hover:text-zinc-300" onClick={() => handleSort("exitPrice")}>
+                        Exit <span className="text-zinc-500">{sortArrow("exitPrice")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-right font-medium hover:text-zinc-300" onClick={() => handleSort("pnl")}>
+                        P&L <span className="text-zinc-500">{sortArrow("pnl")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-right font-medium hover:text-zinc-300" onClick={() => handleSort("pnlPercent")}>
+                        % <span className="text-zinc-500">{sortArrow("pnlPercent")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-left font-medium hover:text-zinc-300" onClick={() => handleSort("exitReason")}>
+                        Reason <span className="text-zinc-500">{sortArrow("exitReason")}</span>
+                      </th>
+                      <th className="cursor-pointer select-none px-2 py-2 text-right font-medium hover:text-zinc-300" onClick={() => handleSort("barsHeld")}>
+                        Bars <span className="text-zinc-500">{sortArrow("barsHeld")}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.isArray(filteredTrades) && filteredTrades.map((t: Trade) => (
+                    {Array.isArray(sortedTrades) && sortedTrades.map((t: Trade) => (
                       <tr key={t.id} onClick={() => setSelectedTradeId(t.id)} className={`cursor-pointer border-b border-border-subtle transition ${selectedTradeId === t.id ? "bg-surface" : "hover:bg-surface/50"}`}>
                         <td className="px-2 py-2 text-zinc-600">{t.id}</td>
                         <td className="px-2 py-2 whitespace-nowrap font-mono text-zinc-400" title={`Exit: ${formatTradeDateTime(t.exitTime)} IST`}>{formatTradeDateTime(t.entryTime)}</td>
