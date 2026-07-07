@@ -88,9 +88,9 @@ export function Chart() {
   const [lastUpdate, setLastUpdate] = useState("");
   // EMA 5 / EMA 20 — the same two indicators EMA5T's live/paper bot uses for its alert rule and
   // trend gate (server/src/services/emaStrategy.js), computed here with the identical canonical
-  // math (src/lib/strategies/engine.ts's calculateEMA). Shown on whatever symbol/timeframe is
-  // currently selected — a general-purpose overlay, not a claim that this IS the bot's live signal
-  // (the bot trades the futures contract specifically; this page charts the index).
+  // math (src/lib/strategies/engine.ts's calculateEMA). Shown on the actual futures contract the
+  // bot trades (resolved below) — still a general-purpose overlay, not a claim that this IS the
+  // bot's live signal state, since the bot scans on its own poll cycle independently of this page.
   const [showEma5, setShowEma5] = useState(true);
   const [showEma20, setShowEma20] = useState(true);
   // Marks candles matching EMA5T's alert rule (5-EMA alert + 20-EMA trend gate — see
@@ -99,11 +99,16 @@ export function Chart() {
   const [showSignals, setShowSignals] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // EMA5T trades the futures contract, not the index — resolve the actual current-month tradable
+  // contract for whichever underlying is selected, the same way the Backtest Lab's Futures mode
+  // does (server/src/routes/backtest.js's /futures-range), instead of a hardcoded symbol that
+  // would go stale at every monthly expiry.
+  const [tradedSymbol, setTradedSymbol] = useState<string | null>(null);
+  const [resolvingFutures, setResolvingFutures] = useState(false);
+
   const symbols = [
-    { value: "NSE:NIFTYBANK-INDEX", label: "BANKNIFTY" },
-    { value: "NSE:NIFTY50-INDEX", label: "NIFTY 50" },
-    { value: "NSE:FINNIFTY-INDEX", label: "FINNIFTY" },
-    { value: "BSE:SENSEX", label: "SENSEX" },
+    { value: "NSE:NIFTYBANK-INDEX", label: "BANKNIFTY FUT" },
+    { value: "NSE:NIFTY50-INDEX", label: "NIFTY FUT" },
   ];
 
   const timeframes = [
@@ -122,7 +127,35 @@ export function Chart() {
     });
   }, []);
 
+  // Resolve the current tradable futures contract whenever the selected underlying changes.
+  useEffect(() => {
+    let cancelled = false;
+    setTradedSymbol(null);
+    setResolvingFutures(true);
+    setError("");
+    backtestApi
+      .resolveFuturesRange(symbol)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.tradedSymbol) {
+          setTradedSymbol(res.tradedSymbol);
+        } else {
+          setError("Could not resolve the current futures contract for this underlying.");
+        }
+      })
+      .catch((err: any) => {
+        if (!cancelled) setError(err?.message || "Could not resolve the current futures contract for this underlying.");
+      })
+      .finally(() => {
+        if (!cancelled) setResolvingFutures(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol]);
+
   const fetchData = async () => {
+    if (!tradedSymbol) return;
     try {
       const to = new Date();
       const from = new Date();
@@ -130,7 +163,7 @@ export function Chart() {
       from.setDate(from.getDate() - daysBack);
 
       const data = await backtestApi.run({
-        symbol,
+        symbol: tradedSymbol,
         resolution,
         fromDate: from.toISOString().split("T")[0],
         toDate: to.toISOString().split("T")[0],
@@ -156,7 +189,7 @@ export function Chart() {
       } else if (data.error) {
         setError(data.error);
       } else {
-        setError("No candle data returned for this symbol/timeframe. If today is a weekend or holiday, the last trading session may not be in the requested range.");
+        setError(`No candle data returned for ${tradedSymbol} on this timeframe. If today is a weekend or holiday, the last trading session may not be in the requested range.`);
       }
     } catch (err: any) {
       setError(err.message || "Failed to load chart data");
@@ -169,9 +202,10 @@ export function Chart() {
   // fit is burned on the old data, and the new bars render at the old zoom level.
   useEffect(() => {
     setCandles([]);
-  }, [symbol, resolution]);
+  }, [tradedSymbol, resolution]);
 
   useEffect(() => {
+    if (!tradedSymbol) return;
     setLoading(true);
     fetchData().finally(() => setLoading(false));
 
@@ -183,11 +217,11 @@ export function Chart() {
       clearInterval(statusInterval);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [symbol, resolution, holidays]);
+  }, [tradedSymbol, resolution, holidays]);
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (marketOpen) {
+    if (marketOpen && tradedSymbol) {
       intervalRef.current = setInterval(() => {
         fetchData();
       }, 5000);
@@ -195,7 +229,7 @@ export function Chart() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [marketOpen, symbol, resolution]);
+  }, [marketOpen, tradedSymbol, resolution]);
 
   // Map to lightweight-charts shape: epoch seconds (CandlesChart dedupes/sorts/guards).
   const chartCandles = candles.map((c) => ({
@@ -361,7 +395,7 @@ export function Chart() {
         )}
       </div>
 
-      {loading && candles.length === 0 && (
+      {(resolvingFutures || loading) && candles.length === 0 && (
         <div className="mt-5 rounded-panel border border-border bg-panel p-4">
           <Skeleton className="mb-3 h-4 w-40" />
           <Skeleton className="h-[420px] w-full" />
@@ -384,6 +418,11 @@ export function Chart() {
               <span className="rounded-panel border border-border-subtle bg-surface px-2 py-0.5 text-2xs text-zinc-600">
                 {timeframes.find((t) => t.value === resolution)?.label}
               </span>
+              {tradedSymbol && (
+                <span className="font-mono text-3xs text-zinc-700" title="The actual current-month contract this chart is showing">
+                  {tradedSymbol}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-zinc-600">
               <span className="font-mono">O: {candles[candles.length - 1].open.toFixed(2)}</span>
@@ -399,7 +438,7 @@ export function Chart() {
             height={420}
             showVolume={hasVolume}
             timeVisible={resolution !== "D"}
-            fitKey={`${symbol}:${resolution}`}
+            fitKey={`${tradedSymbol}:${resolution}`}
             overlays={overlays}
             markers={markers}
           />
