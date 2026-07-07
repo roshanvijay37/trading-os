@@ -526,7 +526,11 @@ export function runBacktest(candles, config) {
             // 15:15 forced exit was mispriced to min(open,target), distorting INDEX-mode parity P&L.
             exitPrice = candle.close;
           } else if (exitReason === "SL") {
-            const rawExit = position.side === "LONG" ? Math.max(candle.open, position.sl) : Math.min(candle.open, position.sl);
+            // Worst-case fill, mirroring the TARGET branch below: assume the stop fills AT the SL
+            // level, not at the candle's open, unless the candle actually gapped through to a worse
+            // price. A real resting stop order doesn't fill better than its trigger just because
+            // price happened to open above it earlier in the bar.
+            const rawExit = position.side === "LONG" ? Math.min(candle.open, position.sl) : Math.max(candle.open, position.sl);
             exitPrice = Math.round(rawExit * (position.side === "LONG" ? (1 - slippage) : (1 + slippage)) * 100) / 100;
           } else {
             const rawExit = position.side === "LONG" ? Math.min(candle.open, position.target) : Math.max(candle.open, position.target);
