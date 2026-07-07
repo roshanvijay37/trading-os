@@ -160,4 +160,46 @@ describe("resolveEmaAlerts", () => {
     const [result] = resolveEmaAlerts(candles, alerts);
     expect(result).toMatchObject({ entry: 90, sl: 95, target: 80, triggerIndex: 1, outcome: "TARGET", outcomeIndex: 2 });
   });
+
+  // Gap-adjusted fill: mirrors checkEntryOrderFill/computeGapAdjustedTarget (autoTrader.js) and
+  // buildPosition (routes/backtest.js). `open` include (o, close, high, low) — `c()` above omits
+  // it, which exercises the "no gap data available" fallback (asserted separately below).
+  const cg = (open: number, close: number, high: number, low: number) => ({ open, close, high, low });
+
+  it("gap-adjusts a LONG fill to the trigger candle's OPEN when it already cleared the nominal entry", () => {
+    // Alert @0: nominal entry = high (110), sl = low (107). Trigger candle @1 OPENS at 120 —
+    // already past the nominal 110 — so the real fill is 120, not 110. Risk becomes 120-107=13,
+    // target = 120 + 2*13 = 146 (not the nominal 110+2*3=116).
+    const candles = [c(108, 110, 107), cg(120, 122, 125, 118)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ entry: 120, sl: 107, target: 146, triggerIndex: 1 });
+  });
+
+  it("gap-adjusts a SHORT fill to the trigger candle's OPEN when it already cleared the nominal entry", () => {
+    // Alert @0: nominal entry = low (90), sl = high (95). Trigger candle @1 OPENS at 80 — already
+    // past the nominal 90 — so the real fill is 80. Risk becomes 95-80=15, target = 80-2*15=50.
+    const candles = [c(92, 95, 90), cg(80, 78, 82, 75)];
+    const alerts = [{ index: 0, type: "BEARISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ entry: 80, sl: 95, target: 50, triggerIndex: 1 });
+  });
+
+  it("does NOT gap-adjust when the trigger candle's open has not actually cleared the entry", () => {
+    // Trigger candle opens at 108 (below the 110 entry) but its high (111) still crosses it
+    // mid-candle — a normal (non-gapped) trigger, so entry stays at the nominal level.
+    const candles = [c(108, 110, 107), cg(108, 112, 111, 106)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ entry: 110, target: 116 });
+  });
+
+  it("falls back to the nominal (non-gap-adjusted) entry when the trigger candle has no `open` at all", () => {
+    // Same shape as the LONG gap test above, but using c() (no open field) — must reproduce the
+    // pre-gap-adjustment behavior exactly, never throw.
+    const candles = [c(108, 110, 107), c(122, 125, 118)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ entry: 110, target: 116 });
+  });
 });

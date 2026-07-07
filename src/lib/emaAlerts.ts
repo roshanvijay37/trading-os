@@ -16,6 +16,9 @@ import { calculateEMA } from "./strategies/engine";
 export type AlertType = "BULLISH" | "BEARISH";
 
 export interface AlertCandle {
+  // Optional: only needed for the gap-adjusted fill check in resolveEmaAlerts. Callers that omit
+  // it (e.g. existing tests) simply get no gap adjustment, never a crash.
+  open?: number;
   close: number;
   high: number;
   low: number;
@@ -87,10 +90,10 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
 
 /**
  * Simulates each alert forward through the candle history to see what actually happened —
- * entry = alert candle's high/low, SL = alert candle's low/high, target = entry ± 2x risk
- * (matches autoTrader.js's EMA5T entry math exactly).
+ * nominal entry = alert candle's high/low, SL = alert candle's low/high, target = entry ± 2x
+ * risk (matches autoTrader.js's EMA5T entry math exactly).
  *
- * Two rules mirrored from the real system, both load-bearing for correctness:
+ * Three rules mirrored from the real system, all load-bearing for correctness:
  *  1. A resting entry order is cancelled the moment a NEWER alert appears (autoTrader.js's
  *     manageFuturesPending: "a previous resting order... must be cancelled before arming the
  *     new one") — so the trigger search for alert k is bounded by alert k+1's candle index.
@@ -98,30 +101,45 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
  *  2. When a single candle's range spans BOTH the SL and target, SL wins — this matches
  *     routes/backtest.js's if/else-if exit-check order (SL checked before target), the
  *     conservative convention for resolving intrabar ambiguity from OHLC-only data.
+ *  3. If the triggering candle's OPEN already cleared the nominal entry level, the market gapped
+ *     straight through it — the real fill happens at (or near) the open, not the stale nominal
+ *     level. The SL stays at the alert candle's fixed structural level, but the target is
+ *     recomputed from the real (gap-adjusted) entry to preserve the intended risk:reward — this
+ *     mirrors checkEntryOrderFill/computeGapAdjustedTarget (autoTrader.js) and buildPosition
+ *     (routes/backtest.js) exactly. Keep this in sync if any of those change.
  */
 export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): ResolvedAlert[] {
   return alerts.map((alert, k) => {
     const alertCandle = candles[alert.index];
     const isBullish = alert.type === "BULLISH";
-    const entry = isBullish ? alertCandle.high : alertCandle.low;
+    const nominalEntry = isBullish ? alertCandle.high : alertCandle.low;
     const sl = isBullish ? alertCandle.low : alertCandle.high;
-    const risk = Math.abs(entry - sl);
-    const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
 
     const nextAlertIndex = k + 1 < alerts.length ? alerts[k + 1].index : candles.length;
 
     let triggerIndex: number | null = null;
     for (let i = alert.index + 1; i < nextAlertIndex && i < candles.length; i++) {
       const c = candles[i];
-      if (isBullish ? c.high >= entry : c.low <= entry) {
+      if (isBullish ? c.high >= nominalEntry : c.low <= nominalEntry) {
         triggerIndex = i;
         break;
       }
     }
 
     if (triggerIndex === null) {
-      return { alertIndex: alert.index, type: alert.type, entry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null };
+      const risk = Math.abs(nominalEntry - sl);
+      const target = isBullish ? nominalEntry + 2 * risk : nominalEntry - 2 * risk;
+      return { alertIndex: alert.index, type: alert.type, entry: nominalEntry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null };
     }
+
+    // Gap-adjusted fill (rule 3 above). `open` is optional — callers that don't supply it
+    // (e.g. existing tests) just get no gap adjustment, never a crash.
+    const triggerCandle = candles[triggerIndex];
+    const triggerOpen = triggerCandle.open;
+    const gappedThrough = triggerOpen !== undefined && (isBullish ? triggerOpen >= nominalEntry : triggerOpen <= nominalEntry);
+    const entry = gappedThrough ? (triggerOpen as number) : nominalEntry;
+    const risk = Math.abs(entry - sl);
+    const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
 
     let outcome: TradeOutcome = "OPEN";
     let outcomeIndex: number | null = null;
