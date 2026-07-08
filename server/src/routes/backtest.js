@@ -507,7 +507,13 @@ export function runBacktest(candles, config) {
       } else if (position.side === "SHORT" && candle.low <= position.target) {
         exitReason = "TARGET";
         indexExitLevel = position.target;
-      } else if (barsHeld >= maxHoldBars) {
+      } else if (strategy !== "EMA5T" && barsHeld >= maxHoldBars) {
+        // EMA5T has no hold-time cap live — autoTrader.js only ever exits a position via SL,
+        // target, or the 15:15 IST square-off (already handled above). Applying maxHoldBars here
+        // artificially truncated real EMA5T trades (esp. on 15m, where 12 bars is only 3 hours),
+        // then let the backtest re-enter a fresh, untraded signal once "freed up" — a different
+        // trade sequence than live actually experienced, not just a smaller number. Legacy EMA5 /
+        // EMA5_OPTION backtests keep the cap unchanged (no live counterpart to match).
         exitReason = "TIME";
         indexExitLevel = candle.close;
       }
