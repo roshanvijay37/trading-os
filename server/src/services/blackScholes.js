@@ -129,10 +129,11 @@ export function yearsToMonthlyExpiry(timestampMs, expiryWeekday = 4, expiryHourI
 /**
  * Per-symbol option defaults (IV / strike step / lot size / expiry cycle). All overridable per run.
  * Lot sizes and expiry cycles change periodically — verify against current NSE contract specs.
- * expiryWeekday/expiryFrequency confirmed for BANKNIFTY 2026-07-08 (its currently-listed contract
- * is monthly, not weekly — see yearsToMonthlyExpiry); FINNIFTY/SENSEX are a best-effort inference
- * from NSE's broader 2024-25 weekly-consolidation (kept only NIFTY weekly), not independently
- * re-verified against live data the way BANKNIFTY was.
+ * BANKNIFTY (monthly, not weekly) and NIFTY (weekly, but Tuesday not Thursday) were both confirmed
+ * 2026-07-08 by probing FYERS for real currently-listed contracts — the previous defaults for both
+ * were stale/unverified assumptions inherited from elsewhere in the codebase. FINNIFTY/SENSEX are
+ * still a best-effort inference from NSE's broader 2024-25 weekly-consolidation, not independently
+ * re-verified against live data the way BANKNIFTY/NIFTY were.
  */
 export function getOptionDefaults(symbol = "") {
   const s = symbol.toUpperCase();
@@ -142,8 +143,10 @@ export function getOptionDefaults(symbol = "") {
     return { iv: 0.16, strikeInterval: 50, lotSize: 65, expiryWeekday: 2, expiryFrequency: "MONTHLY" };
   if (s.includes("SENSEX"))
     return { iv: 0.15, strikeInterval: 100, lotSize: 20, expiryWeekday: 4, expiryFrequency: "MONTHLY" };
-  // NIFTY 50 — 75→65 per NSE Jan-2026 series revision (FAOP70616); still weekly (Thursday).
-  return { iv: 0.13, strikeInterval: 50, lotSize: 65, expiryWeekday: 4, expiryFrequency: "WEEKLY" };
+  // NIFTY 50 — 75→65 per NSE Jan-2026 series revision (FAOP70616); still weekly, but on TUESDAY —
+  // confirmed 2026-07-08 by probing FYERS for real weekly contracts (Jul 14/21 Tuesdays returned
+  // real data, Jul 9/16 Thursdays returned none). The old Thursday default was itself stale/unverified.
+  return { iv: 0.13, strikeInterval: 50, lotSize: 65, expiryWeekday: 2, expiryFrequency: "WEEKLY" };
 }
 
 /**

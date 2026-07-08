@@ -13,10 +13,10 @@ describe("getOptionDefaults expiry cycle", () => {
     expect(d.expiryWeekday).toBe(3);
   });
 
-  it("NIFTY stays weekly (Thursday) — unaffected by the BankNifty fix", () => {
+  it("NIFTY stays weekly, but on Tuesday not Thursday — confirmed by probing FYERS for real contracts", () => {
     const d = getOptionDefaults("NSE:NIFTY50-INDEX");
     expect(d.expiryFrequency).toBe("WEEKLY");
-    expect(d.expiryWeekday).toBe(4);
+    expect(d.expiryWeekday).toBe(2);
   });
 
   it("FINNIFTY/SENSEX default to monthly too (best-effort, not independently re-verified)", () => {
