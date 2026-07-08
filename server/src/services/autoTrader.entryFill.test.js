@@ -83,6 +83,53 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, latestCandle, qty: 30 });
     expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
   });
+
+  // SL-L semantics: a real stop-limit never fills worse than its limit — it stays resting instead.
+  // Without a limitPrice, paper mode is byte-identical to every test above (limitPrice defaults to 0).
+  describe("limitPrice (SL-L cap on the paper-mode fill)", () => {
+    it("limitPrice: 0 (feature off) is identical to omitting it entirely", async () => {
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, limitPrice: 0, latestCandle, qty: 30 });
+      expect(result.status).toBe("FILLED");
+      expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
+    });
+
+    it("LONG still FILLS when the gap-adjusted price is within the limit", async () => {
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, limitPrice: 55200, latestCandle, qty: 30 });
+      expect(result.status).toBe("FILLED");
+      expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
+    });
+
+    it("LONG stays PENDING (never fills worse than the limit) when the gap-adjusted price would exceed it", async () => {
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, limitPrice: 55110, latestCandle, qty: 30 });
+      expect(result.status).toBe("PENDING");
+      expect(result.filledQty).toBe(0);
+    });
+
+    it("SHORT still FILLS when the gap-adjusted price is within the limit", async () => {
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54950, limitPrice: 54900, latestCandle, qty: 30 });
+      expect(result.status).toBe("FILLED");
+      expect(result.avgFillPrice).toBeCloseTo(54950 * 0.9995, 5);
+    });
+
+    it("SHORT stays PENDING (never fills worse than the limit) when the gap-adjusted price would exceed it", async () => {
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54950, limitPrice: 54930, latestCandle, qty: 30 });
+      expect(result.status).toBe("PENDING");
+      expect(result.filledQty).toBe(0);
+    });
+
+    it("a limit set exactly AT the gap-adjusted price still fills (boundary, not strictly exceeded)", async () => {
+      const exact = 55100 * 1.0005;
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, limitPrice: exact, latestCandle, qty: 30 });
+      expect(result.status).toBe("FILLED");
+    });
+
+    it("a real gap-through fill that would exceed the limit stays PENDING, not silently capped to the limit price", async () => {
+      const gapCandle = [1_700_000_000, 55000, 55200, 54950, 55100, 1000]; // open 55000 > level 54800 — gapped through
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 54800, limitPrice: 54850, latestCandle: gapCandle, qty: 30 });
+      expect(result.status).toBe("PENDING");
+      expect(result.filledQty).toBe(0);
+    });
+  });
 });
 
 // Regression: stopLoss/target used to be copied straight from the nominal alert level computed

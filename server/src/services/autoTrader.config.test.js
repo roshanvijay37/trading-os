@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeConfigUpdates } from "./autoTrader.js";
+import { sanitizeConfigUpdates, getPollIntervalMs } from "./autoTrader.js";
 import { getOptionDefaults } from "./blackScholes.js";
 
 // sanitizeConfigUpdates is the pure gate in front of updateConfig: a fat-fingered
@@ -69,6 +69,14 @@ describe("sanitizeConfigUpdates (config bounds validation)", () => {
     expect(rejected).toHaveLength(2);
   });
 
+  it("accepts a boolean useStopLimitEntries and rejects a non-boolean one, same as paperTrading", () => {
+    expect(sanitizeConfigUpdates({ useStopLimitEntries: true }).clean.useStopLimitEntries).toBe(true);
+    expect(sanitizeConfigUpdates({ useStopLimitEntries: false }).clean.useStopLimitEntries).toBe(false);
+    const { clean, rejected } = sanitizeConfigUpdates({ useStopLimitEntries: "true" });
+    expect(clean).toEqual({});
+    expect(rejected).toHaveLength(1);
+  });
+
   it("passes selectedTimeframes through untouched (updateConfig sanitizes those itself)", () => {
     const { clean } = sanitizeConfigUpdates({ selectedTimeframes: [5, 30] });
     expect(clean.selectedTimeframes).toEqual([5, 30]);
@@ -82,5 +90,16 @@ describe("2026 NSE lot sizes", () => {
   it("backtest option model uses NIFTY 65 / BANKNIFTY 30", () => {
     expect(getOptionDefaults("NSE:NIFTY50-INDEX").lotSize).toBe(65);
     expect(getOptionDefaults("NSE:NIFTYBANK-INDEX").lotSize).toBe(30);
+  });
+});
+
+// Bounds sanity, not a brittle exact-value pin: guards against an accidental revert to something
+// far too slow (missing signals) or far too fast (risking FYERS's per-minute rate limit) without
+// locking the number itself, which is expected to be deliberately tuned.
+describe("getPollIntervalMs (trading-loop poll cadence)", () => {
+  it("stays within a sane range", () => {
+    const ms = getPollIntervalMs();
+    expect(ms).toBeGreaterThanOrEqual(5000);
+    expect(ms).toBeLessThanOrEqual(30000);
   });
 });

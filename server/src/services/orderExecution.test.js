@@ -176,6 +176,25 @@ describe("paper-trading order helpers (no broker call)", () => {
     expect(shortEntry.side).toBe(ORDER_SIDE.SELL);
   });
 
+  it("placeStopEntry with limitPrice omitted stays a plain SL-M order (unchanged default)", async () => {
+    const entry = await placeStopEntry({ symbol: "NSE:X", qty: 30, side: ORDER_SIDE.BUY, stopPrice: 55100, session, paperTrading: true });
+    expect(entry.type).toBe(ORDER_TYPE.STOP);
+    expect(entry.limitPrice).toBe(0);
+  });
+
+  it("placeStopEntry with a positive limitPrice becomes an SL-L order", async () => {
+    const entry = await placeStopEntry({ symbol: "NSE:X", qty: 30, side: ORDER_SIDE.BUY, stopPrice: 55100, limitPrice: 55155.1, session, paperTrading: true });
+    expect(entry.type).toBe(ORDER_TYPE.STOPLIMIT);
+    expect(entry.stopPrice).toBe(55100);
+    expect(entry.limitPrice).toBe(55155.1);
+  });
+
+  it("placeStopEntry with a limitPrice but no stopPrice still rejects via placeOrder's own validation", async () => {
+    await expect(
+      placeStopEntry({ symbol: "NSE:X", qty: 30, side: ORDER_SIDE.BUY, stopPrice: 0, limitPrice: 55155.1, session, paperTrading: true })
+    ).rejects.toThrow(/positive stopPrice/);
+  });
+
   it("cancelOrder short-circuits for PAPER ids", async () => {
     await expect(cancelOrder("PAPER-123", session)).resolves.toEqual({ success: true });
   });

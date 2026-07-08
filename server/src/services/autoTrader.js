@@ -52,7 +52,15 @@ import { computeFuturesCosts } from "./futuresCosts.js";
 
 // ΓöÇΓöÇΓöÇ CONFIGURATION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const CONFIG = {
-  POLL_INTERVAL_MS: 30000,
+  // Sized against FYERS's documented rate limit (10/sec, 200/min, 100k/day — see the comment in
+  // orderExecution.js; breaching it repeatedly blocks API access for the rest of the day) at the
+  // STRUCTURAL worst case, not just today's selected instruments/timeframes: both
+  // underlyings, all 4 timeframes, correlated trades allowed (8 concurrent pairs, ~32 REST
+  // calls/cycle in live mode). At 15s that's ~128 calls/min (64% of the 200/min budget,
+  // comfortable headroom); 10s would be ~192/min (96%, too tight to survive scaling up later
+  // without revisiting this number). Previously 30000 — halving it roughly halves the worst-case
+  // lag between a signal confirming and its resting order actually being armed at the broker.
+  POLL_INTERVAL_MS: 15000,
   UNDERLYINGS: [
     // Lot sizes per the NSE Jan-2026 series revision (circular FAOP70616): NIFTY 75→65,
     // BANKNIFTY 35→30. A wrong lot size is silently fatal live — every order is exchange-
@@ -74,6 +82,14 @@ const CONFIG = {
   POSITION_SIZING_MODE: "RISK",
   FIXED_LOTS: 1,
   ORDER_TYPE: "LIMIT",
+  // Off by default: EMA5T's resting entry order is SL-M (fills at whatever price is available
+  // once triggered) unless this is explicitly turned on, in which case it becomes SL-L, capped
+  // at the alert level ± LIMIT_BUFFER_PCT%. LIMIT_BUFFER_PCT itself predates this — it was
+  // previously read by the now-deleted options-buying flow's computeEntryLimitPrice, sized for
+  // option premiums (a few rupees). 0.3% of a ~₹55,000 futures level is ~165 points, the wrong
+  // scale for this use — re-derive it deliberately (start generous, tighten from observed paper
+  // fills) before ever enabling this, don't trust the persisted default.
+  USE_STOPLIMIT_ENTRIES: false,
   LIMIT_BUFFER_PCT: 0.3,
   SLIPPAGE_BUFFER_PCT: 0.5,
   // L2 (audited): option BUYING is a debit — it only needs ~1× the premium. 2× was double-charging
@@ -128,6 +144,12 @@ function getActiveUnderlyings() {
   return CONFIG.UNDERLYINGS.filter((u) => CONFIG.SELECTED_INSTRUMENTS.includes(u.name));
 }
 
+// Exported purely so a test can assert the interval stays within sane bounds without needing to
+// export the whole CONFIG object — guards against an accidental future revert.
+export function getPollIntervalMs() {
+  return CONFIG.POLL_INTERVAL_MS;
+}
+
 // The UI sends config in camelCase; the engine stores it in SCREAMING_SNAKE_CASE. This maps
 // each incoming field to its CONFIG key. Without the translation a blind Object.assign() just
 // attached dead camelCase keys to CONFIG that nothing reads, so every saved setting silently
@@ -142,6 +164,7 @@ const CONFIG_FIELD_MAP = {
   fixedLots: "FIXED_LOTS",
   paperTrading: "PAPER_TRADING",
   paperCapital: "PAPER_CAPITAL",
+  useStopLimitEntries: "USE_STOPLIMIT_ENTRIES",
   limitBufferPct: "LIMIT_BUFFER_PCT",
   maxSpreadPct: "MAX_SPREAD_PCT",
   minOI: "MIN_OI",
@@ -182,10 +205,26 @@ let auditLog = [];
 // caller runs first fully claims the guard before a second caller's check can run.
 const closingPositionIds = new Set();
 
+// Same pattern as closingPositionIds, for manageFuturesPending: today's tradingLoop/processCandles
+// for...await loops are strictly sequential, so two invocations for the same key never actually
+// overlap — this guard is a no-op today. It exists so a future event-driven trigger (e.g. arming
+// off the tick feed instead of only on the poll cycle) can safely coexist with the poll loop
+// without a real race: without it, two near-simultaneous calls for the same key could both read
+// pendingEntries as empty and both place a resting entry order, doubling exposure.
+const pendingKeysInFlight = new Set();
+
 // Gates new entries until local open positions have been verified against the broker on
 // startup. Stays false if that reconciliation could not run, so a phantom position can never
 // trigger a naked exit and we never trade on an unverified picture of what we hold.
 let reconcileOk = false;
+
+// Exported only for tests — reconcilePositionsWithBroker (the real setter, not exported itself)
+// calls out to the broker, so a hermetic test of entry-path logic needs a way to satisfy this
+// gate without running that flow. Production code must never call this; only the real
+// reconciliation on startup may set reconcileOk.
+export function setReconcileOkForTest(ok) {
+  reconcileOk = !!ok;
+}
 
 // EMA5T (futures): resting stop-entry orders, keyed like activeAlerts. One unified lifecycle for
 // both paper and live (see manageFuturesPending) — paperTrading is threaded through to
@@ -1414,6 +1453,24 @@ export function futuresOrderSide(dir, purpose) {
   throw new Error(`futuresOrderSide: unknown direction "${dir}"`);
 }
 
+/**
+ * Limit price for an SL-L resting entry: caps how much worse than the alert level the order will
+ * accept before it just stays resting instead of filling badly (LONG: limit >= stop, SELL-side
+ * entries mirror it below the stop). Pure/exported for unit tests.
+ * TODO(verify FYERS docs): confirm FYERS v3's actual stop-limit price-relationship requirement
+ * matches this standard convention before ever trusting it outside paper mode.
+ * TODO(verify): OPTION_TICK (₹0.05) is confirmed for option premiums — confirm NSE index futures
+ * (NIFTY/BANKNIFTY) use the same tick size before relying on roundToTick here.
+ */
+export function computeStopLimitPrice(dir, stopPrice, bufferPct) {
+  const stop = Number(stopPrice) || 0;
+  if (stop <= 0) return 0;
+  const pct = Number(bufferPct) || 0;
+  if (dir === "LONG") return roundToTick(stop * (1 + pct / 100), "up");
+  if (dir === "SHORT") return roundToTick(stop * (1 - pct / 100), "down");
+  throw new Error(`computeStopLimitPrice: unknown direction "${dir}"`);
+}
+
 // Resolve the tradable (current-month, else next) futures contract by asking FYERS for a
 // live quote rather than hardcoding expiry rules — expiry weekdays have changed repeatedly.
 // Cached per day.
@@ -1449,7 +1506,7 @@ async function resolveFuturesSymbol(underlying, session) {
  * fills when a LATER candle actually crosses the level). Returns a normalized
  * { status: "FILLED"|"PENDING"|"REJECTED"|"CANCELLED"|"EXPIRED"|"UNKNOWN", avgFillPrice?, filledQty? }.
  */
-export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, level, latestCandle, qty, session }) {
+export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, level, limitPrice = 0, latestCandle, qty, session }) {
   // Applies to BOTH modes: a pending entry with no entryOrderId was gate-skipped at arm time
   // (checkTimeFilter/canTakeTrade/margin failed — see manageFuturesPendingInner's EMA5T_ENTRY_
   // ORDER_SKIPPED branch), so it was never actually placed anywhere. Without this check up front,
@@ -1469,6 +1526,13 @@ export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, lev
     const gappedThrough = dir === "LONG" ? open >= level : open <= level;
     const fillBase = gappedThrough ? open : level;
     const avgFillPrice = dir === "LONG" ? fillBase * (1 + slip) : fillBase * (1 - slip);
+    // SL-L semantics: a real stop-limit never fills worse than its limit — it just keeps resting.
+    // Without this, paper mode would report a fill an SL-L order could never actually have gotten,
+    // exactly on the big-gap days a limit price exists to protect against.
+    if (Number(limitPrice) > 0) {
+      const exceedsLimit = dir === "LONG" ? avgFillPrice > limitPrice : avgFillPrice < limitPrice;
+      if (exceedsLimit) return { status: "PENDING", filledQty: 0 };
+    }
     return { status: "FILLED", avgFillPrice, filledQty: qty };
   }
   return getOrderDetails(entryOrderId, session);
@@ -1514,13 +1578,22 @@ export async function cancelPendingEntryOrder(p, paperTrading, session) {
  * cancel-discipline, and margin-aggregation code live will run — not a separate simulated path.
  * Errors are caught here (not left to propagate) so one flaky broker call for one timeframe can
  * never abort the sibling timeframes' processing in the same processCandles cycle.
+ *
+ * Guarded entry point (mirrors closePosition/closingPositionIds): claims args.key in
+ * pendingKeysInFlight synchronously before any await, so two invocations for the same key can
+ * never both reach manageFuturesPendingInner concurrently. Exported only for the reentrancy
+ * test — not part of the public API surface used by routes.
  */
-async function manageFuturesPending(args) {
+export async function manageFuturesPending(args) {
+  if (pendingKeysInFlight.has(args.key)) return;
+  pendingKeysInFlight.add(args.key);
   try {
     await manageFuturesPendingInner(args);
   } catch (err) {
     console.error(`[AUTO-TRADER] EMA5T pending-entry cycle failed for ${args.key}:`, err.message);
     logAudit({ type: "EMA5T_PENDING_CYCLE_ERROR", key: args.key, error: err.message });
+  } finally {
+    pendingKeysInFlight.delete(args.key);
   }
 }
 
@@ -1541,7 +1614,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const p = pendingEntries.get(key);
   if (p) {
     const fillCheck = await checkEntryOrderFill({
-      paperTrading, entryOrderId: p.entryOrderId, dir: p.dir, level: p.level, latestCandle: latest, qty: underlying.lotSize, session,
+      paperTrading, entryOrderId: p.entryOrderId, dir: p.dir, level: p.level, limitPrice: p.limitPrice || 0, latestCandle: latest, qty: underlying.lotSize, session,
     });
 
     const filledQty = Number(fillCheck.filledQty) || 0;
@@ -1698,6 +1771,10 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const committedMargin = computeCommittedMargin(openPositions, pendingEntries);
   const dataFresh = !isCandleStale(candles, tf);
 
+  const entryLimitPrice = CONFIG.USE_STOPLIMIT_ENTRIES && CONFIG.LIMIT_BUFFER_PCT > 0
+    ? computeStopLimitPrice(dir, level, CONFIG.LIMIT_BUFFER_PCT)
+    : 0;
+
   let entryOrderId = null;
   if (checkTimeFilter() && canTakeTrade(underlying.name) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
     try {
@@ -1706,12 +1783,13 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
         qty: underlying.lotSize,
         side: futuresOrderSide(dir, "ENTRY"),
         stopPrice: level,
+        limitPrice: entryLimitPrice,
         session,
         paperTrading,
         auditLogger: logAudit,
       });
       entryOrderId = order.orderId;
-      logAudit({ type: "EMA5T_ENTRY_ORDER_PLACED", key, dir, level, stopLoss: sl, timeframe: tf, orderId: entryOrderId });
+      logAudit({ type: "EMA5T_ENTRY_ORDER_PLACED", key, dir, level, limitPrice: entryLimitPrice, stopLoss: sl, timeframe: tf, orderId: entryOrderId });
     } catch (err) {
       console.error(`[AUTO-TRADER] Failed to place EMA5T entry order for ${key}:`, err.message);
       logAudit({ type: "EMA5T_ENTRY_ORDER_PLACE_FAILED", key, error: err.message });
@@ -1727,6 +1805,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     timeframe: tf,
     dir,
     level,
+    limitPrice: entryLimitPrice,
     stopLoss: sl,
     target,
     alertTimestamp: alert.timestamp,
@@ -2155,7 +2234,7 @@ export function sanitizeConfigUpdates(updates) {
     } else if (key === "positionSizingMode") {
       if (value === "RISK" || value === "LOTS") clean[key] = value;
       else rejected.push({ key, value });
-    } else if (key === "allowCorrelatedTrades" || key === "paperTrading") {
+    } else if (key === "allowCorrelatedTrades" || key === "paperTrading" || key === "useStopLimitEntries") {
       if (typeof value === "boolean") clean[key] = value;
       else rejected.push({ key, value });
     } else if (key === "selectedStrategies") {
@@ -2225,6 +2304,7 @@ export function updateConfig(updates) {
       positionSizingMode: CONFIG.POSITION_SIZING_MODE,
       fixedLots: CONFIG.FIXED_LOTS,
       paperTrading: CONFIG.PAPER_TRADING,
+      useStopLimitEntries: CONFIG.USE_STOPLIMIT_ENTRIES,
       limitBufferPct: CONFIG.LIMIT_BUFFER_PCT,
       maxSpreadPct: CONFIG.MAX_SPREAD_PCT,
       minOI: CONFIG.MIN_OI,

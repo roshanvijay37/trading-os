@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildFuturesSymbol, futuresOrderSide, sanitizeConfigUpdates } from "./autoTrader.js";
+import { buildFuturesSymbol, futuresOrderSide, computeStopLimitPrice, sanitizeConfigUpdates } from "./autoTrader.js";
 import { ORDER_SIDE } from "./orderExecution.js";
 
 describe("buildFuturesSymbol (EMA5T futures contract naming)", () => {
@@ -28,6 +28,31 @@ describe("futuresOrderSide (EMA5T LONG/SHORT order-side mapping)", () => {
   it("throws on an unknown direction rather than silently picking a side", () => {
     expect(() => futuresOrderSide("SIDEWAYS", "EXIT")).toThrow(/unknown direction/);
     expect(() => futuresOrderSide(undefined, "ENTRY")).toThrow(/unknown direction/);
+  });
+});
+
+// SL-L entry buffer: caps how much worse than the alert level the resting order will accept.
+describe("computeStopLimitPrice (SL-L entry buffer)", () => {
+  it("LONG rounds the limit UP to the nearest tick above stop + buffer%", () => {
+    expect(computeStopLimitPrice("LONG", 55100, 0.13)).toBe(55171.65);
+  });
+
+  it("SHORT rounds the limit DOWN to the nearest tick below stop - buffer%", () => {
+    expect(computeStopLimitPrice("SHORT", 55100, 0.13)).toBe(55028.35);
+  });
+
+  it("a zero buffer returns the (tick-rounded) stop price unchanged, either direction", () => {
+    expect(computeStopLimitPrice("LONG", 55100, 0)).toBe(55100);
+    expect(computeStopLimitPrice("SHORT", 55100, 0)).toBe(55100);
+  });
+
+  it("a non-positive stop price returns 0 rather than a garbage limit", () => {
+    expect(computeStopLimitPrice("LONG", 0, 0.1)).toBe(0);
+    expect(computeStopLimitPrice("LONG", -100, 0.1)).toBe(0);
+  });
+
+  it("throws on an unknown direction rather than silently picking a side", () => {
+    expect(() => computeStopLimitPrice("SIDEWAYS", 55100, 0.1)).toThrow(/unknown direction/);
   });
 });
 

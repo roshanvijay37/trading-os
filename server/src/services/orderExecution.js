@@ -671,15 +671,19 @@ export function placeStopLossOrder({ symbol, qty, stopPrice, side, session, pape
  * Resting stop-ENTRY order — opens a NEW position when price crosses stopPrice, as opposed to
  * placeStopLossOrder which protects an already-open one. Kept as its own named export (rather
  * than reusing placeStopLossOrder) so audit logs and call sites read unambiguously as entry vs.
- * protective-exit even though both use the same broker order type (SL-M).
+ * protective-exit. Defaults to SL-M (no limitPrice), same as before; pass limitPrice > 0 for SL-L.
  */
-export function placeStopEntry({ symbol, qty, side, stopPrice, session, paperTrading = false, paperFillPrice = 0, auditLogger }) {
+export function placeStopEntry({ symbol, qty, side, stopPrice, limitPrice = 0, session, paperTrading = false, paperFillPrice = 0, auditLogger }) {
+  // limitPrice > 0 → SL-L (caps the worst fill the order will accept); omitted/0 → SL-M
+  // (today's default, fills at whatever price is available once triggered), unchanged.
+  const type = Number(limitPrice) > 0 ? ORDER_TYPE.STOPLIMIT : ORDER_TYPE.STOP;
   return placeOrder({
     symbol,
     qty,
     side,
-    type: ORDER_TYPE.STOP,
+    type,
     stopPrice,
+    limitPrice,
     session,
     paperTrading,
     paperFillPrice: paperFillPrice || stopPrice,
