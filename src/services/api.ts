@@ -170,6 +170,7 @@ export const backtestApi = {
     riskPercent?: number;
     slBuffer?: number;
     targetMultiplier?: number;
+    trendEmaPeriod?: number;
     maxHoldBars?: number;
     slippage?: number;
     capitalMode?: "COMPOUND" | "FIXED";

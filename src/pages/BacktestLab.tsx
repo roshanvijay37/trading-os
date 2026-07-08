@@ -117,6 +117,10 @@ export function BacktestLab() {
   const [capital, setCapital] = useState(1000000);
   const [riskPercent, setRiskPercent] = useState(1);
   const [targetMult, setTargetMult] = useState(2);
+  // EMA5T's no-lookahead trend gate (calculateEMA(closes, trendEmaPeriod) in the backend) —
+  // defaults to 20 to match the live bot; editable here for a parameter-sensitivity check, same
+  // as Target R:R.
+  const [trendEmaPeriod, setTrendEmaPeriod] = useState(20);
   const [slippage, setSlippage] = useState(0.02);
   const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
   // Live-parity risk gates — same figures the live bot's own config uses by default, but
@@ -276,6 +280,7 @@ export function BacktestLab() {
         capital,
         riskPercent,
         targetMultiplier: targetMult,
+        trendEmaPeriod,
         // "Slippage %" → the decimal fraction the engine expects (e.g. 0.02% → 0.0002).
         slippage: slippage / 100,
         capitalMode,
@@ -323,6 +328,7 @@ export function BacktestLab() {
             capital,
             riskPercent,
             targetMultiplier: targetMult,
+            trendEmaPeriod,
             slippage: slippage / 100,
             capitalMode,
             pricingModel: "INDEX",
@@ -681,6 +687,10 @@ export function BacktestLab() {
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Target R:R</label>
             <input type="number" step="0.1" value={targetMult} onChange={(e) => setTargetMult(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+          </div>
+          <div>
+            <label className="mb-1 block text-2xs text-zinc-600">Trend EMA Period</label>
+            <input type="number" min="2" step="1" value={trendEmaPeriod} onChange={(e) => setTrendEmaPeriod(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Slippage %</label>
