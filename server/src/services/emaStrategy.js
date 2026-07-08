@@ -44,7 +44,7 @@ export function calculateEMA(closes, period = 5) {
  * @param {Object[]} candles - Array of candles [timestamp, open, high, low, close, volume]
  * @returns {Object|null} Alert candle info or null
  */
-export function detectAlertCandle(candles, strategy = "EMA5") {
+export function detectAlertCandle(candles, strategy = "EMA5", trendEmaPeriod = 20) {
   // Need the alert candle (the latest completed candle) plus enough history to seed the EMA.
   if (candles.length < 6) return null;
 
@@ -68,11 +68,12 @@ export function detectAlertCandle(candles, strategy = "EMA5") {
 
   let trendEma = null;
   if (strategy === "EMA5T") {
-    // EMA5T (futures, 2026-07 validation): STRICT trend gate — EMA20 computed over closes
-    // EXCLUDING the latest bar, compared against the ALERT bar's close. The alert bar and
-    // everything the gate reads were fully closed before any entry could trigger, so live
-    // and backtest see identical information (the backtest's "no-lookahead" filter).
-    const ema20Series = emaSeries(closes.slice(0, -1), 20);
+    // EMA5T (futures, 2026-07 validation): STRICT trend gate — a trendEmaPeriod-EMA computed
+    // over closes EXCLUDING the latest bar, compared against the ALERT bar's close. The alert
+    // bar and everything the gate reads were fully closed before any entry could trigger, so
+    // live and backtest see identical information (the backtest's "no-lookahead" filter).
+    // Defaults to 20 (the validated period) — pass CONFIG.TREND_EMA_PERIOD to override.
+    const ema20Series = emaSeries(closes.slice(0, -1), trendEmaPeriod);
     if (ema20Series.length === 0) return null;
     trendEma = ema20Series[ema20Series.length - 1];
   }

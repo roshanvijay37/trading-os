@@ -81,6 +81,16 @@ describe("sanitizeConfigUpdates (config bounds validation)", () => {
     const { clean } = sanitizeConfigUpdates({ selectedTimeframes: [5, 30] });
     expect(clean.selectedTimeframes).toEqual([5, 30]);
   });
+
+  it("accepts a trendEmaPeriod within bounds and rejects out-of-range/non-integer values", () => {
+    expect(sanitizeConfigUpdates({ trendEmaPeriod: 20 }).clean.trendEmaPeriod).toBe(20);
+    expect(sanitizeConfigUpdates({ trendEmaPeriod: 15 }).clean.trendEmaPeriod).toBe(15);
+    const { clean, rejected } = sanitizeConfigUpdates({ trendEmaPeriod: 4 });
+    expect(clean.trendEmaPeriod).toBeUndefined();
+    expect(rejected.map((r) => r.key)).toContain("trendEmaPeriod");
+    expect(sanitizeConfigUpdates({ trendEmaPeriod: 51 }).clean.trendEmaPeriod).toBeUndefined();
+    expect(sanitizeConfigUpdates({ trendEmaPeriod: 20.5 }).clean.trendEmaPeriod).toBeUndefined();
+  });
 });
 
 // A wrong lot size is silently fatal live (every order exchange-rejected as an invalid

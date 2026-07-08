@@ -124,6 +124,8 @@ export interface BotConfig {
   selectedStrategies: string[];
   selectedInstruments: string[];
   selectedTimeframes: number[];
+  // EMA5T's no-lookahead trend gate (EMA20 on closes excluding the latest bar) — defaults to 20.
+  trendEmaPeriod: number;
 }
 
 export interface BotStatus {
@@ -146,6 +148,7 @@ export interface BotStatus {
   selectedStrategies?: string[];
   selectedInstruments?: string[];
   selectedTimeframes?: number[];
+  trendEmaPeriod?: number;
   dailyPnL?: string;
   consecutiveLosses?: number;
   tickStatus?: {

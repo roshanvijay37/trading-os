@@ -41,6 +41,9 @@ export function AutoTrade() {
     selectedStrategies: ["EMA5"],
     selectedInstruments: ["NIFTY", "BANKNIFTY"],
     selectedTimeframes: [5],
+    // EMA5T's no-lookahead trend gate — matches the backend's CONFIG.TREND_EMA_PERIOD default.
+    // Changing this live-trades a DIFFERENT rule than the 6-year validation actually tested.
+    trendEmaPeriod: 20,
   });
   const [logs, setLogs] = useState<string[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -120,6 +123,7 @@ export function AutoTrade() {
         selectedStrategies: status.selectedStrategies ?? prev.selectedStrategies,
         selectedInstruments: status.selectedInstruments ?? prev.selectedInstruments,
         selectedTimeframes: status.selectedTimeframes ?? prev.selectedTimeframes,
+        trendEmaPeriod: status.trendEmaPeriod ?? prev.trendEmaPeriod,
       }));
     }
   }, [status, showConfig]);
@@ -418,6 +422,21 @@ export function AutoTrade() {
                 onChange={(e) => {
                   const n = parseFloat(e.target.value);
                   setConfigForm({ ...configForm, maxRiskPerDay: Number.isFinite(n) ? n : 2 });
+                }}
+                className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+              />
+            </div>
+            <div>
+              <label className="text-2xs text-zinc-600">Trend EMA Period</label>
+              <input
+                type="number"
+                min="5"
+                max="50"
+                step="1"
+                value={configForm.trendEmaPeriod}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setConfigForm({ ...configForm, trendEmaPeriod: Number.isFinite(n) ? n : 20 });
                 }}
                 className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
               />

@@ -55,3 +55,43 @@ describe("detectAlertCandle EMA5T (strict trend gate)", () => {
     expect(alert.type).toBe("BULLISH_ALERT");
   });
 });
+
+// Regression coverage for the trendEmaPeriod parameter (server/src/services/autoTrader.js's
+// CONFIG.TREND_EMA_PERIOD, Backtest Lab's "Trend EMA Period" field) — previously hardcoded to 20
+// with no way to change the live/paper gate without editing code.
+describe("detectAlertCandle EMA5T trend-gate period (trendEmaPeriod)", () => {
+  // Downtrend for 20 bars (200 -> 181), then a sharp reversal/rally for 10 bars — a SHORT trend
+  // EMA reacts fast enough to reflect the new uptrend by the alert bar; a longer one still lags,
+  // dragged down by the initial decline. This is what makes the period genuinely load-bearing
+  // here, unlike a plain monotonic trend where every period agrees.
+  function reversalSeries() {
+    const down = [];
+    for (let i = 0; i < 20; i++) down.push(bar(200 - i));
+    const up = [];
+    for (let i = 1; i <= 10; i++) up.push(bar(181 + i * 1.5));
+    return [...down, ...up];
+  }
+
+  function buildAlertSeries() {
+    const candles = reversalSeries();
+    const closes = candles.map((c) => c[4]);
+    const ema5 = calculateEMA([...closes, 197], 5);
+    const alertBar = bar(ema5 - 2, ema5 - 1, ema5 - 3);
+    const latestBar = bar(197, 198, 196.5);
+    return [...candles, alertBar, latestBar];
+  }
+
+  it("defaults to 20 when omitted — identical to passing 20 explicitly", () => {
+    const series = buildAlertSeries();
+    const implicit = detectAlertCandle(series, "EMA5T");
+    const explicit = detectAlertCandle(series, "EMA5T", 20);
+    expect(implicit).toEqual(explicit);
+    expect(implicit).not.toBeNull();
+  });
+
+  it("a shorter trend period gates OUT an alert the default period lets through", () => {
+    const series = buildAlertSeries();
+    expect(detectAlertCandle(series, "EMA5T", 20)?.type).toBe("BULLISH_ALERT");
+    expect(detectAlertCandle(series, "EMA5T", 5)).toBeNull();
+  });
+});

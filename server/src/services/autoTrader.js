@@ -79,6 +79,11 @@ const CONFIG = {
   MAX_CONSECUTIVE_LOSSES: 3,
   MAX_TRADES_PER_DAY: 10,
   TARGET_MULTIPLIER: 2,
+  // EMA5T's no-lookahead trend gate (emaStrategy.js's detectAlertCandle) — the validated period is
+  // 20; exposed here (matching Backtest Lab's "Trend EMA Period" field) so a parameter-sensitivity
+  // change can be tried live/paper without a code edit. Changing this live-trades a DIFFERENT rule
+  // than the 6-year validation actually tested — treat any non-default value as unvalidated.
+  TREND_EMA_PERIOD: 20,
   POSITION_SIZING_MODE: "RISK",
   FIXED_LOTS: 1,
   ORDER_TYPE: "LIMIT",
@@ -166,6 +171,7 @@ const CONFIG_FIELD_MAP = {
   paperCapital: "PAPER_CAPITAL",
   useStopLimitEntries: "USE_STOPLIMIT_ENTRIES",
   limitBufferPct: "LIMIT_BUFFER_PCT",
+  trendEmaPeriod: "TREND_EMA_PERIOD",
   maxSpreadPct: "MAX_SPREAD_PCT",
   minOI: "MIN_OI",
   maxTimeEntryHour: "MAX_TIME_ENTRY_HOUR",
@@ -1383,7 +1389,7 @@ async function processCandles(underlying, session) {
         // Alerts/signals are keyed per (underlying, strategy, timeframe) so each timeframe runs
         // independently and never clobbers another timeframe's pending setup.
         const key = `${underlying.name}:${strategy}:${tf}m`;
-        const alert = detectAlertCandle(candles, strategy);
+        const alert = detectAlertCandle(candles, strategy, CONFIG.TREND_EMA_PERIOD);
         if (alert) {
           console.log(`[AUTO-TRADER] ${underlying.name} ${alert.type} detected (${tf}m)`);
           activeAlerts.set(key, {
@@ -2018,6 +2024,7 @@ export async function startAutoTrader(sessionId) {
         selectedStrategies: CONFIG.SELECTED_STRATEGIES,
         selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
         selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
+        trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
       },
       startedAt: new Date().toISOString(),
     };
@@ -2150,6 +2157,7 @@ export function getAutoTraderStatus() {
     selectedStrategies: CONFIG.SELECTED_STRATEGIES,
     selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
     selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
+    trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -2208,6 +2216,7 @@ const CONFIG_NUMERIC_BOUNDS = {
   maxSpreadPct: { min: 0.1, max: 20 },
   minOI: { min: 0, max: 10000000, int: true },
   maxTimeEntryHour: { min: 9, max: 15, int: true },
+  trendEmaPeriod: { min: 5, max: 50, int: true },
 };
 const ALLOWED_STRATEGIES = ["EMA5T"];
 const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY"];
@@ -2313,6 +2322,7 @@ export function updateConfig(updates) {
       selectedStrategies: CONFIG.SELECTED_STRATEGIES,
       selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
       selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
+      trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
     },
   };
 }
