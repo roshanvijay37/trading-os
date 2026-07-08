@@ -431,14 +431,14 @@ export function runBacktest(candles, config) {
     };
   }
 
-  // Price the option leg at exit and return { entryRec, exitRec, pnl } for a BS position.
+  // Price the option leg at exit and return { entryRec, exitRec, pnl, costs } for a BS position.
   function settleBSExit(pos, exitSpot, candle, iv) {
     const tExit = yearsToExpiry(candle.timestamp, bs.expiryWeekday);
     const exitMid = bsPrice({ type: pos.optionType, spot: exitSpot, strike: pos.strike, t: tExit, r: bs.riskFreeRate, sigma: iv });
     const exitPremium = Math.max(0, round2(exitMid * (1 - bs.halfSpread))); // hit the bid
     const gross = (exitPremium - pos.entryPremium) * pos.qty;
     const costs = computeOptionCosts(pos.entryPremium, exitPremium, pos.qty, { brokeragePerOrder });
-    return { entryRec: pos.entryPremium, exitRec: exitPremium, pnl: gross - costs };
+    return { entryRec: pos.entryPremium, exitRec: exitPremium, pnl: gross - costs, costs };
   }
 
   // Gated entry shared by both strategies (C3): when a breakout would fire, apply the live entry
@@ -532,7 +532,7 @@ export function runBacktest(candles, config) {
 
         if (position.mode === "BS") {
           // Same trigger & exit index level; P&L is option-premium based (delta + theta + costs).
-          ({ entryRec, exitRec, pnl } = settleBSExit(position, indexExitLevel, candle, candleIv[i]));
+          ({ entryRec, exitRec, pnl, costs: tradeCosts } = settleBSExit(position, indexExitLevel, candle, candleIv[i]));
         } else {
           // INDEX mode — original open-aware fill + slippage arithmetic preserved.
           let exitPrice;
@@ -668,7 +668,7 @@ export function runBacktest(candles, config) {
     let entryRec, exitRec, pnl;
     let tradeCosts = 0;
     if (position.mode === "BS") {
-      ({ entryRec, exitRec, pnl } = settleBSExit(position, lastCandle.close, lastCandle, candleIv[candles.length - 1]));
+      ({ entryRec, exitRec, pnl, costs: tradeCosts } = settleBSExit(position, lastCandle.close, lastCandle, candleIv[candles.length - 1]));
     } else {
       exitRec = lastCandle.close;
       entryRec = position.entryPrice;
