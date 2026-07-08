@@ -11,6 +11,10 @@ import {
 // Shared 5-EMA + alert rule — same definition the live engine uses (single source of truth).
 import { calculateEMA, detectAlert } from "../services/signalCore.js";
 import { computeAdvancedStats } from "../services/backtestStats.js";
+// Same statutory cost model autoTrader.js applies to real futures fills — INDEX-mode P&L was
+// gross (no brokerage/STT/exchange/GST/stamp duty) whenever instrumentSource is "FUTURES", the
+// one case where a real, costed instrument is actually being simulated.
+import { computeFuturesCosts } from "../services/futuresCosts.js";
 
 const router = express.Router();
 
@@ -273,6 +277,10 @@ export function runBacktest(candles, config) {
     //           fixedLots matching the live default of 1) for a true live-parity backtest.
     positionSizingMode = "RISK",
     fixedLots = 1,
+    // "FUTURES" is the only INDEX-mode case simulating a real, costed instrument (the current-month
+    // contract EMA5T actually trades) — gates the statutory cost deduction below. "INDEX" trades the
+    // raw index itself, which isn't directly tradable and stays cost-free, same as before.
+    instrumentSource = "INDEX",
   } = config;
 
   const isBS = pricingModel === "BLACK_SCHOLES";
@@ -520,6 +528,7 @@ export function runBacktest(candles, config) {
 
       if (exitReason) {
         let entryRec, exitRec, pnl;
+        let tradeCosts = 0;
 
         if (position.mode === "BS") {
           // Same trigger & exit index level; P&L is option-premium based (delta + theta + costs).
@@ -542,9 +551,17 @@ export function runBacktest(candles, config) {
             const rawExit = position.side === "LONG" ? Math.min(candle.open, position.target) : Math.max(candle.open, position.target);
             exitPrice = Math.round(rawExit * (position.side === "LONG" ? (1 - slippage) : (1 + slippage)) * 100) / 100;
           }
-          pnl = position.side === "LONG"
+          const gross = position.side === "LONG"
             ? (exitPrice - position.entryPrice) * position.qty
             : (position.entryPrice - exitPrice) * position.qty;
+          // Costed whenever this is EMA5T, not just when instrumentSource is literally "FUTURES":
+          // EMA5T only ever trades the futures contract live/paper, even when the backtest borrowed
+          // INDEX candles for deeper history than the current contract has — the real trade this
+          // signal represents is always a futures fill, so it always carries a futures fill's costs.
+          tradeCosts = strategy === "EMA5T"
+            ? computeFuturesCosts(position.entryPrice, exitPrice, position.qty, { brokeragePerOrder, side: position.side })
+            : 0;
+          pnl = gross - tradeCosts;
           entryRec = position.entryPrice;
           exitRec = exitPrice;
         }
@@ -578,6 +595,7 @@ export function runBacktest(candles, config) {
           qty: position.qty,
           pnl: Math.round(pnl * 100) / 100,
           pnlPercent: Math.round(pnlPercent * 100) / 100,
+          costs: Math.round(tradeCosts * 100) / 100, // statutory + brokerage, already netted out of pnl above
           exitReason,
           barsHeld,
           capitalAfter: Math.round(currentCapital * 100) / 100,
@@ -648,14 +666,19 @@ export function runBacktest(candles, config) {
   if (position) {
     const lastCandle = candles[candles.length - 1];
     let entryRec, exitRec, pnl;
+    let tradeCosts = 0;
     if (position.mode === "BS") {
       ({ entryRec, exitRec, pnl } = settleBSExit(position, lastCandle.close, lastCandle, candleIv[candles.length - 1]));
     } else {
       exitRec = lastCandle.close;
       entryRec = position.entryPrice;
-      pnl = position.side === "LONG"
+      const gross = position.side === "LONG"
         ? (exitRec - position.entryPrice) * position.qty
         : (position.entryPrice - exitRec) * position.qty;
+      tradeCosts = strategy === "EMA5T"
+        ? computeFuturesCosts(position.entryPrice, exitRec, position.qty, { brokeragePerOrder, side: position.side })
+        : 0;
+      pnl = gross - tradeCosts;
     }
 
     currentCapital += pnl;
@@ -673,6 +696,7 @@ export function runBacktest(candles, config) {
       qty: position.qty,
       pnl: Math.round(pnl * 100) / 100,
       pnlPercent: Math.round((pnl / (entryRec * position.qty)) * 100 * 100) / 100,
+      costs: Math.round(tradeCosts * 100) / 100,
       exitReason: "END_OF_DATA",
       barsHeld: candles.length - position.entryBar,
       capitalAfter: Math.round(currentCapital * 100) / 100,
@@ -808,6 +832,10 @@ router.post("/run", async (req, res) => {
     const toTs = Math.floor(new Date(toDate).getTime() / 1000) + 86400;
 
     let fetchSymbol = symbol;
+    // Only genuinely "FUTURES" when candles actually came from the resolved futures contract below —
+    // any other strategy/instrumentSource combination still fetches the index, so runBacktest must
+    // see "INDEX" for those or it would apply real futures costs to un-costed index candles.
+    let effectiveInstrumentSource = "INDEX";
     if (strategy === "EMA5T" && instrumentSource === "FUTURES") {
       const underlyingName = EMA5T_UNDERLYINGS[symbol];
       if (!underlyingName) {
@@ -818,6 +846,7 @@ router.post("/run", async (req, res) => {
         return res.status(400).json({ error: `Could not resolve a tradable ${underlyingName} futures contract right now (FYERS returned no valid quote for the current or next 2 months). Try Index mode instead.` });
       }
       fetchSymbol = resolved;
+      effectiveInstrumentSource = "FUTURES";
     }
 
     const rawCandles = await fetchHistoricalData(fetchSymbol, resolution, fromTs, toTs, session.accessToken);
@@ -854,6 +883,7 @@ router.post("/run", async (req, res) => {
       ivSource,
       ivMultiplier,
       ivSeries,
+      instrumentSource: effectiveInstrumentSource,
       // C3 live-parity controls. Undefined → runBacktest's defaults (full parity) apply; the UI can
       // pass applyLiveFilters:false for the legacy raw "idea filter" run, or override any threshold.
       applyLiveFilters: req.body.applyLiveFilters,
