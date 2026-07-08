@@ -364,17 +364,36 @@ export function runBacktest(candles, config) {
   // entryPrice is the BUY premium (mid + half-spread).
   function buildPosition(side, rawEntry, sl, i, candle) {
     const riskAmount = (capitalMode === "FIXED" ? initialCapital : currentCapital) * (riskPercent / 100);
-    const stopDistance = Math.abs(rawEntry - sl);
-    if (stopDistance <= 0) return null;
-    const targetDistance = stopDistance * targetMultiplier;
-    const indexTarget = side === "LONG" ? rawEntry + targetDistance : rawEntry - targetDistance;
+    // Reject a structurally degenerate alert setup (nominal entry level === SL, e.g. a perfectly
+    // flat alert candle) BEFORE any gap adjustment — a real setup like this can't exist (SL is
+    // always the alert candle's opposite extreme, distinct from the entry level), so this only
+    // fires on synthetic edge cases, but it must reject on the RAW levels, not the gap-adjusted
+    // fillBase below: a real gap could make fillBase legitimately differ from a degenerate rawEntry,
+    // which would otherwise let a setup through that was never a valid signal to begin with.
+    if (Math.abs(rawEntry - sl) <= 0) return null;
+
+    // Gap-adjusted fill spot, shared by BOTH pricing modes: if the breakout candle's OPEN already
+    // cleared rawEntry, the market gapped straight through it — the real fill (and everything
+    // priced FROM it — target, strike selection, the option premium itself in BS mode) happens at
+    // (or near) the open, not the stale nominal level. Matches checkEntryOrderFill's identical gap
+    // check in autoTrader.js (single source of truth for entry-fill behavior). Previously BS mode
+    // priced entry/target off the raw, un-adjusted rawEntry — on a hard gap that meant the modeled
+    // option was priced (and its target set) against an index level the market never actually gave
+    // you, which is what made BS-mode P&L diverge so far from real option premiums on gappy days.
+    const gappedThrough = side === "LONG" ? candle.open >= rawEntry : candle.open <= rawEntry;
+    const fillBase = gappedThrough ? candle.open : rawEntry;
 
     if (isBS) {
+      const stopDistance = Math.abs(fillBase - sl);
+      if (stopDistance <= 0) return null;
+      const targetDistance = stopDistance * targetMultiplier;
+      const indexTarget = side === "LONG" ? fillBase + targetDistance : fillBase - targetDistance;
+
       const optionType = side === "LONG" ? "CE" : "PE";
-      const strike = roundToStrike(rawEntry, bs.strikeInterval);
+      const strike = roundToStrike(fillBase, bs.strikeInterval);
       const t = timeToExpiry(candle.timestamp, bs.expiryWeekday);
       const iv = candleIv[i];
-      const entryMid = bsPrice({ type: optionType, spot: rawEntry, strike, t, r: bs.riskFreeRate, sigma: iv });
+      const entryMid = bsPrice({ type: optionType, spot: fillBase, strike, t, r: bs.riskFreeRate, sigma: iv });
       if (!(entryMid > 0)) return null;
       const entryPremium = round2(entryMid * (1 + bs.halfSpread)); // pay the ask
       // Option-premium risk per unit ≈ premium drop if the index reaches the SL level.
@@ -393,7 +412,7 @@ export function runBacktest(candles, config) {
       return {
         mode: "BS", side, optionType, strike,
         entryPrice: entryPremium, entryPremium,
-        indexEntry: round2(rawEntry),
+        indexEntry: round2(fillBase),
         qty,
         sl: round2(sl),
         target: round2(indexTarget),
@@ -403,14 +422,9 @@ export function runBacktest(candles, config) {
       };
     }
 
-    // INDEX mode — original arithmetic preserved (slippage on entry, qty by index points).
-    // If the breakout candle's OPEN already cleared rawEntry, the market gapped straight through
-    // it — the real fill happens at (or near) the open, not the stale nominal alert level.
-    // Matches checkEntryOrderFill's identical gap check in autoTrader.js (single source of truth
-    // for entry-fill behavior). Target/idxStop below are derived FROM entryPrice, so gap-adjusting
-    // it here automatically scales the target to the REAL entry — no separate adjustment needed.
-    const gappedThrough = side === "LONG" ? candle.open >= rawEntry : candle.open <= rawEntry;
-    const fillBase = gappedThrough ? candle.open : rawEntry;
+    // INDEX mode — original arithmetic preserved (slippage on entry, qty by index points). Target/
+    // idxStop below are derived FROM entryPrice, so gap-adjusting fillBase above automatically
+    // scales the target to the REAL entry — no separate adjustment needed.
     const entryPrice = side === "LONG"
       ? round2(fillBase * (1 + slippage))
       : round2(fillBase * (1 - slippage));

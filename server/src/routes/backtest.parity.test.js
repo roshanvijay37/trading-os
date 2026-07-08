@@ -248,3 +248,62 @@ describe("runBacktest SL exit fill price (worst-case, not best-case)", () => {
     expect(tr.exitPrice).toBe(30156.03);
   });
 });
+
+// Regression tests for the BS-mode (option) target/strike/entry-spot fix: buildPosition priced
+// the option's strike, entry premium, AND target off the raw, un-adjusted nominal alert level —
+// while INDEX mode already correctly gap-adjusted all three off the real fill. On a gapping signal
+// (the common case this whole session), that meant the option was priced against — and its target
+// set from — an index level the market never actually gave you.
+describe("runBacktest BS-mode prices strike/spot/target off the gap-adjusted fill, not the stale nominal level", () => {
+  const baseConfig = {
+    symbol: "NSE:NIFTYBANK-INDEX",
+    strategy: "EMA5",
+    capital: 1000000,
+    riskPercent: 1,
+    targetMultiplier: 2,
+    pricingModel: "BLACK_SCHOLES",
+    applyLiveFilters: true,
+  };
+
+  function buildCandles(events) {
+    const startMs = Date.UTC(2024, 0, 2, 3, 50, 0); // 2024-01-02 09:20 IST
+    const candles = [];
+    let t = startMs;
+    for (const [open, high, low, close] of events) {
+      candles.push({ timestamp: t, datetime: new Date(t).toISOString(), open, high, low, close, volume: 1000 });
+      t += 5 * 60 * 1000;
+    }
+    return candles;
+  }
+
+  // 8 flat candles seed the 5-EMA at exactly 30000, then an alert candle entirely below the EMA
+  // (BULLISH, nominal entry = its high = 29950, sl = its low = 29800), then a breakout candle whose
+  // OPEN (30000) already clears 29950 — a hard gap through the nominal level. No further candles,
+  // so the position closes via END_OF_DATA and its fields can be inspected directly.
+  const gappedLong = buildCandles([
+    ...Array(8).fill([30000, 30000, 30000, 30000]),
+    [29900, 29950, 29800, 29900],
+    [30000, 30100, 29900, 30050],
+  ]);
+
+  it("records indexEntry as the gap-adjusted fill (30000), not the stale nominal alert high (29950)", () => {
+    const result = runBacktest(gappedLong, baseConfig);
+    expect(result.trades.length).toBe(1);
+    expect(result.trades[0].indexEntry).toBe(30000);
+  });
+
+  it("sets the target from the gap-adjusted fill's own risk distance, not the nominal level's", () => {
+    const result = runBacktest(gappedLong, baseConfig);
+    const tr = result.trades[0];
+    // risk = |30000 - sl(29800)| = 200; target = 30000 + 2×200 = 30400.
+    // The old (buggy) behavior priced this off the nominal level (29950): risk 150, target 30250.
+    expect(tr.sl).toBe(29800);
+    expect(tr.target).toBe(30400);
+  });
+
+  it("selects the strike off the gap-adjusted fill too", () => {
+    const result = runBacktest(gappedLong, baseConfig);
+    // roundToStrike(30000, 100) = 30000 — BANKNIFTY's strikeInterval.
+    expect(result.trades[0].strike).toBe(30000);
+  });
+});
