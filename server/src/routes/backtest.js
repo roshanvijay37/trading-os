@@ -5,6 +5,7 @@ import {
   bsPrice,
   roundToStrike,
   yearsToExpiry,
+  yearsToMonthlyExpiry,
   getOptionDefaults,
   computeOptionCosts,
 } from "../services/blackScholes.js";
@@ -240,7 +241,8 @@ export function runBacktest(candles, config) {
     riskFreeRate,      // decimal, default 0.065
     strikeInterval,    // points between strikes; per-symbol default
     lotSize,           // contract lot size; per-symbol default
-    expiryWeekday,     // 0=Sun..6=Sat IST; default 4 (Thu)
+    expiryWeekday,     // 0=Sun..6=Sat IST; per-symbol default (see getOptionDefaults)
+    expiryFrequency,   // "WEEKLY" | "MONTHLY"; per-symbol default (see getOptionDefaults)
     optionSpreadPct = 1.0, // round-trip bid/ask as % of premium (half applied each side)
     brokeragePerOrder = 20,
     // IV source for the BS model: "FLAT" (use annualizedIV / per-symbol default) or
@@ -290,9 +292,11 @@ export function runBacktest(candles, config) {
     strikeInterval: Number(strikeInterval) > 0 ? Number(strikeInterval) : symDefaults.strikeInterval,
     lotSize: Number(lotSize) > 0 ? Number(lotSize) : symDefaults.lotSize,
     riskFreeRate: Number(riskFreeRate) > 0 ? Number(riskFreeRate) : 0.065,
-    expiryWeekday: Number.isInteger(expiryWeekday) ? expiryWeekday : 4,
+    expiryWeekday: Number.isInteger(expiryWeekday) ? expiryWeekday : symDefaults.expiryWeekday,
+    expiryFrequency: expiryFrequency === "WEEKLY" || expiryFrequency === "MONTHLY" ? expiryFrequency : symDefaults.expiryFrequency,
     halfSpread: (Number(optionSpreadPct) >= 0 ? Number(optionSpreadPct) : 1.0) / 100 / 2,
   };
+  const timeToExpiry = bs.expiryFrequency === "MONTHLY" ? yearsToMonthlyExpiry : yearsToExpiry;
   const round2 = (n) => Math.round(n * 100) / 100;
 
   // Resolve the IV to use at every bar. With INDIA_VIX we align the VIX series to the price
@@ -368,7 +372,7 @@ export function runBacktest(candles, config) {
     if (isBS) {
       const optionType = side === "LONG" ? "CE" : "PE";
       const strike = roundToStrike(rawEntry, bs.strikeInterval);
-      const t = yearsToExpiry(candle.timestamp, bs.expiryWeekday);
+      const t = timeToExpiry(candle.timestamp, bs.expiryWeekday);
       const iv = candleIv[i];
       const entryMid = bsPrice({ type: optionType, spot: rawEntry, strike, t, r: bs.riskFreeRate, sigma: iv });
       if (!(entryMid > 0)) return null;
@@ -433,7 +437,7 @@ export function runBacktest(candles, config) {
 
   // Price the option leg at exit and return { entryRec, exitRec, pnl, costs } for a BS position.
   function settleBSExit(pos, exitSpot, candle, iv) {
-    const tExit = yearsToExpiry(candle.timestamp, bs.expiryWeekday);
+    const tExit = timeToExpiry(candle.timestamp, bs.expiryWeekday);
     const exitMid = bsPrice({ type: pos.optionType, spot: exitSpot, strike: pos.strike, t: tExit, r: bs.riskFreeRate, sigma: iv });
     const exitPremium = Math.max(0, round2(exitMid * (1 - bs.halfSpread))); // hit the bid
     const gross = (exitPremium - pos.entryPremium) * pos.qty;
@@ -757,6 +761,7 @@ export function runBacktest(candles, config) {
           lotSize: bs.lotSize,
           riskFreeRate: bs.riskFreeRate,
           expiryWeekday: bs.expiryWeekday,
+          expiryFrequency: bs.expiryFrequency,
           spreadPct: bs.halfSpread * 2 * 100,
           brokeragePerOrder,
           ivSource: isVixSource ? "INDIA_VIX" : "FLAT",
@@ -803,6 +808,7 @@ router.post("/run", async (req, res) => {
     strikeInterval,
     lotSize,
     expiryWeekday,
+    expiryFrequency,
     optionSpreadPct,
     brokeragePerOrder,
     ivSource = "FLAT",
@@ -878,6 +884,7 @@ router.post("/run", async (req, res) => {
       strikeInterval,
       lotSize,
       expiryWeekday,
+      expiryFrequency,
       optionSpreadPct,
       brokeragePerOrder,
       ivSource,
@@ -1026,6 +1033,7 @@ router.post("/run-multi", async (req, res) => {
     strikeInterval,
     lotSize,
     expiryWeekday,
+    expiryFrequency,
     optionSpreadPct,
     brokeragePerOrder,
     ivSource = "FLAT",
@@ -1077,6 +1085,7 @@ router.post("/run-multi", async (req, res) => {
       strikeInterval,
       lotSize,
       expiryWeekday,
+      expiryFrequency,
       optionSpreadPct,
       brokeragePerOrder,
       ivSource,

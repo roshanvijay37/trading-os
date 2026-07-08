@@ -83,16 +83,67 @@ export function yearsToExpiry(timestampMs, expiryWeekday = 4, expiryHourIST = 15
   return Math.max(years, 1 / (365 * 24 * 60)); // floor at ~1 min so BS never divides by zero
 }
 
+/** Day-of-month (1-31) of the LAST occurrence of `weekday` (0=Sun..6=Sat) in the given
+ * IST-wall-clock year/month (month is 0-indexed). */
+function lastWeekdayDom(year, month, weekday) {
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const lastDow = new Date(Date.UTC(year, month, daysInMonth)).getUTCDay();
+  return daysInMonth - ((lastDow - weekday + 7) % 7);
+}
+
 /**
- * Per-symbol option defaults (IV / strike step / lot size). All overridable per run.
- * Lot sizes change periodically — verify against current NSE contract specs.
+ * Time to the current (or next, if already past) MONTHLY expiry, in YEARS — same contract as
+ * yearsToExpiry, but for instruments with monthly-only contracts. NSE discontinued BankNifty's
+ * weekly options (this codebase used to assume weekly-Thursday for every index, which badly
+ * mispriced BankNifty: confirmed 2026-07-08 by comparing this model's output against BankNifty's
+ * actual currently-listed monthly contract's real historical premiums — the weekly assumption
+ * priced the option ~20x too cheap and far too gamma-sensitive). Re-verify if NSE reshuffles
+ * expiry cycles again.
+ * @param {number} timestampMs
+ * @param {number} [expiryWeekday] - 0=Sun..6=Sat in IST wall-clock (default 4 = Thursday)
+ * @param {number} [expiryHourIST] - hour-of-day of expiry settlement (default 15.5 = 15:30)
+ */
+export function yearsToMonthlyExpiry(timestampMs, expiryWeekday = 4, expiryHourIST = 15.5) {
+  const istMs = timestampMs + 330 * 60000; // shift epoch to IST wall-clock, same trick as yearsToExpiry
+  const now = new Date(istMs);
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const expiryHour = Math.floor(expiryHourIST);
+  const expiryMin = Math.round((expiryHourIST % 1) * 60);
+
+  let expiryDom = lastWeekdayDom(year, month, expiryWeekday);
+  let expiryIstMs = Date.UTC(year, month, expiryDom, expiryHour, expiryMin);
+  if (istMs > expiryIstMs) {
+    // Past this month's settlement → roll to next month's last occurrence of expiryWeekday.
+    let targetMonth = month + 1, targetYear = year;
+    if (targetMonth > 11) { targetMonth = 0; targetYear += 1; }
+    expiryDom = lastWeekdayDom(targetYear, targetMonth, expiryWeekday);
+    expiryIstMs = Date.UTC(targetYear, targetMonth, expiryDom, expiryHour, expiryMin);
+  }
+
+  const minutesToExpiry = (expiryIstMs - istMs) / 60000;
+  const years = minutesToExpiry / (365 * 24 * 60);
+  return Math.max(years, 1 / (365 * 24 * 60)); // floor at ~1 min so BS never divides by zero
+}
+
+/**
+ * Per-symbol option defaults (IV / strike step / lot size / expiry cycle). All overridable per run.
+ * Lot sizes and expiry cycles change periodically — verify against current NSE contract specs.
+ * expiryWeekday/expiryFrequency confirmed for BANKNIFTY 2026-07-08 (its currently-listed contract
+ * is monthly, not weekly — see yearsToMonthlyExpiry); FINNIFTY/SENSEX are a best-effort inference
+ * from NSE's broader 2024-25 weekly-consolidation (kept only NIFTY weekly), not independently
+ * re-verified against live data the way BANKNIFTY was.
  */
 export function getOptionDefaults(symbol = "") {
   const s = symbol.toUpperCase();
-  if (s.includes("NIFTYBANK") || s.includes("BANKNIFTY")) return { iv: 0.18, strikeInterval: 100, lotSize: 30 };
-  if (s.includes("FINNIFTY")) return { iv: 0.16, strikeInterval: 50, lotSize: 65 };
-  if (s.includes("SENSEX")) return { iv: 0.15, strikeInterval: 100, lotSize: 20 };
-  return { iv: 0.13, strikeInterval: 50, lotSize: 65 }; // NIFTY 50 — 75→65 per NSE Jan-2026 series revision (FAOP70616)
+  if (s.includes("NIFTYBANK") || s.includes("BANKNIFTY"))
+    return { iv: 0.18, strikeInterval: 100, lotSize: 30, expiryWeekday: 3, expiryFrequency: "MONTHLY" };
+  if (s.includes("FINNIFTY"))
+    return { iv: 0.16, strikeInterval: 50, lotSize: 65, expiryWeekday: 2, expiryFrequency: "MONTHLY" };
+  if (s.includes("SENSEX"))
+    return { iv: 0.15, strikeInterval: 100, lotSize: 20, expiryWeekday: 4, expiryFrequency: "MONTHLY" };
+  // NIFTY 50 — 75→65 per NSE Jan-2026 series revision (FAOP70616); still weekly (Thursday).
+  return { iv: 0.13, strikeInterval: 50, lotSize: 65, expiryWeekday: 4, expiryFrequency: "WEEKLY" };
 }
 
 /**
