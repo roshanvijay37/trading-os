@@ -221,6 +221,10 @@ export function runBacktest(candles, config) {
     symbol = "NSE:NIFTYBANK-INDEX",
     strategy = "EMA5",
     emaPeriod = 5,
+    // EMA5T/EMA5_OPTION's no-lookahead trend gate — was hardcoded to 20 (calculateEMA(closes, 20))
+    // with no way to test whether the strategy is sensitive to this exact period. Exposed the same
+    // way emaPeriod already is, default unchanged.
+    trendEmaPeriod = 20,
     capital = 1000000,
     riskPercent = 1,
     // TODO(backtest): slBuffer is accepted from the UI but never applied to the stop-loss in
@@ -323,9 +327,9 @@ export function runBacktest(candles, config) {
   const closes = candles.map((c) => c.close);
   const emaValues = calculateEMA(closes, emaPeriod);
   const emaOffset = candles.length - emaValues.length;
-  // EMA5T's no-lookahead trend gate: a 20-EMA on the SAME timeframe, read AT the alert bar
-  // (never beyond it) — identical to emaStrategy.js's detectAlertCandle (live parity).
-  const trendEmaValues = calculateEMA(closes, 20);
+  // EMA5T's no-lookahead trend gate: a trendEmaPeriod-EMA on the SAME timeframe, read AT the
+  // alert bar (never beyond it) — identical to emaStrategy.js's detectAlertCandle (live parity).
+  const trendEmaValues = calculateEMA(closes, trendEmaPeriod);
   const trendEmaOffset = candles.length - trendEmaValues.length;
 
   const trades = [];
@@ -485,9 +489,10 @@ export function runBacktest(candles, config) {
   }
 
   // C3: align warmup with the live bot, which signals as soon as it has enough candles (6 for EMA5;
-  // 20 for EMA5_OPTION's trend EMA). The old flat 50-bar warmup made the backtest skip the first ~4h
-  // that the live bot trades. Keep 50 only when live filters are off (legacy raw mode).
-  const liveWarmup = (strategy === "EMA5_OPTION" || strategy === "EMA5T") ? 20 : Math.max(emaPeriod + 1, 6);
+  // trendEmaPeriod for EMA5_OPTION/EMA5T's trend EMA). The old flat 50-bar warmup made the backtest
+  // skip the first ~4h that the live bot trades. Keep 50 only when live filters are off (legacy raw
+  // mode).
+  const liveWarmup = (strategy === "EMA5_OPTION" || strategy === "EMA5T") ? trendEmaPeriod : Math.max(emaPeriod + 1, 6);
   const warmup = Math.max(emaOffset, applyLiveFilters ? liveWarmup : 50);
 
   for (let i = warmup; i < candles.length; i++) {
@@ -808,6 +813,7 @@ router.post("/run", async (req, res) => {
     toDate,
     strategy = "EMA5",
     emaPeriod = 5,
+    trendEmaPeriod = 20,
     capital = 1000000,
     riskPercent = 1,
     slBuffer = 0.005,
@@ -885,6 +891,7 @@ router.post("/run", async (req, res) => {
       symbol,
       strategy,
       emaPeriod,
+      trendEmaPeriod,
       capital,
       riskPercent,
       slBuffer,
@@ -1036,6 +1043,7 @@ router.post("/run-multi", async (req, res) => {
     toDate,
     strategies = ["EMA5"],
     emaPeriod = 5,
+    trendEmaPeriod = 20,
     capital = 1000000,
     riskPercent = 1,
     slBuffer = 0.005,
@@ -1087,6 +1095,7 @@ router.post("/run-multi", async (req, res) => {
       symbol,
       strategy: strat,
       emaPeriod,
+      trendEmaPeriod,
       capital,
       riskPercent,
       slBuffer,
