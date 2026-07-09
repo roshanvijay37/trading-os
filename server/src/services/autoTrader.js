@@ -126,6 +126,13 @@ const CONFIG = {
   // Candle timeframes (in minutes) the strategy scans — each is evaluated INDEPENDENTLY (a 5m
   // and a 15m signal each trade on their own). Subset of ALLOWED_TIMEFRAMES; never empty.
   SELECTED_TIMEFRAMES: [5],
+  // Optional VIX-regime filter (OFF by default). When on, skip EMA5T entries while India VIX is
+  // below MIN_VIX. Momentum works in elevated-vol regimes and chops in quiet ones — validated
+  // out-of-sample (high-VIX EMA5T strongly +ve, low-VIX -ve). Default off ⇒ NO behaviour change and
+  // no extra VIX fetch. LIVE gates on the current VIX quote; the backtest gates on the prior-day VIX
+  // close (the persistent regime is what matters, so the small reference difference is immaterial).
+  MIN_VIX_FILTER: false,
+  MIN_VIX: 15,
 };
 
 // Selectable candle timeframes (minutes); 60 = 1 hour. Drives BOTH the live-tick aggregation
@@ -183,6 +190,8 @@ const CONFIG_FIELD_MAP = {
   selectedStrategies: "SELECTED_STRATEGIES",
   selectedInstruments: "SELECTED_INSTRUMENTS",
   selectedTimeframes: "SELECTED_TIMEFRAMES",
+  minVixFilter: "MIN_VIX_FILTER",
+  minVix: "MIN_VIX",
 };
 const PERSISTED_CONFIG_KEYS = Object.values(CONFIG_FIELD_MAP);
 
@@ -1335,6 +1344,31 @@ async function monitorPositions(session) {
   }
 }
 
+// ─── OPTIONAL VIX-REGIME FILTER (MIN_VIX) ──────────────────────────────
+// Re-added as an OPT-IN gate (CONFIG.MIN_VIX_FILTER, default false). The VIX quote is fetched only
+// when the filter is enabled, so the default path makes zero extra API calls and behaves exactly as
+// before. currentVix is refreshed once per trading-loop cycle in tradingLoop().
+let currentVix = null;
+async function fetchIndiaVix(session) {
+  try {
+    const data = await fyersDataFetch(`${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent("NSE:INDIAVIX-INDEX")}`, session);
+    return Number(data.d?.[0]?.v?.lp) || null;
+  } catch (err) {
+    console.error("[AUTO-TRADER] India VIX fetch failed:", err.message);
+    return null;
+  }
+}
+function checkMinVixFilter() {
+  if (!CONFIG.MIN_VIX_FILTER) return true;
+  // Fail-CLOSED: if the filter is on but VIX is unavailable, don't trade (we can't confirm the regime).
+  if (currentVix == null || currentVix < CONFIG.MIN_VIX) {
+    console.log(`[AUTO-TRADER] MIN_VIX filter: VIX ${currentVix} < ${CONFIG.MIN_VIX} — no new entries`);
+    logAudit({ type: "FILTER_BLOCKED", reason: "MIN_VIX", vix: currentVix, minVix: CONFIG.MIN_VIX });
+    return false;
+  }
+  return true;
+}
+
 // ─── MAIN TRADING LOGIC ───────────────────────────────────────────────
 function canTakeTrade(underlyingName) {
   if (CONFIG.EMERGENCY_STOP) {
@@ -1350,6 +1384,7 @@ function canTakeTrade(underlyingName) {
   if (!checkMaxTrades()) return false;
   if (!checkTimeFilter()) return false;
   if (!checkCorrelationFilter(underlyingName)) return false;
+  if (!checkMinVixFilter()) return false;
   return true;
 }
 
@@ -1923,6 +1958,8 @@ async function tradingLoop(session) {
       if (!reconcileOk) {
         await reconcilePositionsWithBroker(session);
       }
+      // Refresh India VIX only when the optional MIN_VIX regime filter is enabled (else no fetch).
+      currentVix = CONFIG.MIN_VIX_FILTER ? await fetchIndiaVix(session) : null;
       for (const underlying of getActiveUnderlyings()) {
         await processCandles(underlying, session);
       }
@@ -2164,6 +2201,9 @@ export function getAutoTraderStatus() {
     selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
     trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
     targetMultiplier: CONFIG.TARGET_MULTIPLIER,
+    minVixFilter: CONFIG.MIN_VIX_FILTER,
+    minVix: CONFIG.MIN_VIX,
+    currentVix,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -2224,6 +2264,7 @@ const CONFIG_NUMERIC_BOUNDS = {
   maxTimeEntryHour: { min: 9, max: 15, int: true },
   trendEmaPeriod: { min: 5, max: 50, int: true },
   targetMultiplier: { min: 0.5, max: 5 },
+  minVix: { min: 0, max: 100 },
 };
 const ALLOWED_STRATEGIES = ["EMA5T"];
 const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY"];
@@ -2250,7 +2291,7 @@ export function sanitizeConfigUpdates(updates) {
     } else if (key === "positionSizingMode") {
       if (value === "RISK" || value === "LOTS") clean[key] = value;
       else rejected.push({ key, value });
-    } else if (key === "allowCorrelatedTrades" || key === "paperTrading" || key === "useStopLimitEntries") {
+    } else if (key === "allowCorrelatedTrades" || key === "paperTrading" || key === "useStopLimitEntries" || key === "minVixFilter") {
       if (typeof value === "boolean") clean[key] = value;
       else rejected.push({ key, value });
     } else if (key === "selectedStrategies") {
@@ -2331,6 +2372,8 @@ export function updateConfig(updates) {
       selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
       trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
       targetMultiplier: CONFIG.TARGET_MULTIPLIER,
+      minVixFilter: CONFIG.MIN_VIX_FILTER,
+      minVix: CONFIG.MIN_VIX,
     },
   };
 }

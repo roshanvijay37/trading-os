@@ -287,6 +287,12 @@ export function runBacktest(candles, config) {
     // contract EMA5T actually trades) — gates the statutory cost deduction below. "INDEX" trades the
     // raw index itself, which isn't directly tradable and stays cost-free, same as before.
     instrumentSource = "INDEX",
+    // Optional VIX-regime filter (parity with the live bot's MIN_VIX_FILTER). OFF by default. When on,
+    // an EMA5T entry is skipped if the prior-day India VIX (priorDayVix: Map dateStr → prior close) is
+    // below minVix. The route builds priorDayVix only when the filter is on.
+    minVixFilter = false,
+    minVix = 15,
+    priorDayVix = null,
   } = config;
 
   const isBS = pricingModel === "BLACK_SCHOLES";
@@ -479,6 +485,16 @@ export function runBacktest(candles, config) {
       );
       if (!gate.allow) {
         blockedByFilter[gate.reason] = (blockedByFilter[gate.reason] || 0) + 1;
+        alertCandle = null;
+        return;
+      }
+    }
+    // Optional MIN_VIX regime filter (parity with live). Uses the PRIOR-day VIX close (no lookahead);
+    // fail-closed if that date's VIX is unknown.
+    if (minVixFilter && priorDayVix) {
+      const vix = priorDayVix.get(String(candle.datetime).slice(0, 10));
+      if (vix == null || vix < minVix) {
+        blockedByFilter["MIN_VIX"] = (blockedByFilter["MIN_VIX"] || 0) + 1;
         alertCandle = null;
         return;
       }
@@ -887,6 +903,21 @@ router.post("/run", async (req, res) => {
 
     const ivSeries = await fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs, accessToken: session.accessToken });
 
+    // Optional VIX-regime filter: fetch daily India VIX and map each date -> the PRIOR day's close
+    // (no lookahead), only when the filter is requested.
+    let priorDayVix = null;
+    if (req.body.minVixFilter) {
+      try {
+        const vixRaw = await fetchHistoricalData("NSE:INDIAVIX-INDEX", "D", fromTs, toTs, session.accessToken);
+        const vd = parseCandles(vixRaw).filter((v) => v.close > 0).sort((a, b) => a.timestamp - b.timestamp);
+        priorDayVix = new Map();
+        for (let k = 1; k < vd.length; k++) priorDayVix.set(vd[k].datetime.slice(0, 10), vd[k - 1].close);
+      } catch (e) {
+        console.error("[backtest] VIX fetch for MIN_VIX filter failed; filter will block all entries:", e.message);
+        priorDayVix = new Map();
+      }
+    }
+
     const result = runBacktest(candles, {
       symbol,
       strategy,
@@ -921,6 +952,9 @@ router.post("/run", async (req, res) => {
       marginSafetyMultiplier: req.body.marginSafetyMultiplier,
       positionSizingMode: req.body.positionSizingMode,
       fixedLots: req.body.fixedLots,
+      minVixFilter: req.body.minVixFilter,
+      minVix: req.body.minVix,
+      priorDayVix,
     });
 
     res.json({

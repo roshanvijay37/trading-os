@@ -47,6 +47,10 @@ export function AutoTrade() {
     // Reward:risk multiple on the alert candle's stop distance — matches CONFIG.TARGET_MULTIPLIER.
     // The 6-year validation used 2 (1:2 RR); treat any non-default value as unvalidated.
     targetMultiplier: 2,
+    // Optional VIX-regime filter (OFF by default) — matches CONFIG.MIN_VIX_FILTER/MIN_VIX. When on,
+    // only trade EMA5T while India VIX >= minVix (momentum works in elevated vol, chops when quiet).
+    minVixFilter: false,
+    minVix: 15,
   });
   const [logs, setLogs] = useState<string[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -128,6 +132,8 @@ export function AutoTrade() {
         selectedTimeframes: status.selectedTimeframes ?? prev.selectedTimeframes,
         trendEmaPeriod: status.trendEmaPeriod ?? prev.trendEmaPeriod,
         targetMultiplier: status.targetMultiplier ?? prev.targetMultiplier,
+        minVixFilter: status.minVixFilter ?? prev.minVixFilter,
+        minVix: status.minVix ?? prev.minVix,
       }));
     }
   }, [status, showConfig]);
@@ -458,6 +464,30 @@ export function AutoTrade() {
                   setConfigForm({ ...configForm, targetMultiplier: Number.isFinite(n) ? n : 2 });
                 }}
                 className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+              />
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-2xs text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={configForm.minVixFilter}
+                  onChange={(e) => setConfigForm({ ...configForm, minVixFilter: e.target.checked })}
+                  className="h-3.5 w-3.5 rounded border-border bg-surface"
+                />
+                VIX filter — only trade when VIX ≥
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                disabled={!configForm.minVixFilter}
+                value={configForm.minVix}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  setConfigForm({ ...configForm, minVix: Number.isFinite(n) ? n : 15 });
+                }}
+                className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover disabled:opacity-40"
               />
             </div>
             <div className="flex items-center gap-3 pt-5">

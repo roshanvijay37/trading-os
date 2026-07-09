@@ -128,6 +128,9 @@ export interface BotConfig {
   trendEmaPeriod: number;
   // Reward:risk multiple on the alert candle's stop distance (target = risk * this) — defaults to 2.
   targetMultiplier: number;
+  // Optional VIX-regime filter (default false) + threshold: only take EMA5T trades while VIX >= minVix.
+  minVixFilter: boolean;
+  minVix: number;
 }
 
 export interface BotStatus {
@@ -152,6 +155,9 @@ export interface BotStatus {
   selectedTimeframes?: number[];
   trendEmaPeriod?: number;
   targetMultiplier?: number;
+  minVixFilter?: boolean;
+  minVix?: number;
+  currentVix?: number | null;
   dailyPnL?: string;
   consecutiveLosses?: number;
   tickStatus?: {

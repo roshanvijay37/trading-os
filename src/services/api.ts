@@ -203,6 +203,9 @@ export const backtestApi = {
     // actual live sizing — the bot never scales with risk%, always exactly 1 lot by default.
     positionSizingMode?: "RISK" | "LOTS";
     fixedLots?: number;
+    // Optional VIX-regime filter (default false): skip EMA5T entries when prior-day India VIX < minVix.
+    minVixFilter?: boolean;
+    minVix?: number;
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",

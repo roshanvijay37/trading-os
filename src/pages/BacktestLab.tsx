@@ -137,6 +137,9 @@ export function BacktestLab() {
   // EMA5T only: INDEX has years of history but isn't the literal traded instrument; FUTURES is
   // the actual live contract, with real availability that varies by contract (see resolveFuturesRange).
   const [instrumentSource, setInstrumentSource] = useState<"INDEX" | "FUTURES">("INDEX");
+  // Optional VIX-regime filter (off by default), mirrors the live bot's MIN_VIX_FILTER.
+  const [minVixFilter, setMinVixFilter] = useState(false);
+  const [minVix, setMinVix] = useState(15);
   const [resolvingRange, setResolvingRange] = useState(false);
   const [resolvedFuturesSymbol, setResolvedFuturesSymbol] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -290,6 +293,8 @@ export function BacktestLab() {
         maxRiskPerDayPercent,
         positionSizingMode,
         fixedLots,
+        minVixFilter,
+        minVix,
       });
       setResult(res);
     } catch (err: any) {
@@ -691,6 +696,13 @@ export function BacktestLab() {
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Trend EMA Period</label>
             <input type="number" min="2" step="1" value={trendEmaPeriod} onChange={(e) => setTrendEmaPeriod(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
+          </div>
+          <div>
+            <label className="mb-1 flex items-center gap-2 text-2xs text-zinc-600">
+              <input type="checkbox" checked={minVixFilter} onChange={(e) => setMinVixFilter(e.target.checked)} className="h-3.5 w-3.5 rounded border-border bg-surface" />
+              VIX filter — trade only VIX ≥
+            </label>
+            <input type="number" min="0" max="100" step="0.5" disabled={!minVixFilter} value={minVix} onChange={(e) => setMinVix(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover disabled:opacity-40" />
           </div>
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Slippage %</label>
