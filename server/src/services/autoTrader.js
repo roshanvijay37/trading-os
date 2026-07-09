@@ -78,6 +78,9 @@ const CONFIG = {
   MAX_RISK_PER_DAY_PERCENT: 2,
   MAX_CONSECUTIVE_LOSSES: 3,
   MAX_TRADES_PER_DAY: 10,
+  // Reward:risk multiple on the alert-candle's structural stop distance (target = risk * this).
+  // The 6-year validation used 2 (1:2 RR); a parameter-sensitivity sweep this session found 2.5
+  // outperforms on the tested range, but treat any non-default value as unvalidated live/paper.
   TARGET_MULTIPLIER: 2,
   // EMA5T's no-lookahead trend gate (emaStrategy.js's detectAlertCandle) — the validated period is
   // 20; exposed here (matching Backtest Lab's "Trend EMA Period" field) so a parameter-sensitivity
@@ -172,6 +175,7 @@ const CONFIG_FIELD_MAP = {
   useStopLimitEntries: "USE_STOPLIMIT_ENTRIES",
   limitBufferPct: "LIMIT_BUFFER_PCT",
   trendEmaPeriod: "TREND_EMA_PERIOD",
+  targetMultiplier: "TARGET_MULTIPLIER",
   maxSpreadPct: "MAX_SPREAD_PCT",
   minOI: "MIN_OI",
   maxTimeEntryHour: "MAX_TIME_ENTRY_HOUR",
@@ -1641,7 +1645,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
       const entryFillPrice = fillCheck.avgFillPrice || p.level;
       // Gap-adjust the target to the REAL fill (see computeGapAdjustedTarget) — never leave it
       // anchored to the stale nominal alert level.
-      const adjustedTarget = computeGapAdjustedTarget(p.dir, entryFillPrice, p.stopLoss);
+      const adjustedTarget = computeGapAdjustedTarget(p.dir, entryFillPrice, p.stopLoss, CONFIG.TARGET_MULTIPLIER);
 
       // All local state mutations happen BEFORE the one saveState() below, so a crash right
       // after can never persist "signal processed" without the position it created (which would
@@ -1772,7 +1776,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     pendingEntries.delete(key);
   }
 
-  const target = dir === "LONG" ? level + 2 * risk : level - 2 * risk;
+  const target = dir === "LONG" ? level + CONFIG.TARGET_MULTIPLIER * risk : level - CONFIG.TARGET_MULTIPLIER * risk;
   const marginReq = underlying.marginPerLot;
   const committedMargin = computeCommittedMargin(openPositions, pendingEntries);
   const dataFresh = !isCandleStale(candles, tf);
@@ -2025,6 +2029,7 @@ export async function startAutoTrader(sessionId) {
         selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
         selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
         trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
+        targetMultiplier: CONFIG.TARGET_MULTIPLIER,
       },
       startedAt: new Date().toISOString(),
     };
@@ -2158,6 +2163,7 @@ export function getAutoTraderStatus() {
     selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
     selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
     trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
+    targetMultiplier: CONFIG.TARGET_MULTIPLIER,
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -2217,6 +2223,7 @@ const CONFIG_NUMERIC_BOUNDS = {
   minOI: { min: 0, max: 10000000, int: true },
   maxTimeEntryHour: { min: 9, max: 15, int: true },
   trendEmaPeriod: { min: 5, max: 50, int: true },
+  targetMultiplier: { min: 0.5, max: 5 },
 };
 const ALLOWED_STRATEGIES = ["EMA5T"];
 const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY"];
@@ -2323,6 +2330,7 @@ export function updateConfig(updates) {
       selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
       selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
       trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
+      targetMultiplier: CONFIG.TARGET_MULTIPLIER,
     },
   };
 }

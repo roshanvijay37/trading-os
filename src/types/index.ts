@@ -126,6 +126,8 @@ export interface BotConfig {
   selectedTimeframes: number[];
   // EMA5T's no-lookahead trend gate (EMA20 on closes excluding the latest bar) — defaults to 20.
   trendEmaPeriod: number;
+  // Reward:risk multiple on the alert candle's stop distance (target = risk * this) — defaults to 2.
+  targetMultiplier: number;
 }
 
 export interface BotStatus {
@@ -149,6 +151,7 @@ export interface BotStatus {
   selectedInstruments?: string[];
   selectedTimeframes?: number[];
   trendEmaPeriod?: number;
+  targetMultiplier?: number;
   dailyPnL?: string;
   consecutiveLosses?: number;
   tickStatus?: {

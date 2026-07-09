@@ -44,6 +44,9 @@ export function AutoTrade() {
     // EMA5T's no-lookahead trend gate — matches the backend's CONFIG.TREND_EMA_PERIOD default.
     // Changing this live-trades a DIFFERENT rule than the 6-year validation actually tested.
     trendEmaPeriod: 20,
+    // Reward:risk multiple on the alert candle's stop distance — matches CONFIG.TARGET_MULTIPLIER.
+    // The 6-year validation used 2 (1:2 RR); treat any non-default value as unvalidated.
+    targetMultiplier: 2,
   });
   const [logs, setLogs] = useState<string[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -124,6 +127,7 @@ export function AutoTrade() {
         selectedInstruments: status.selectedInstruments ?? prev.selectedInstruments,
         selectedTimeframes: status.selectedTimeframes ?? prev.selectedTimeframes,
         trendEmaPeriod: status.trendEmaPeriod ?? prev.trendEmaPeriod,
+        targetMultiplier: status.targetMultiplier ?? prev.targetMultiplier,
       }));
     }
   }, [status, showConfig]);
@@ -437,6 +441,21 @@ export function AutoTrade() {
                 onChange={(e) => {
                   const n = parseInt(e.target.value, 10);
                   setConfigForm({ ...configForm, trendEmaPeriod: Number.isFinite(n) ? n : 20 });
+                }}
+                className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+              />
+            </div>
+            <div>
+              <label className="text-2xs text-zinc-600">Target R:R</label>
+              <input
+                type="number"
+                min="0.5"
+                max="5"
+                step="0.1"
+                value={configForm.targetMultiplier}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  setConfigForm({ ...configForm, targetMultiplier: Number.isFinite(n) ? n : 2 });
                 }}
                 className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
               />
