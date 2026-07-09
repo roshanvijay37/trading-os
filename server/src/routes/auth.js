@@ -215,6 +215,15 @@ router.post("/callback", async (req, res) => {
     sessions.set(sessionId, session);
     saveSessions();
 
+    // Zero-touch parity check: mirror the freshly-created operator session id to a file the daily
+    // parity cron (scripts/daily-parity.mjs) reads, so its backtest side works each day without a
+    // manual session refresh. Best-effort with mode 0600 — a write failure must never block login.
+    try {
+      fs.writeFileSync(path.join(process.cwd(), ".session-id"), sessionId, { mode: 0o600 });
+    } catch (e) {
+      console.warn("[AUTH] Could not write .session-id for parity check:", e.message);
+    }
+
     res.json({
       success: true,
       sessionId,
