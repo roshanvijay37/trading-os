@@ -342,6 +342,11 @@ export function BacktestLab() {
             maxRiskPerDayPercent,
             positionSizingMode,
             fixedLots,
+            // The multi-timeframe path previously dropped these two, so the VIX filter checkbox
+            // silently did nothing when the primary "Run" button was used (the single-run path
+            // already forwarded them). Parity with live's MIN_VIX_FILTER requires them here too.
+            minVixFilter,
+            minVix,
           })
         )
       );
