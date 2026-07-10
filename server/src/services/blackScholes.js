@@ -143,6 +143,11 @@ export function getOptionDefaults(symbol = "") {
     return { iv: 0.16, strikeInterval: 50, lotSize: 65, expiryWeekday: 2, expiryFrequency: "MONTHLY" };
   if (s.includes("SENSEX"))
     return { iv: 0.15, strikeInterval: 100, lotSize: 20, expiryWeekday: 4, expiryFrequency: "MONTHLY" };
+  // MCX gold (futures-only in this app): lotSize is the GOLDM point-value fallback (₹10/pt) so an
+  // un-overridden gold run sizes sanely — the backtest route normally overrides lotSize with the
+  // chosen contract's point value (instruments.js). IV/strike fields are placeholders (no gold options).
+  if (s.includes("GOLD"))
+    return { iv: 0.14, strikeInterval: 100, lotSize: 10, expiryWeekday: 5, expiryFrequency: "MONTHLY" };
   // NIFTY 50 — 75→65 per NSE Jan-2026 series revision (FAOP70616); still weekly, but on TUESDAY —
   // confirmed 2026-07-08 by probing FYERS for real weekly contracts (Jul 14/21 Tuesdays returned
   // real data, Jul 9/16 Thursdays returned none). The old Thursday default was itself stale/unverified.

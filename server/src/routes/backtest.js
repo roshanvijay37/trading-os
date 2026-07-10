@@ -16,6 +16,9 @@ import { computeAdvancedStats } from "../services/backtestStats.js";
 // gross (no brokerage/STT/exchange/GST/stamp duty) whenever instrumentSource is "FUTURES", the
 // one case where a real, costed instrument is actually being simulated.
 import { computeFuturesCosts } from "../services/futuresCosts.js";
+// Shared instrument/session registry (pure module): gold session profile, contract specs, and the
+// futures symbol builder previously duplicated between this file and autoTrader.js.
+import { SESSION_PROFILES, GOLD_CONTRACTS, buildFuturesSymbol, probeMonthsFor } from "../services/instruments.js";
 
 const router = express.Router();
 
@@ -160,23 +163,30 @@ async function fetchIvSeries({ pricingModel, ivSource, resolution, fromTs, toTs,
 // typically a few weeks since listing. buildFuturesSymbol mirrors autoTrader.js's helper of
 // the same name (duplicated, not imported — importing autoTrader.js would pull the entire
 // live order-execution/WebSocket module graph into the backtest route for one string template).
-const FUT_MONTH_CODES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+// "MCX:GOLD" is a pseudo-symbol from the Backtest Lab dropdown — the server resolves the real
+// continuous contract and derives gold's session profile itself (the client never sends session
+// fields). Backtests always price off the BIG GOLD series (deepest history; GOLDM tracks the same
+// price) — the contract choice only changes the point-value used for sizing.
 const EMA5T_UNDERLYINGS = {
   "NSE:NIFTYBANK-INDEX": "BANKNIFTY",
   "NSE:NIFTY50-INDEX": "NIFTY",
+  "MCX:GOLD": "GOLD",
 };
+const UNDERLYING_EXCHANGE = { BANKNIFTY: "NSE", NIFTY: "NSE", GOLD: "MCX" };
 
-function buildFuturesSymbol(underlyingName, year, monthIdx) {
-  return `NSE:${underlyingName}${String(year % 100).padStart(2, "0")}${FUT_MONTH_CODES[monthIdx]}FUT`;
-}
+// buildFuturesSymbol/MONTH_CODES now come from services/instruments.js (shared with autoTrader.js
+// — ends the duplicated builders that could silently drift).
 
-// Probe the current + next 2 months for a live quote — same approach autoTrader.js uses to
+// Probe the current + next N-1 months for a live quote — same approach autoTrader.js uses to
 // find the tradable front-month contract (FYERS has no "list active contracts" endpoint).
-async function resolveCurrentFuturesSymbol(underlyingName, accessToken) {
+// N = probeMonthsFor(exchange): 3 for NSE monthlies (unchanged), 4 for MCX (GOLD is bi-monthly
+// FEB/APR/JUN/AUG/OCT/DEC — 4 consecutive months always contain an active even-month contract;
+// the probe silently skips unlisted odd months).
+async function resolveCurrentFuturesSymbol(underlyingName, accessToken, exchange = "NSE") {
   const now = new Date();
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < probeMonthsFor(exchange); k++) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + k, 1));
-    const sym = buildFuturesSymbol(underlyingName, d.getUTCFullYear(), d.getUTCMonth());
+    const sym = buildFuturesSymbol(underlyingName, d.getUTCFullYear(), d.getUTCMonth(), exchange);
     try {
       const response = await fetch(`${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(sym)}`, {
         headers: { Authorization: `${appId}:${accessToken}` },
@@ -293,6 +303,9 @@ export function runBacktest(candles, config) {
     minVixFilter = false,
     minVix = 15,
     priorDayVix = null,
+    // Which exchange's statutory cost table applies (futuresCosts.js): "NSE" (default — every
+    // existing caller unchanged) or "MCX" (gold: CTT 0.01% sell-side instead of 0.05% STT).
+    exchange = "NSE",
   } = config;
 
   const isBS = pricingModel === "BLACK_SCHOLES";
@@ -442,8 +455,11 @@ export function runBacktest(candles, config) {
     if (idxStop <= 0) return null;
     // LOTS: fixed qty every trade (lotSize × fixedLots) — matches EMA5T's actual live sizing,
     // which never scales with riskPercent. RISK: original risk-based sizing, unchanged.
+    // bs.lotSize (not symDefaults.lotSize): identical when no lotSize is in config (bs.lotSize
+    // falls back to symDefaults) — but lets the route pass a contract point-value (gold: ₹10/pt
+    // GOLDM or ₹100/pt GOLD) so 1 "lot" produces correct rupee P&L.
     const qty = positionSizingMode === "LOTS"
-      ? symDefaults.lotSize * fixedLots
+      ? bs.lotSize * fixedLots
       : Math.floor(riskAmount / idxStop);
     if (qty <= 0) return null;
     const idxTargetDist = idxStop * targetMultiplier;
@@ -598,7 +614,7 @@ export function runBacktest(candles, config) {
           // INDEX candles for deeper history than the current contract has — the real trade this
           // signal represents is always a futures fill, so it always carries a futures fill's costs.
           tradeCosts = strategy === "EMA5T"
-            ? computeFuturesCosts(position.entryPrice, exitPrice, position.qty, { brokeragePerOrder, side: position.side })
+            ? computeFuturesCosts(position.entryPrice, exitPrice, position.qty, { brokeragePerOrder, side: position.side, exchange })
             : 0;
           pnl = gross - tradeCosts;
           entryRec = position.entryPrice;
@@ -715,7 +731,7 @@ export function runBacktest(candles, config) {
         ? (exitRec - position.entryPrice) * position.qty
         : (position.entryPrice - exitRec) * position.qty;
       tradeCosts = strategy === "EMA5T"
-        ? computeFuturesCosts(position.entryPrice, exitRec, position.qty, { brokeragePerOrder, side: position.side })
+        ? computeFuturesCosts(position.entryPrice, exitRec, position.qty, { brokeragePerOrder, side: position.side, exchange })
         : 0;
       pnl = gross - tradeCosts;
     }
@@ -878,10 +894,34 @@ router.post("/run", async (req, res) => {
     // any other strategy/instrumentSource combination still fetches the index, so runBacktest must
     // see "INDEX" for those or it would apply real futures costs to un-costed index candles.
     let effectiveInstrumentSource = "INDEX";
-    if (strategy === "EMA5T" && instrumentSource === "FUTURES") {
+    // Gold ("MCX:GOLD" pseudo-symbol from the Lab dropdown): always resolves to the continuous
+    // BIG-GOLD futures contract (there is no gold index; cont_flag=1 on the fetch path gives
+    // ~2019+ history) and applies the VALIDATED MCX session profile SERVER-side — the client
+    // never sends session fields. The `contract` body param (GOLDM default / GOLD) only sets the
+    // point-value used for 1-lot sizing; both contracts track the same price series.
+    let goldOverrides = null;
+    if (EMA5T_UNDERLYINGS[symbol] === "GOLD") {
+      const contractKey = req.body.contract === "GOLD" ? "GOLD" : "GOLDM";
+      const resolved = await resolveCurrentFuturesSymbol("GOLD", session.accessToken, "MCX");
+      if (!resolved) {
+        return res.status(400).json({ error: "Could not resolve a tradable MCX GOLD futures contract right now (FYERS returned no valid quote for the current or next 3 months)." });
+      }
+      fetchSymbol = resolved;
+      effectiveInstrumentSource = "FUTURES";
+      const p = SESSION_PROFILES.MCX_COMMODITY;
+      goldOverrides = {
+        exchange: "MCX",                                    // MCX statutory cost table (CTT, not STT)
+        sessionStartDecimal: p.sessionStartDecimal,         // 9.0  — gold opens 09:00
+        sessionEndDecimal: p.sessionEndDecimal,             // 22.0 — validated entry-window end
+        maxTimeEntryHour: p.entryCutoffHour,                // 22
+        squareOffHour: p.btSquareOffHour,                   // 23 — exit on the 23:00 bar close
+        squareOffMinute: p.btSquareOffMinute,               // 0    (the validated EOD variant)
+        lotSize: GOLD_CONTRACTS[contractKey].pointValue,    // ₹/point per lot → 1-lot rupee P&L
+      };
+    } else if (strategy === "EMA5T" && instrumentSource === "FUTURES") {
       const underlyingName = EMA5T_UNDERLYINGS[symbol];
       if (!underlyingName) {
-        return res.status(400).json({ error: `EMA5T futures backtesting only supports Bank Nifty / Nifty 50 (got ${symbol}).` });
+        return res.status(400).json({ error: `EMA5T futures backtesting only supports Bank Nifty / Nifty 50 / Gold (got ${symbol}).` });
       }
       const resolved = await resolveCurrentFuturesSymbol(underlyingName, session.accessToken);
       if (!resolved) {
@@ -955,6 +995,9 @@ router.post("/run", async (req, res) => {
       minVixFilter: req.body.minVixFilter,
       minVix: req.body.minVix,
       priorDayVix,
+      // LAST so the server-derived gold session profile + contract point-value win over any
+      // client-sent session fields (null for every non-gold run → nothing changes).
+      ...(goldOverrides || {}),
     });
 
     res.json({
@@ -985,8 +1028,9 @@ router.post("/futures-range", async (req, res) => {
   const { symbol } = req.body;
   const underlyingName = EMA5T_UNDERLYINGS[symbol];
   if (!underlyingName) {
-    return res.status(400).json({ error: `Futures backtesting only supports Bank Nifty / Nifty 50 (got ${symbol}).` });
+    return res.status(400).json({ error: `Futures backtesting only supports Bank Nifty / Nifty 50 / Gold (got ${symbol}).` });
   }
+  const underlyingExchange = UNDERLYING_EXCHANGE[underlyingName] || "NSE";
 
   const sessionId = req.headers["x-session-id"];
   if (!sessionId) {
@@ -998,12 +1042,15 @@ router.post("/futures-range", async (req, res) => {
   }
 
   try {
-    const tradedSymbol = await resolveCurrentFuturesSymbol(underlyingName, session.accessToken);
+    const tradedSymbol = await resolveCurrentFuturesSymbol(underlyingName, session.accessToken, underlyingExchange);
     if (!tradedSymbol) {
-      return res.status(400).json({ error: `Could not resolve a tradable ${underlyingName} futures contract right now (FYERS returned no valid quote for the current or next 2 months).` });
+      return res.status(400).json({ error: `Could not resolve a tradable ${underlyingName} futures contract right now (FYERS returned no valid quote for the upcoming months).` });
     }
     const toTs = Math.floor(Date.now() / 1000);
-    const fromTs = toTs - 730 * DAY_IN_SECONDS; // 2 years of headroom; cont_flag=1 can splice in more than this contract's own listing window
+    // Gold's continuous series reaches back ~2019 (verified) — widen the probe so the Lab can
+    // auto-fill the true available window; NSE contracts keep the original 2-year headroom.
+    const lookbackDays = underlyingExchange === "MCX" ? 2800 : 730;
+    const fromTs = toTs - lookbackDays * DAY_IN_SECONDS; // cont_flag=1 can splice in more than this contract's own listing window
     // 730 days exceeds FYERS's 366-day cap for daily resolution — fetchHistoricalData chunks it
     // (fetchSingleRange would send it as one request and FYERS would reject the whole thing).
     const rawCandles = await fetchHistoricalData(tradedSymbol, "D", fromTs, toTs, session.accessToken);
@@ -1264,6 +1311,9 @@ router.get("/symbols", (_req, res) => {
       { symbol: "NSE:NIFTY50-INDEX", name: "Nifty 50" },
       { symbol: "NSE:FINNIFTY-INDEX", name: "Fin Nifty" },
       { symbol: "BSE:SENSEX", name: "Sensex" },
+    ],
+    commodities: [
+      { symbol: "MCX:GOLD", name: "Gold (MCX)" }, // pseudo-symbol; server resolves the continuous contract
     ],
     timeframes: [
       { value: "1", label: "1 Minute" },
