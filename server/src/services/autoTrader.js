@@ -2189,6 +2189,12 @@ export function getAutoTraderStatus() {
     consecutiveLosses,
     capital: CONFIG.CAPITAL,
     riskPercent: CONFIG.RISK_PERCENT,
+    // The config form (AutoTrade.tsx) hydrates from these on load. Without them, Max Trades/Day
+    // and Max Risk/Day silently reverted to their hardcoded UI defaults (10 / 2) on every reload,
+    // and the next save clobbered the persisted values back. Keys MUST match what the form reads:
+    // status.maxTrades and status.maxRiskPerDay.
+    maxTrades: CONFIG.MAX_TRADES_PER_DAY,
+    maxRiskPerDay: CONFIG.MAX_RISK_PER_DAY_PERCENT,
     paperTrading: CONFIG.PAPER_TRADING,
     emergencyStop: CONFIG.EMERGENCY_STOP,
     // Token health so the UI can warn when the broker session has died mid-run (see noteAuthFailure).
@@ -2196,6 +2202,7 @@ export function getAutoTraderStatus() {
     consecutiveAuthFailures,
     positionSizingMode: CONFIG.POSITION_SIZING_MODE,
     fixedLots: CONFIG.FIXED_LOTS,
+    allowCorrelatedTrades: CONFIG.ALLOW_CORRELATED_TRADES, // same round-trip bug: form reads status.allowCorrelatedTrades
     selectedStrategies: CONFIG.SELECTED_STRATEGIES,
     selectedInstruments: CONFIG.SELECTED_INSTRUMENTS,
     selectedTimeframes: CONFIG.SELECTED_TIMEFRAMES,
