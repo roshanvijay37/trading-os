@@ -82,6 +82,46 @@ export function computeInstrumentPhase(profile, { istMinutes, isTradingDay }) {
   return "CLOSED";
 }
 
+// ─── Trading-loop plan ───────────────────────────────────────────────────────────────────
+/**
+ * Pure decision table for one trading-loop cycle — extracted from the loop so the riskiest
+ * behavior (WHO scans, WHOSE positions force-close, at WHAT cadence) is unit-testable without
+ * timers/network. For an index-only selection this reproduces the legacy loop's behavior
+ * exactly (verified by truth-table tests), with one deliberate improvement: holidays reschedule
+ * at the slow cadence like any other closed state (legacy quirk polled holidays at 15s).
+ *
+ * @param {object} args
+ * @param {number} args.istMinutes IST minutes-since-midnight
+ * @param {Array<{name:string, active:boolean, profile:object, isTradingDay:boolean}>} args.instruments
+ *   EVERY configured instrument (not just selected) — a position on a deselected instrument
+ *   must still be monitored and force-closed by its own session clock.
+ * @param {string[]} [args.openPositionUnderlyings] underlying names of currently OPEN positions
+ * @param {number} [args.defaultPollMs] cadence while anything relevant is open/pre-open
+ * @param {number} [args.closedPollMs] cadence while everything relevant is closed
+ */
+export function computeLoopPlan({ istMinutes, instruments, openPositionUnderlyings = [], defaultPollMs = 15000, closedPollMs = 60000 }) {
+  const phaseByInstrument = {};
+  for (const inst of instruments) {
+    phaseByInstrument[inst.name] = computeInstrumentPhase(inst.profile, { istMinutes, isTradingDay: inst.isTradingDay });
+  }
+  const openNames = new Set(openPositionUnderlyings);
+  // "Relevant" = selected for trading, or currently holding a position (even if deselected).
+  const relevant = instruments.filter((i) => i.active || openNames.has(i.name));
+  const anyOpen = relevant.some((i) => phaseByInstrument[i.name] === "OPEN");
+  const anyPreOpen = relevant.some((i) => phaseByInstrument[i.name] === "PRE_OPEN");
+  return {
+    phaseByInstrument,
+    // Scan (signal-hunt) only ACTIVE instruments whose session is open.
+    scanList: instruments.filter((i) => i.active && phaseByInstrument[i.name] === "OPEN").map((i) => i.name),
+    // Force-close positions whose OWN instrument session is over — per-position, never blanket
+    // (an index position closes at 15:30 while a gold position keeps running to 23:30).
+    forceCloseList: [...openNames].filter((n) => (phaseByInstrument[n] ?? "CLOSED") === "CLOSED"),
+    anyOpen,
+    statusString: anyOpen ? "OPEN" : anyPreOpen ? "PRE_OPEN" : "CLOSED",
+    rescheduleMs: anyOpen || anyPreOpen ? defaultPollMs : closedPollMs,
+  };
+}
+
 // ─── Backtest symbol → session profile mapping ───────────────────────────────────────────
 /**
  * The Backtest Lab sends the pseudo-symbol "MCX:GOLD" (the server resolves the real contract).

@@ -40,7 +40,17 @@ import {
   getWsStatus,
 } from "./tickService.js";
 
-import { isNseMarketOpen } from "../utils/marketHolidays.js";
+import { isNseMarketOpen, isInstrumentTradingDay } from "../utils/marketHolidays.js";
+// Shared instrument/session registry (pure module, also used by routes/backtest.js and
+// tickService.js): per-exchange session profiles, gold contract specs, futures symbol builder.
+import {
+  SESSION_PROFILES,
+  GOLD_CONTRACTS,
+  buildFuturesSymbol as buildFuturesSymbolShared,
+  probeMonthsFor,
+  computeInstrumentPhase,
+  computeLoopPlan,
+} from "./instruments.js";
 
 import fs from "fs";
 import path from "path";
@@ -66,8 +76,14 @@ const CONFIG = {
     // BANKNIFTY 35→30. A wrong lot size is silently fatal live — every order is exchange-
     // rejected as an invalid multiple — while paper mode happily fills it, so re-verify
     // these against the NSE circulars at every series revision.
-    { name: "NIFTY", symbol: "NSE:NIFTY50-INDEX", lotSize: 65, marginPerLot: 150000 },
-    { name: "BANKNIFTY", symbol: "NSE:NIFTYBANK-INDEX", lotSize: 30, marginPerLot: 180000 },
+    { name: "NIFTY", symbol: "NSE:NIFTY50-INDEX", lotSize: 65, marginPerLot: 150000, exchange: "NSE", sessionProfile: "NSE_INDEX", correlationGroup: "INDEX" },
+    { name: "BANKNIFTY", symbol: "NSE:NIFTYBANK-INDEX", lotSize: 30, marginPerLot: 180000, exchange: "NSE", sessionProfile: "NSE_INDEX", correlationGroup: "INDEX" },
+    // GOLD (MCX): symbol is a display pseudo-symbol (signals come from the resolved futures
+    // contract, same as the indices — there is no gold index). No static lotSize/marginPerLot —
+    // they depend on the runtime-configurable CONFIG.GOLD_CONTRACT (see getContractSpec), so a
+    // stale copy here could silently disagree. correlationGroup "GOLD": gold is uncorrelated
+    // with the indices, so the ALLOW_CORRELATED_TRADES gate never blocks across groups.
+    { name: "GOLD", symbol: "MCX:GOLD", exchange: "MCX", sessionProfile: "MCX_COMMODITY", correlationGroup: "GOLD" },
   ],
   CAPITAL: 100000,
   // Simulated capital used in PAPER mode instead of the (possibly tiny) real broker balance, so paper
@@ -133,6 +149,12 @@ const CONFIG = {
   // close (the persistent regime is what matters, so the small reference difference is immaterial).
   MIN_VIX_FILTER: false,
   MIN_VIX: 15,
+  // Which MCX gold contract the bot trades when GOLD is selected: "GOLDM" (mini, ₹10/point,
+  // ~₹60-80k margin — the safe default) or "GOLD" (big, ₹100/point, ~₹6-8L margin). Signals are
+  // identical (same underlying price); only the money at stake per lot differs. Change is
+  // blocked while the bot is running (see updateConfig) — flipping contracts mid-run would
+  // orphan resting/SL orders on the other contract.
+  GOLD_CONTRACT: "GOLDM",
 };
 
 // Selectable candle timeframes (minutes); 60 = 1 hour. Drives BOTH the live-tick aggregation
@@ -157,6 +179,42 @@ function getTimeframes() {
 
 function getActiveUnderlyings() {
   return CONFIG.UNDERLYINGS.filter((u) => CONFIG.SELECTED_INSTRUMENTS.includes(u.name));
+}
+
+function getUnderlyingByName(name) {
+  return CONFIG.UNDERLYINGS.find((u) => u.name === name) || null;
+}
+
+// Session profile for an underlying (object or name). Unknown/legacy → NSE_INDEX, which is
+// byte-identical to the pre-gold behavior for every existing instrument.
+function getSessionProfileFor(underlyingOrName) {
+  const u = typeof underlyingOrName === "string" ? getUnderlyingByName(underlyingOrName) : underlyingOrName;
+  return SESSION_PROFILES[u?.sessionProfile] || SESSION_PROFILES.NSE_INDEX;
+}
+
+// Tradable-contract spec for an underlying. Indices: static lotSize/margin from UNDERLYINGS.
+// GOLD: derived from CONFIG.GOLD_CONTRACT at call time (no stale copy). `qty` is the order
+// quantity AND the P&L point-multiplier — paper P&L (Δprice × qty) is exact with qty=pointValue.
+// TODO(verify-before-live): FYERS MCX order-qty semantics (lots vs units) must be confirmed
+// before any REAL gold order; paper-first makes this safe (instruments.js has the same note).
+function getContractSpec(underlying) {
+  if (underlying.name !== "GOLD") {
+    return { root: underlying.name, qty: underlying.lotSize, marginPerLot: underlying.marginPerLot };
+  }
+  const c = GOLD_CONTRACTS[CONFIG.GOLD_CONTRACT] || GOLD_CONTRACTS.GOLDM;
+  return { root: c.root, qty: c.pointValue, marginPerLot: c.marginPerLot };
+}
+
+// Current session phase ("PRE_OPEN"|"OPEN"|"CLOSED") for an underlying (object or name), on the
+// live IST clock + the exchange's trading-day calendar. Unknown names resolve to the NSE profile.
+function getInstrumentPhaseNow(underlyingOrName) {
+  const u = typeof underlyingOrName === "string" ? getUnderlyingByName(underlyingOrName) : underlyingOrName;
+  const now = new Date();
+  const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % (24 * 60);
+  return computeInstrumentPhase(getSessionProfileFor(u || underlyingOrName), {
+    istMinutes,
+    isTradingDay: isInstrumentTradingDay(u?.exchange || "NSE"),
+  });
 }
 
 // Exported purely so a test can assert the interval stays within sane bounds without needing to
@@ -192,6 +250,7 @@ const CONFIG_FIELD_MAP = {
   selectedTimeframes: "SELECTED_TIMEFRAMES",
   minVixFilter: "MIN_VIX_FILTER",
   minVix: "MIN_VIX",
+  goldContract: "GOLD_CONTRACT",
 };
 const PERSISTED_CONFIG_KEYS = Object.values(CONFIG_FIELD_MAP);
 
@@ -537,21 +596,33 @@ function checkDailyLossLimit() {
 }
 
 // ΓöÇΓöÇΓöÇ MARKET FILTERS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-function checkTimeFilter() {
+function checkTimeFilter(underlying) {
   const now = new Date();
   const istOffset = 330;
   const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + istOffset) % (24 * 60);
   const hours = Math.floor(istMinutes / 60);
-  if (hours >= CONFIG.MAX_TIME_ENTRY_HOUR) {
-    console.log(`[AUTO-TRADER] After ${CONFIG.MAX_TIME_ENTRY_HOUR}:00 IST ΓÇö no new entries`);
+  // Per-instrument entry cutoff: NSE profiles carry entryCutoffHour null → the long-standing
+  // operator knob (MAX_TIME_ENTRY_HOUR, default 14) keeps governing them, byte-identical. Gold's
+  // profile fixes 22 (part of the validated variant — entries 09:00–22:00, evening session kept).
+  const cutoff = getSessionProfileFor(underlying)?.entryCutoffHour ?? CONFIG.MAX_TIME_ENTRY_HOUR;
+  if (hours >= cutoff) {
+    console.log(`[AUTO-TRADER] After ${cutoff}:00 IST — no new entries (${typeof underlying === "string" ? underlying : underlying?.name || "?"})`);
     return false;
   }
   return true;
 }
 
-function checkCorrelationFilter(underlyingName) {
+function checkCorrelationFilter(underlying) {
   if (CONFIG.ALLOW_CORRELATED_TRADES) return true;
-  const hasOpenTrade = openPositions.some((p) => p.status === "OPEN" && p.underlying !== underlyingName);
+  // Correlation only applies WITHIN a correlation group: NIFTY↔BANKNIFTY ("INDEX") behave
+  // exactly as before; GOLD is its own group, so gold never blocks / is never blocked by index
+  // exposure — concurrent gold+index positions are the diversification point (margin cap still
+  // applies globally via computeCommittedMargin).
+  const myName = typeof underlying === "string" ? underlying : underlying.name;
+  const myGroup = (typeof underlying === "string" ? getUnderlyingByName(underlying) : underlying)?.correlationGroup || "INDEX";
+  const sameGroupOther = (name) =>
+    name !== myName && ((getUnderlyingByName(name)?.correlationGroup || "INDEX") === myGroup);
+  const hasOpenTrade = openPositions.some((p) => p.status === "OPEN" && sameGroupOther(p.underlying));
   // A resting (not-yet-filled) entry on another underlying is exposure just as real as an OPEN
   // position for this gate's purpose — without this, two correlated resting orders can both arm
   // (neither is "open" yet when the other is checked) and both later fill, defeating
@@ -561,7 +632,7 @@ function checkCorrelationFilter(underlyingName) {
   // margin check that failed for one cycle) has zero real exposure and can otherwise sit in
   // pendingEntries for the rest of the day, permanently blocking every future alert on every
   // OTHER underlying for no real reason.
-  const hasPendingOnOther = Array.from(pendingEntries.values()).some((p) => p.underlying !== underlyingName && p.entryOrderId);
+  const hasPendingOnOther = Array.from(pendingEntries.values()).some((p) => sameGroupOther(p.underlying) && p.entryOrderId);
   if (hasOpenTrade || hasPendingOnOther) {
     console.log(`[AUTO-TRADER] Correlation filter: already in trade on other underlying`);
     return false;
@@ -697,7 +768,7 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId, pape
   const dirMult = position.side === "SHORT" ? -1 : 1;
   const gross = (exitPrice - position.avgFillPrice) * exitQty * dirMult;
   const costQty = position.origEntryQty || exitQty;
-  const costs = paperTrading ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER, side: position.side });
+  const costs = paperTrading ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER, side: position.side, exchange: getUnderlyingByName(position.underlying)?.exchange || "NSE" });
   const pnl = gross - costs;
   position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
   position.pnl = position.realizedPnl;
@@ -1288,6 +1359,11 @@ async function monitorPositions(session) {
 
   for (const position of openPositions) {
     if (position.status !== "OPEN") continue;
+    // Per-instrument session gate: only act on positions whose OWN market is currently open —
+    // an NSE position isn't monitored during gold's evening session (its quotes are frozen and
+    // any exit is the loop's force-close's job at its session boundary, exactly as before), and
+    // a gold position keeps being monitored after 15:30 while its market runs to 23:30.
+    if (getInstrumentPhaseNow(position.underlying) !== "OPEN") continue;
     try {
       // A live position must always have a resting broker stop. If it lost its SL (initial placement
       // failed, or the SL order was cancelled/expired), re-arm before anything else — self-heals the
@@ -1319,7 +1395,8 @@ async function monitorPositions(session) {
         await closePosition(position, session, "STOPLOSS");
       } else if (targetHit) {
         await closePosition(position, session, "TARGET");
-      } else if (isSquareOffTime()) {
+      } else if (isSquareOffTime(getSessionProfileFor(position.underlying))) {
+        // Per-instrument square-off: NSE 15:15 (unchanged), gold 23:15 (its session runs to 23:30).
         await closePosition(position, session, "SQUARE_OFF");
       }
     } catch (error) {
@@ -1370,7 +1447,7 @@ function checkMinVixFilter() {
 }
 
 // ─── MAIN TRADING LOGIC ───────────────────────────────────────────────
-function canTakeTrade(underlyingName) {
+function canTakeTrade(underlying) {
   if (CONFIG.EMERGENCY_STOP) {
     console.log("[AUTO-TRADER] EMERGENCY STOP ACTIVE");
     return false;
@@ -1379,11 +1456,13 @@ function canTakeTrade(underlyingName) {
     console.log("[AUTO-TRADER] Broker reconciliation incomplete — no new entries");
     return false;
   }
-  if (!isValidTradingTime()) return false;
+  // Per-instrument session window (instruments.js): NSE profiles reproduce the old hardcoded
+  // 9:15–15:00 exactly; gold's is 9:00–22:00. Global risk gates below are shared, as before.
+  if (!isValidTradingTime(getSessionProfileFor(underlying))) return false;
   if (!checkDailyLossLimit()) return false;
   if (!checkMaxTrades()) return false;
-  if (!checkTimeFilter()) return false;
-  if (!checkCorrelationFilter(underlyingName)) return false;
+  if (!checkTimeFilter(underlying)) return false;
+  if (!checkCorrelationFilter(underlying)) return false;
   if (!checkMinVixFilter()) return false;
   return true;
 }
@@ -1479,11 +1558,11 @@ async function fetchLatestCandles(symbol, session, timeframeMinutes) {
 }
 
 // ─── EMA5T FUTURES ─────────────────────────────────────────────────
-const MONTH_CODES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-
-/** FYERS futures symbol, e.g. NSE:BANKNIFTY26JULFUT. Pure/exported for unit tests. */
-export function buildFuturesSymbol(underlyingName, year, monthIdx) {
-  return `NSE:${underlyingName}${String(year % 100).padStart(2, "0")}${MONTH_CODES[monthIdx]}FUT`;
+/** FYERS futures symbol, e.g. NSE:BANKNIFTY26JULFUT or MCX:GOLDM26AUGFUT. Delegates to the
+ * shared builder in instruments.js (single source of truth with routes/backtest.js); kept
+ * exported here for back-compat with existing unit tests/callers. */
+export function buildFuturesSymbol(underlyingName, year, monthIdx, exchange = "NSE") {
+  return buildFuturesSymbolShared(underlyingName, year, monthIdx, exchange);
 }
 
 /**
@@ -1526,15 +1605,23 @@ async function resolveFuturesSymbol(underlying, session) {
     futSymbolCache.date = today;
     futSymbolCache.symbols = {};
   }
-  if (futSymbolCache.symbols[underlying.name]) return futSymbolCache.symbols[underlying.name];
+  // Cache key includes the contract root so a GOLD↔GOLDM config flip can never serve the other
+  // contract's cached symbol (indices: root === name, key unchanged in effect).
+  const spec = getContractSpec(underlying);
+  const exchange = underlying.exchange || "NSE";
+  const cacheKey = `${underlying.name}:${spec.root}`;
+  if (futSymbolCache.symbols[cacheKey]) return futSymbolCache.symbols[cacheKey];
   const now = new Date();
-  for (let k = 0; k < 3; k++) {
+  // NSE monthlies probe 3 consecutive months (unchanged); MCX probes 4 — GOLD lists bi-monthly
+  // (FEB/APR/JUN/AUG/OCT/DEC), and 4 consecutive months always contain an active even month
+  // (unlisted odd months just fail the quote probe and are skipped).
+  for (let k = 0; k < probeMonthsFor(exchange); k++) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + k, 1));
-    const sym = buildFuturesSymbol(underlying.name, d.getUTCFullYear(), d.getUTCMonth());
+    const sym = buildFuturesSymbol(spec.root, d.getUTCFullYear(), d.getUTCMonth(), exchange);
     try {
       const data = await fyersDataFetch(`${FYERS_DATA_BASE}/quotes?symbols=${encodeURIComponent(sym)}`, session);
       if ((data.d?.[0]?.v?.lp || 0) > 0) {
-        futSymbolCache.symbols[underlying.name] = sym;
+        futSymbolCache.symbols[cacheKey] = sym;
         return sym;
       }
     } catch {
@@ -1659,7 +1746,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const p = pendingEntries.get(key);
   if (p) {
     const fillCheck = await checkEntryOrderFill({
-      paperTrading, entryOrderId: p.entryOrderId, dir: p.dir, level: p.level, limitPrice: p.limitPrice || 0, latestCandle: latest, qty: underlying.lotSize, session,
+      paperTrading, entryOrderId: p.entryOrderId, dir: p.dir, level: p.level, limitPrice: p.limitPrice || 0, latestCandle: latest, qty: getContractSpec(underlying).qty, session,
     });
 
     const filledQty = Number(fillCheck.filledQty) || 0;
@@ -1675,8 +1762,9 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
         return;
       }
 
-      const qty = Math.min(filledQty || underlying.lotSize, underlying.lotSize);
-      const isPartial = qty < underlying.lotSize;
+      const fullQty = getContractSpec(underlying).qty;
+      const qty = Math.min(filledQty || fullQty, fullQty);
+      const isPartial = qty < fullQty;
       const entryFillPrice = fillCheck.avgFillPrice || p.level;
       // Gap-adjust the target to the REAL fill (see computeGapAdjustedTarget) — never leave it
       // anchored to the stale nominal alert level.
@@ -1757,8 +1845,8 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     // Still resting (PENDING, nothing filled yet) — re-validate it's still worth holding. Any gate
     // tripping cancels the resting order (real cancelOrder live; a no-op for paper/never-placed).
     // Data freshness is already guaranteed by the function's own top-of-function stale check.
-    const timeOk = checkTimeFilter();
-    const riskOk = canTakeTrade(underlying.name);
+    const timeOk = checkTimeFilter(underlying);
+    const riskOk = canTakeTrade(underlying);
     if (!timeOk || !riskOk) {
       const cancelled = await cancelPendingEntryOrder(p, paperTrading, session);
       if (!cancelled.ok) return; // couldn't confirm — leave tracked, retry the cancel next cycle
@@ -1812,7 +1900,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   }
 
   const target = dir === "LONG" ? level + CONFIG.TARGET_MULTIPLIER * risk : level - CONFIG.TARGET_MULTIPLIER * risk;
-  const marginReq = underlying.marginPerLot;
+  const marginReq = getContractSpec(underlying).marginPerLot;
   const committedMargin = computeCommittedMargin(openPositions, pendingEntries);
   const dataFresh = !isCandleStale(candles, tf);
 
@@ -1821,11 +1909,11 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     : 0;
 
   let entryOrderId = null;
-  if (checkTimeFilter() && canTakeTrade(underlying.name) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
+  if (checkTimeFilter(underlying) && canTakeTrade(underlying) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
     try {
       const order = await placeStopEntry({
         symbol: futSymbol,
-        qty: underlying.lotSize,
+        qty: getContractSpec(underlying).qty,
         side: futuresOrderSide(dir, "ENTRY"),
         stopPrice: level,
         limitPrice: entryLimitPrice,
@@ -1925,34 +2013,45 @@ async function tradingLoop(session) {
     }
     const { hours, minutes } = getISTTime();
     const timeStr = `${hours}:${minutes.toString().padStart(2, "0")}`;
-    if (hours === 9 && minutes < 15) {
-      marketStatus = "PRE_OPEN";
-      console.log(`[AUTO-TRADER] Pre-market IST (${timeStr})`);
-    } else if (hours < 9 || hours > 15 || (hours === 15 && minutes >= 30)) {
-      marketStatus = "CLOSED";
-      console.log(`[AUTO-TRADER] Market closed IST (${timeStr})`);
-      for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
+    // Per-instrument session plan (instruments.js computeLoopPlan — pure, truth-table-tested):
+    // WHO scans, WHOSE positions force-close, at WHAT cadence. Index-only selections reproduce
+    // the old hardcoded 9:15/15:30 branch table exactly; with GOLD selected, gold keeps scanning
+    // and monitoring until 23:30 while index positions still force-close at 15:30. Instruments
+    // are planned over ALL underlyings (not just selected) so a position on a deselected
+    // instrument is still monitored and force-closed by its own session clock.
+    const activeNames = new Set(getActiveUnderlyings().map((u) => u.name));
+    const tradingDayByExchange = {
+      NSE: isInstrumentTradingDay("NSE"),
+      MCX: isInstrumentTradingDay("MCX"),
+    };
+    const plan = computeLoopPlan({
+      istMinutes: hours * 60 + minutes,
+      instruments: CONFIG.UNDERLYINGS.map((u) => ({
+        name: u.name,
+        active: activeNames.has(u.name),
+        profile: getSessionProfileFor(u),
+        isTradingDay: tradingDayByExchange[u.exchange || "NSE"] ?? tradingDayByExchange.NSE,
+      })),
+      openPositionUnderlyings: openPositions.filter((p) => p.status === "OPEN").map((p) => p.underlying),
+      defaultPollMs: CONFIG.POLL_INTERVAL_MS,
+    });
+    marketStatus = plan.statusString;
+    rescheduleMs = plan.rescheduleMs;
+
+    // Force-close positions whose OWN instrument's session is over (per-position, not blanket).
+    if (plan.forceCloseList.length) {
+      const forceClose = new Set(plan.forceCloseList);
+      console.log(`[AUTO-TRADER] Session over for ${plan.forceCloseList.join(",")} IST (${timeStr}) - closing their positions`);
+      for (const pos of openPositions.filter((p) => p.status === "OPEN" && forceClose.has(p.underlying))) {
         try {
           await closePosition(pos, session, "MARKET_CLOSE");
         } catch (err) {
           console.error(`[AUTO-TRADER] Market-close exit failed for ${pos.optionSymbol}:`, err.message);
         }
       }
-      rescheduleMs = 60000;
-    } else if (!isNseMarketOpen()) {
-      // Within market hours by the clock, but the exchange is closed (weekend or holiday).
-      // The time-of-day branches above only know the clock, not the NSE calendar.
-      marketStatus = "CLOSED";
-      console.log(`[AUTO-TRADER] Exchange holiday/weekend - no trading IST (${timeStr})`);
-      for (const pos of openPositions.filter((p) => p.status === "OPEN")) {
-        try {
-          await closePosition(pos, session, "MARKET_CLOSE");
-        } catch (err) {
-          console.error(`[AUTO-TRADER] Holiday-close exit failed for ${pos.optionSymbol}:`, err.message);
-        }
-      }
-    } else {
-      marketStatus = "OPEN";
+    }
+
+    if (plan.anyOpen) {
       // If startup reconciliation couldn't complete (e.g. a transient positions-fetch failure),
       // retry it here so the engine self-heals and can resume taking trades without a restart.
       if (!reconcileOk) {
@@ -1960,10 +2059,15 @@ async function tradingLoop(session) {
       }
       // Refresh India VIX only when the optional MIN_VIX regime filter is enabled (else no fetch).
       currentVix = CONFIG.MIN_VIX_FILTER ? await fetchIndiaVix(session) : null;
+      const scanSet = new Set(plan.scanList);
       for (const underlying of getActiveUnderlyings()) {
-        await processCandles(underlying, session);
+        if (scanSet.has(underlying.name)) {
+          await processCandles(underlying, session);
+        }
       }
       await monitorPositions(session);
+    } else {
+      console.log(`[AUTO-TRADER] ${plan.statusString} IST (${timeStr})`);
     }
   } catch (err) {
     console.error(`[AUTO-TRADER] Trading loop cycle error:`, err.message);
@@ -2211,6 +2315,10 @@ export function getAutoTraderStatus() {
     minVixFilter: CONFIG.MIN_VIX_FILTER,
     minVix: CONFIG.MIN_VIX,
     currentVix,
+    goldContract: CONFIG.GOLD_CONTRACT,
+    // Per-instrument session phase ("PRE_OPEN"|"OPEN"|"CLOSED") — a single global string can't
+    // express "NSE closed, MCX open" once gold trades until 23:30. Legacy marketStatus retained.
+    marketStatusByInstrument: Object.fromEntries(CONFIG.UNDERLYINGS.map((u) => [u.name, getInstrumentPhaseNow(u)])),
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     activeAlerts: Object.fromEntries(activeAlerts),
@@ -2274,7 +2382,8 @@ const CONFIG_NUMERIC_BOUNDS = {
   minVix: { min: 0, max: 100 },
 };
 const ALLOWED_STRATEGIES = ["EMA5T"];
-const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY"];
+const ALLOWED_INSTRUMENT_NAMES = ["NIFTY", "BANKNIFTY", "GOLD"];
+const ALLOWED_GOLD_CONTRACTS = ["GOLDM", "GOLD"];
 
 /**
  * Pure validation of a /config payload: numeric fields bounds-checked, enums/lists filtered
@@ -2297,6 +2406,9 @@ export function sanitizeConfigUpdates(updates) {
       clean[key] = n;
     } else if (key === "positionSizingMode") {
       if (value === "RISK" || value === "LOTS") clean[key] = value;
+      else rejected.push({ key, value });
+    } else if (key === "goldContract") {
+      if (ALLOWED_GOLD_CONTRACTS.includes(value)) clean[key] = value;
       else rejected.push({ key, value });
     } else if (key === "allowCorrelatedTrades" || key === "paperTrading" || key === "useStopLimitEntries" || key === "minVixFilter") {
       if (typeof value === "boolean") clean[key] = value;
@@ -2338,6 +2450,14 @@ export function updateConfig(updates) {
       logAudit({ type: "MODE_CHANGE_BLOCKED", requested: updates.paperTrading });
       delete updates.paperTrading;
     }
+  }
+  // Never flip the gold contract while the bot is running: resting entry/SL orders would be
+  // sitting on the OTHER contract's symbol with nothing tracking them (same class of guard as
+  // the paper/live flip above).
+  if (updates.goldContract !== undefined && isRunning && updates.goldContract !== CONFIG.GOLD_CONTRACT) {
+    console.error("[AUTO-TRADER] Ignoring gold contract change via /config while running — stop the bot first.");
+    logAudit({ type: "GOLD_CONTRACT_CHANGE_BLOCKED", requested: updates.goldContract });
+    delete updates.goldContract;
   }
   // Sanitize the timeframes up front — accept an array (or single value) of supported candle
   // intervals only: coerce to numbers, keep allowed ones, dedupe. Also accept a legacy single
@@ -2381,6 +2501,7 @@ export function updateConfig(updates) {
       targetMultiplier: CONFIG.TARGET_MULTIPLIER,
       minVixFilter: CONFIG.MIN_VIX_FILTER,
       minVix: CONFIG.MIN_VIX,
+      goldContract: CONFIG.GOLD_CONTRACT,
     },
   };
 }
