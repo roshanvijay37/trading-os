@@ -131,6 +131,9 @@ export interface BotConfig {
   // Optional VIX-regime filter (default false) + threshold: only take EMA5T trades while VIX >= minVix.
   minVixFilter: boolean;
   minVix: number;
+  // Which MCX gold contract the bot trades when GOLD is selected: GOLDM mini (₹10/pt, default)
+  // or GOLD big (₹100/pt). Server blocks changes while the bot is running.
+  goldContract: "GOLDM" | "GOLD";
 }
 
 export interface BotStatus {
@@ -158,6 +161,9 @@ export interface BotStatus {
   minVixFilter?: boolean;
   minVix?: number;
   currentVix?: number | null;
+  goldContract?: "GOLDM" | "GOLD";
+  // Per-instrument session phase (e.g. NSE closed while MCX gold still trades in the evening).
+  marketStatusByInstrument?: Record<string, "PRE_OPEN" | "OPEN" | "CLOSED">;
   dailyPnL?: string;
   consecutiveLosses?: number;
   tickStatus?: {

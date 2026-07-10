@@ -47,6 +47,8 @@ export function AutoTrade() {
     // Reward:risk multiple on the alert candle's stop distance — matches CONFIG.TARGET_MULTIPLIER.
     // The 6-year validation used 2 (1:2 RR); treat any non-default value as unvalidated.
     targetMultiplier: 2,
+    // MCX gold contract (only used when GOLD is selected) — matches CONFIG.GOLD_CONTRACT default.
+    goldContract: "GOLDM",
     // Optional VIX-regime filter (OFF by default) — matches CONFIG.MIN_VIX_FILTER/MIN_VIX. When on,
     // only trade EMA5T while India VIX >= minVix (momentum works in elevated vol, chops when quiet).
     minVixFilter: false,
@@ -134,6 +136,7 @@ export function AutoTrade() {
         targetMultiplier: status.targetMultiplier ?? prev.targetMultiplier,
         minVixFilter: status.minVixFilter ?? prev.minVixFilter,
         minVix: status.minVix ?? prev.minVix,
+        goldContract: status.goldContract ?? prev.goldContract,
       }));
     }
   }, [status, showConfig]);
@@ -569,6 +572,7 @@ export function AutoTrade() {
               {[
                 { id: "NIFTY", label: "NIFTY" },
                 { id: "BANKNIFTY", label: "BANKNIFTY" },
+                { id: "GOLD", label: "GOLD (MCX)" },
               ].map((instrument) => (
                 <label key={instrument.id} className="flex items-center gap-2 text-2xs text-zinc-400">
                   <input
@@ -586,6 +590,24 @@ export function AutoTrade() {
                 </label>
               ))}
             </div>
+            {configForm.selectedInstruments.includes("GOLD") && (
+              <div className="mt-3">
+                <label className="text-2xs text-zinc-600">Gold Contract</label>
+                <select
+                  value={configForm.goldContract}
+                  onChange={(e) => setConfigForm({ ...configForm, goldContract: e.target.value as "GOLDM" | "GOLD" })}
+                  className="mt-1 w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
+                >
+                  <option value="GOLDM">GOLDM mini (₹10/point, ~₹80k margin)</option>
+                  <option value="GOLD">GOLD big (₹100/point, ~₹6-8L margin)</option>
+                </select>
+                <p className="mt-1.5 text-3xs text-zinc-600">
+                  Gold trades its own session automatically: entries 09:00–22:00 IST, square-off 23:15. Same EMA5T
+                  rules and global risk gates; independent of the index correlation filter. Contract can't change
+                  while the bot is running.
+                </p>
+              </div>
+            )}
           </div>
         </Panel>
       )}
@@ -607,7 +629,11 @@ export function AutoTrade() {
             <Stat
               label="Market Status"
               value={status.marketStatus}
-              sub="Exchange connectivity"
+              sub={
+                status.marketStatusByInstrument && status.selectedInstruments?.includes("GOLD")
+                  ? `NSE ${status.marketStatusByInstrument.NIFTY ?? "?"} · MCX ${status.marketStatusByInstrument.GOLD ?? "?"}`
+                  : "Exchange connectivity"
+              }
               icon={BarChart3}
               tone="green"
             />
