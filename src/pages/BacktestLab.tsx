@@ -140,6 +140,9 @@ export function BacktestLab() {
   // Optional VIX-regime filter (off by default), mirrors the live bot's MIN_VIX_FILTER.
   const [minVixFilter, setMinVixFilter] = useState(false);
   const [minVix, setMinVix] = useState(15);
+  // Timeframes the "Run Multi" button backtests together (each runs independently, then merged).
+  // Selectable so you can run any subset — one, two, or all three — not just the fixed 15/30/60 trio.
+  const [multiTfs, setMultiTfs] = useState<string[]>(["15", "30", "60"]);
   const [resolvingRange, setResolvingRange] = useState(false);
   const [resolvedFuturesSymbol, setResolvedFuturesSymbol] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -316,14 +319,14 @@ export function BacktestLab() {
   // independently per timeframe here, not against one shared daily budget the way the live bot's
   // single scanner would — so combined trade count/frequency likely runs a little higher than true
   // live behaviour would produce.
-  const MULTI_TIMEFRAMES = ["15", "30", "60"];
   const runMultiTimeframeBacktest = async () => {
     if (!fromDate || !toDate) return;
+    if (multiTfs.length === 0) { setError("Select at least one timeframe for the multi-run."); return; }
     setLoading(true);
     setError(null);
     try {
       const perTf = await Promise.all(
-        MULTI_TIMEFRAMES.map((tf) =>
+        multiTfs.map((tf) =>
           backtestApi.run({
             symbol,
             resolution: tf,
@@ -352,7 +355,7 @@ export function BacktestLab() {
       );
 
       const allTrades = perTf
-        .flatMap((r, i) => (r.trades || []).map((t: Trade) => ({ ...t, timeframe: MULTI_TIMEFRAMES[i] })))
+        .flatMap((r, i) => (r.trades || []).map((t: Trade) => ({ ...t, timeframe: multiTfs[i] })))
         .sort((a, b) => new Date(a.exitTime).getTime() - new Date(b.exitTime).getTime())
         .map((t, i) => ({ ...t, id: i + 1 })); // re-number: ids collided across the 3 separate runs
 
@@ -386,7 +389,10 @@ export function BacktestLab() {
   // the contribution of each of the 3 timeframes is visible, not just the merged summary.
   const timeframeBreakdown = useMemo(() => {
     if (!isMultiTimeframe || !result) return [];
-    return MULTI_TIMEFRAMES.map((tf) => {
+    // Derive from the trades actually present, so the breakdown always matches what was run
+    // (not the current checkbox state, which the user may change after a run).
+    const tfsRun = Array.from(new Set((result.trades || []).map((t) => t.timeframe).filter((x): x is string => !!x))).sort((a, b) => Number(a) - Number(b));
+    return tfsRun.map((tf) => {
       const tfTrades = (result.trades || []).filter((t) => t.timeframe === tf);
       const wins = tfTrades.filter((t) => t.pnl > 0).length;
       const totalPnL = tfTrades.reduce((s, t) => s + t.pnl, 0);
@@ -728,17 +734,37 @@ export function BacktestLab() {
             <label className="mb-1 block text-2xs text-zinc-600">Daily Loss Limit %</label>
             <input type="number" step="0.1" min="0.5" max="10" value={maxRiskPerDayPercent} onChange={(e) => setMaxRiskPerDayPercent(Number(e.target.value))} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-2xs text-zinc-600">Multi-run timeframes</label>
+            <div className="flex items-center gap-4 pt-1">
+              {["15", "30", "60"].map((tf) => (
+                <label key={tf} className="flex cursor-pointer items-center gap-1.5 text-2xs text-zinc-400">
+                  <input
+                    type="checkbox"
+                    checked={multiTfs.includes(tf)}
+                    onChange={(e) =>
+                      setMultiTfs((prev) =>
+                        e.target.checked ? [...prev, tf].sort((a, b) => Number(a) - Number(b)) : prev.filter((x) => x !== tf)
+                      )
+                    }
+                    className="h-3.5 w-3.5 rounded border-border bg-surface"
+                  />
+                  {tf}m
+                </label>
+              ))}
+            </div>
+          </div>
           <div className="flex items-end gap-2 sm:col-span-2">
             <button onClick={runBacktest} disabled={loading || resolvingRange} className="flex-1 rounded-panel border border-gain/20 bg-gain-dim py-2 text-2xs font-medium text-gain transition hover:bg-gain/20 disabled:opacity-50">
               {loading ? "Running..." : resolvingRange ? "Resolving..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run</span>}
             </button>
             <button
               onClick={runMultiTimeframeBacktest}
-              disabled={loading || resolvingRange}
-              title="Runs EMA5T on 15m + 30m + 60m independently, then merges the trades chronologically into one combined result"
+              disabled={loading || resolvingRange || multiTfs.length === 0}
+              title="Runs EMA5T on the selected timeframes independently, then merges the trades chronologically into one combined result"
               className="flex-1 rounded-panel border border-info/20 bg-info-dim py-2 text-2xs font-medium text-info transition hover:bg-info/20 disabled:opacity-50"
             >
-              {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run All (15+30+60)</span>}
+              {loading ? "Running..." : <span className="flex items-center justify-center gap-2"><Play size={12} /> Run Multi ({multiTfs.join("+") || "none"})</span>}
             </button>
             <button onClick={() => { setResult(null); setError(null); setIsMultiTimeframe(false); }} className="rounded-panel border border-border-subtle bg-surface p-2 text-zinc-500 hover:text-zinc-300">
               <RotateCcw size={12} />
