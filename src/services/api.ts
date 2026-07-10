@@ -206,6 +206,9 @@ export const backtestApi = {
     // Optional VIX-regime filter (default false): skip EMA5T entries when prior-day India VIX < minVix.
     minVixFilter?: boolean;
     minVix?: number;
+    // Gold (MCX:GOLD) only: which contract's point-value sizes 1-lot P&L — "GOLDM" (₹10/pt,
+    // default) or "GOLD" (₹100/pt). The server derives gold's session profile itself.
+    contract?: "GOLDM" | "GOLD";
   }) =>
     fetchWithAuth("/backtest/run", {
       method: "POST",

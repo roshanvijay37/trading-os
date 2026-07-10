@@ -140,6 +140,10 @@ export function BacktestLab() {
   // Optional VIX-regime filter (off by default), mirrors the live bot's MIN_VIX_FILTER.
   const [minVixFilter, setMinVixFilter] = useState(false);
   const [minVix, setMinVix] = useState(15);
+  // Gold (MCX): pseudo-symbol "MCX:GOLD" — the server resolves the continuous futures contract and
+  // applies the validated MCX session profile (entries 09:00–22:00, EOD square-off) by itself; the
+  // contract choice only sets the point-value used for 1-lot sizing (GOLDM ₹10/pt vs GOLD ₹100/pt).
+  const [goldContract, setGoldContract] = useState<"GOLDM" | "GOLD">("GOLDM");
   // Timeframes the "Run Multi" button backtests together (each runs independently, then merged).
   // Selectable so you can run any subset — one, two, or all three — not just the fixed 15/30/60 trio.
   const [multiTfs, setMultiTfs] = useState<string[]>(["15", "30", "60"]);
@@ -232,6 +236,8 @@ export function BacktestLab() {
   const candleContainerRef = useRef<HTMLDivElement>(null);
   const candleChartRef = useRef<IChartApi | null>(null);
   const prevInstrumentSourceRef = useRef(instrumentSource);
+  const isGold = symbol === "MCX:GOLD";
+  const wasGoldRef = useRef(isGold);
 
   // Futures mode: auto-fill From/To to the contract's REAL available window (resolved server-side —
   // FYERS has no "list active contracts" or date-range endpoint, so guessing dates wastes a run).
@@ -239,8 +245,12 @@ export function BacktestLab() {
   useEffect(() => {
     const prev = prevInstrumentSourceRef.current;
     prevInstrumentSourceRef.current = instrumentSource;
+    const wasGold = wasGoldRef.current;
+    wasGoldRef.current = isGold;
 
-    if (instrumentSource === "FUTURES") {
+    // Gold ALWAYS rides the futures-range resolution (there is no gold index — the continuous
+    // contract is the only data source), regardless of the Data Source toggle (hidden for gold).
+    if (isGold || instrumentSource === "FUTURES") {
       let cancelled = false;
       setResolvingRange(true);
       setError(null);
@@ -262,14 +272,14 @@ export function BacktestLab() {
       return () => {
         cancelled = true;
       };
-    } else if (prev === "FUTURES") {
+    } else if (prev === "FUTURES" || wasGold) {
       const d = new Date();
       d.setDate(d.getDate() - 1825);
       setFromDate(d.toISOString().split("T")[0]);
       setToDate(new Date().toISOString().split("T")[0]);
       setResolvedFuturesSymbol(null);
     }
-  }, [instrumentSource, symbol]);
+  }, [instrumentSource, symbol, isGold]);
 
   const runBacktest = async () => {
     if (!fromDate || !toDate) return;
@@ -298,6 +308,8 @@ export function BacktestLab() {
         fixedLots,
         minVixFilter,
         minVix,
+        // Gold only: which contract's point-value sizes the 1-lot P&L (server ignores otherwise).
+        ...(isGold ? { contract: goldContract } : {}),
       });
       setResult(res);
     } catch (err: any) {
@@ -350,6 +362,7 @@ export function BacktestLab() {
             // already forwarded them). Parity with live's MIN_VIX_FILTER requires them here too.
             minVixFilter,
             minVix,
+            ...(isGold ? { contract: goldContract } : {}),
           })
         )
       );
@@ -640,19 +653,30 @@ export function BacktestLab() {
             <select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
               <option value="NSE:NIFTY50-INDEX">NIFTY 50</option>
               <option value="NSE:NIFTYBANK-INDEX">BANKNIFTY</option>
+              <option value="MCX:GOLD">GOLD (MCX)</option>
             </select>
           </div>
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Strategy</label>
             <div className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-400">5 EMA Trend (EMA5T)</div>
           </div>
-          <div>
-            <label className="mb-1 block text-2xs text-zinc-600">Data Source</label>
-            <select value={instrumentSource} onChange={(e) => setInstrumentSource(e.target.value as "INDEX" | "FUTURES")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
-              <option value="INDEX">Index (full history)</option>
-              <option value="FUTURES">Futures (current contract only)</option>
-            </select>
-          </div>
+          {isGold ? (
+            <div>
+              <label className="mb-1 block text-2xs text-zinc-600">Contract (sizing)</label>
+              <select value={goldContract} onChange={(e) => setGoldContract(e.target.value as "GOLDM" | "GOLD")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
+                <option value="GOLDM">GOLDM mini (₹10/point)</option>
+                <option value="GOLD">GOLD big (₹100/point)</option>
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-2xs text-zinc-600">Data Source</label>
+              <select value={instrumentSource} onChange={(e) => setInstrumentSource(e.target.value as "INDEX" | "FUTURES")} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
+                <option value="INDEX">Index (full history)</option>
+                <option value="FUTURES">Futures (current contract only)</option>
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">From</label>
             <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
@@ -661,13 +685,18 @@ export function BacktestLab() {
             <label className="mb-1 block text-2xs text-zinc-600">To</label>
             <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover" />
           </div>
-          {instrumentSource === "FUTURES" && (
+          {(isGold || instrumentSource === "FUTURES") && (
             <div className="sm:col-span-2 lg:col-span-4 -mt-1 rounded-panel border border-border-subtle bg-surface px-3 py-2 text-3xs text-zinc-500">
               {resolvingRange
                 ? "Resolving the current contract and its available date range…"
                 : resolvedFuturesSymbol
                 ? <>From/To auto-set to the real available window for <span className="font-mono text-zinc-300">{resolvedFuturesSymbol}</span> — narrow it further if you want, but it won't go any wider than this.</>
+                : isGold
+                ? "Gold trades the MCX continuous futures series — From/To will auto-fill once the contract resolves."
                 : "Futures history is limited to the current contract's lifetime — From/To will auto-fill once resolved."}
+              {isGold && !resolvingRange && (
+                <> Gold runs on its own session automatically: entries 09:00–22:00 IST, square-off on the 23:00 bar, MCX costs. Validated profile: Trend EMA 12, Target R:R 3.</>
+              )}
             </div>
           )}
           <div>
