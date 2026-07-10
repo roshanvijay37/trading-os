@@ -78,4 +78,41 @@ describe("computeFuturesCosts", () => {
     const withoutSide = computeFuturesCosts(50000, 50100, 30);
     expect(withLongSide).toBeCloseTo(withoutSide, 8);
   });
+
+  // ── Exchange-aware rates (MCX commodity futures, e.g. GOLD/GOLDM) ─────────────────────────
+  // Commodities pay CTT 0.01% sell-side (not equities' 0.05% STT) and MCX's own txn charge.
+
+  it("opts.exchange omitted or unknown === NSE (byte-identical regression for every existing caller)", () => {
+    const noExchange = computeFuturesCosts(50000, 50100, 30, { brokeragePerOrder: 20 });
+    const nse = computeFuturesCosts(50000, 50100, 30, { brokeragePerOrder: 20, exchange: "NSE" });
+    const unknown = computeFuturesCosts(50000, 50100, 30, { brokeragePerOrder: 20, exchange: "BSE" });
+    expect(nse).toBeCloseTo(noExchange, 10);
+    expect(unknown).toBeCloseTo(noExchange, 10);
+  });
+
+  it("MCX pins the exact commodity rate constants (CTT 0.01% sell, txn 0.0021%, stamp 0.002% buy)", () => {
+    const entryPrice = 100000, exitPrice = 100500, qty = 10, brokeragePerOrder = 20; // ~GOLDM scale
+    const buyTurnover = entryPrice * qty;
+    const sellTurnover = exitPrice * qty;
+    const brokerage = brokeragePerOrder * 2;
+    const ctt = 0.0001 * sellTurnover;
+    const exchTxn = 0.000021 * (buyTurnover + sellTurnover);
+    const sebi = 0.000001 * (buyTurnover + sellTurnover);
+    const stamp = 0.00002 * buyTurnover;
+    const gst = 0.18 * (brokerage + exchTxn + sebi);
+    const expected = brokerage + ctt + exchTxn + sebi + stamp + gst;
+    expect(computeFuturesCosts(entryPrice, exitPrice, qty, { brokeragePerOrder, exchange: "MCX" })).toBeCloseTo(expected, 6);
+  });
+
+  it("MCX round-trip is materially cheaper than NSE at equal turnover (CTT 1bps vs STT 5bps)", () => {
+    const nse = computeFuturesCosts(100000, 100000, 10, { exchange: "NSE" });
+    const mcx = computeFuturesCosts(100000, 100000, 10, { exchange: "MCX" });
+    expect(mcx).toBeLessThan(nse);
+  });
+
+  it("MCX SHORT leg attribution mirrors NSE's (entry is the SELL leg → CTT reads entry price)", () => {
+    const short = computeFuturesCosts(100000, 99500, 10, { exchange: "MCX", side: "SHORT" });
+    const swapped = computeFuturesCosts(99500, 100000, 10, { exchange: "MCX" });
+    expect(short).toBeCloseTo(swapped, 8);
+  });
 });
