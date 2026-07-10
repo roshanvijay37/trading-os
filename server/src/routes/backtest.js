@@ -16,9 +16,6 @@ import { computeAdvancedStats } from "../services/backtestStats.js";
 // gross (no brokerage/STT/exchange/GST/stamp duty) whenever instrumentSource is "FUTURES", the
 // one case where a real, costed instrument is actually being simulated.
 import { computeFuturesCosts } from "../services/futuresCosts.js";
-// Research-only alternate ENTRY triggers that reuse EMA5T's exact exit machinery (see altSignals.js).
-// Additive: the EMA5T/EMA5/EMA5_OPTION paths below are unchanged; the live bot never imports this.
-import { ALT_STRATEGIES, precomputeAlt, detectAltAlert } from "../services/altSignals.js";
 
 const router = express.Router();
 
@@ -341,11 +338,6 @@ export function runBacktest(candles, config) {
   const trendEmaValues = calculateEMA(closes, trendEmaPeriod);
   const trendEmaOffset = candles.length - trendEmaValues.length;
 
-  // Alternate-trigger research strategies (RSI2/VWAP/MACD/BOLL/STREND): precompute their indicators
-  // once. They then run through EMA5T's identical entry/exit path below (only the trigger differs).
-  const isAlt = ALT_STRATEGIES.includes(strategy);
-  const altInd = isAlt ? precomputeAlt(candles, strategy) : null;
-
   const trades = [];
   const equityCurve = [{ date: candles[0].datetime, equity: capital }];
   let currentCapital = capital;
@@ -516,7 +508,7 @@ export function runBacktest(candles, config) {
   // trendEmaPeriod for EMA5_OPTION/EMA5T's trend EMA). The old flat 50-bar warmup made the backtest
   // skip the first ~4h that the live bot trades. Keep 50 only when live filters are off (legacy raw
   // mode).
-  const liveWarmup = isAlt ? (altInd.warmup || 110) : ((strategy === "EMA5_OPTION" || strategy === "EMA5T") ? trendEmaPeriod : Math.max(emaPeriod + 1, 6));
+  const liveWarmup = (strategy === "EMA5_OPTION" || strategy === "EMA5T") ? trendEmaPeriod : Math.max(emaPeriod + 1, 6);
   const warmup = Math.max(emaOffset, applyLiveFilters ? liveWarmup : 50);
 
   for (let i = warmup; i < candles.length; i++) {
@@ -533,7 +525,7 @@ export function runBacktest(candles, config) {
       curDay = clk.dayKey; dayTrades = 0; dayPnL = 0; currentConsecutiveLosses = 0;
       // EMA5T parity: resting stop entries never carry across days (autoTrader.js clears
       // pendingEntries every new IST day) — a stale alert must not fire on a later session.
-      if (strategy === "EMA5T" || isAlt) alertCandle = null;
+      if (strategy === "EMA5T") alertCandle = null;
     }
 
     if (currentCapital > peakEquity) peakEquity = currentCapital;
@@ -562,7 +554,7 @@ export function runBacktest(candles, config) {
       } else if (position.side === "SHORT" && candle.low <= position.target) {
         exitReason = "TARGET";
         indexExitLevel = position.target;
-      } else if (strategy !== "EMA5T" && !isAlt && barsHeld >= maxHoldBars) {
+      } else if (strategy !== "EMA5T" && barsHeld >= maxHoldBars) {
         // EMA5T has no hold-time cap live — autoTrader.js only ever exits a position via SL,
         // target, or the 15:15 IST square-off (already handled above). Applying maxHoldBars here
         // artificially truncated real EMA5T trades (esp. on 15m, where 12 bars is only 3 hours),
@@ -605,7 +597,7 @@ export function runBacktest(candles, config) {
           // EMA5T only ever trades the futures contract live/paper, even when the backtest borrowed
           // INDEX candles for deeper history than the current contract has — the real trade this
           // signal represents is always a futures fill, so it always carries a futures fill's costs.
-          tradeCosts = (strategy === "EMA5T" || isAlt)
+          tradeCosts = strategy === "EMA5T"
             ? computeFuturesCosts(position.entryPrice, exitPrice, position.qty, { brokeragePerOrder, side: position.side })
             : 0;
           pnl = gross - tradeCosts;
@@ -706,16 +698,6 @@ export function runBacktest(candles, config) {
       }
       tryEnterFromAlert(candle, i, clk); // same resting-breakout entry as live's manageFuturesPending
     }
-
-    // ── Alternate research triggers (RSI2 / VWAP / MACD / BOLL / STREND) ──────────────────────
-    // Each nominates the prior (fully-closed) candle as the "alert" when its trigger fires; the SAME
-    // resting stop-entry + tight stop + targetMultiplier×R + 15:15 square-off machinery as EMA5T then
-    // handles it. Only the trigger differs (altSignals.js). Research-only; not wired to the live bot.
-    else if (isAlt) {
-      const at = detectAltAlert(strategy, i - 1, candles, altInd);
-      if (at) alertCandle = { candle: prevCandle, type: at, index: i - 1 };
-      tryEnterFromAlert(candle, i, clk);
-    }
   }
 
 
@@ -732,7 +714,7 @@ export function runBacktest(candles, config) {
       const gross = position.side === "LONG"
         ? (exitRec - position.entryPrice) * position.qty
         : (position.entryPrice - exitRec) * position.qty;
-      tradeCosts = (strategy === "EMA5T" || isAlt)
+      tradeCosts = strategy === "EMA5T"
         ? computeFuturesCosts(position.entryPrice, exitRec, position.qty, { brokeragePerOrder, side: position.side })
         : 0;
       pnl = gross - tradeCosts;
