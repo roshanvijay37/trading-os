@@ -198,6 +198,23 @@ export function getHolidayName(date = new Date()) {
 }
 
 /**
+ * Is `now` a TRADING DAY for the given exchange (weekend + holiday check only — the intraday
+ * session window is the caller's session-profile concern, not this calendar's).
+ *
+ * v1 deliberately reuses the NSE weekend+holiday calendar for BOTH exchanges: MCX's holiday
+ * list differs (e.g. MCX often runs an evening session on NSE holidays, and Muhurat timings
+ * differ), so this is CONSERVATIVE for MCX — it skips a few valid gold sessions but never
+ * trades a closed one; live quote-probes fail gracefully if MCX is closed on an NSE-open day.
+ * A real MCX calendar is a documented follow-up.
+ */
+export function isInstrumentTradingDay(_exchange = "NSE", now = new Date()) {
+  const { day } = getIstDateParts(now);
+  if (day === 0 || day === 6) return false;
+  if (isMarketHoliday(now)) return false;
+  return true;
+}
+
+/**
  * Check if NSE market is open
  */
 export function isNseMarketOpen() {

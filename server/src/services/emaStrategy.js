@@ -95,34 +95,43 @@ export function detectAlertCandle(candles, strategy = "EMA5", trendEmaPeriod = 2
 }
 
 /**
- * Check if it's valid trading time
+ * Check if it's valid trading time (new-entry window) for a session profile.
+ * @param {{sessionStartDecimal?: number, sessionEndDecimal?: number}} [profile] — per-instrument
+ *   session (services/instruments.js SESSION_PROFILES). Omitted → the long-standing NSE equity
+ *   window (9:15–15:00 IST), so every existing caller is behavior-identical.
  * @returns {boolean}
  */
-export function isValidTradingTime() {
+export function isValidTradingTime(profile) {
   // Compute IST explicitly from UTC. Using getHours()/getMinutes() relies on the server's
   // local timezone — on a UTC production host that shifts the whole trading window by 5.5h.
   const now = new Date();
   const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % (24 * 60);
   const timeDecimal = istMinutes / 60;
 
-  // Market hours: 9:15 AM to 3:30 PM IST
-  // No new positions after 3:00 PM
-  return timeDecimal >= 9.25 && timeDecimal < 15.0;
+  const start = profile?.sessionStartDecimal ?? 9.25; // NSE: 9:15, no new entries before
+  const end = profile?.sessionEndDecimal ?? 15.0;     // NSE: no new positions after 15:00
+  return timeDecimal >= start && timeDecimal < end;
 }
 
 /**
- * Check if it's time to square off (3:15 PM)
+ * Check if it's time to square off for a session profile (NSE default: 15:15 IST).
+ * Generalized to "at/after HH:MM" — for NSE this also returns true after 16:00, which the old
+ * `hours === 15` check didn't; behavior is unchanged in practice because the bot's trading loop
+ * force-closes everything at the session close boundary and stops monitoring after that.
+ * @param {{squareOffHour?: number, squareOffMinute?: number}} [profile]
  * @returns {boolean}
  */
-export function isSquareOffTime() {
-  // IST explicitly from UTC (see isValidTradingTime) — square-off at 15:15 IST must not
-  // drift with the server's local timezone.
+export function isSquareOffTime(profile) {
+  // IST explicitly from UTC (see isValidTradingTime) — square-off must not drift with the
+  // server's local timezone.
   const now = new Date();
   const istMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % (24 * 60);
   const hours = Math.floor(istMinutes / 60);
   const minutes = istMinutes % 60;
 
-  return hours === 15 && minutes >= 15;
+  const sqH = profile?.squareOffHour ?? 15;
+  const sqM = profile?.squareOffMinute ?? 15;
+  return hours > sqH || (hours === sqH && minutes >= sqM);
 }
 
 /**

@@ -66,3 +66,43 @@ describe("getPeriodStart (session-anchored candle buckets)", () => {
     expect(starts[2] - starts[1]).toBe(min(30));
   });
 });
+
+// ─── MCX gold session anchor (09:00 IST) ────────────────────────────────────────────────────
+// Gold trades 09:00–23:30; its candles must anchor at 09:00 (MCX/FYERS bar boundaries are
+// 09:00–09:30–10:00… for 30m), and its 09:00–09:15 ticks must NOT be dropped by the NSE cutoff.
+// The default (no sessionOpenMin) stays the NSE 09:15 anchor — asserted for regression.
+describe("per-symbol session anchor (MCX gold = 09:00)", () => {
+  const min = (n) => n * 60000;
+  const MCX_OPEN = 9 * 60; // 09:00 IST
+  const goldOpen = (y, mo, d) => ist(y, mo, d, 9, 0);
+
+  it("currentSessionStartMs with the MCX anchor → today's 09:00 IST", () => {
+    expect(currentSessionStartMs(ist(2026, 6, 1, 9, 5), MCX_OPEN)).toBe(goldOpen(2026, 6, 1));
+    // NSE default at the same instant would point at the PREVIOUS session (09:05 < 09:15)
+    expect(currentSessionStartMs(ist(2026, 6, 1, 9, 5))).toBe(ist(2026, 5, 30, 9, 15));
+  });
+
+  it("a 09:05 gold tick is inside the MCX session (would be dropped under the NSE anchor)", () => {
+    const mcxCutoff = currentSessionStartMs(ist(2026, 6, 1, 9, 32), MCX_OPEN);
+    const nseCutoff = currentSessionStartMs(ist(2026, 6, 1, 9, 32));
+    const tick = ist(2026, 6, 1, 9, 5);
+    expect(tick).toBeGreaterThanOrEqual(mcxCutoff);
+    expect(tick).toBeLessThan(nseCutoff);
+  });
+
+  it("30m gold buckets: 09:14 → the 09:00 bar; 09:30 opens the next; evening 22:40 → 22:30 bar", () => {
+    expect(getPeriodStart(ist(2026, 6, 1, 9, 14), "minute", 30, MCX_OPEN)).toBe(goldOpen(2026, 6, 1));
+    expect(getPeriodStart(ist(2026, 6, 1, 9, 30), "minute", 30, MCX_OPEN)).toBe(goldOpen(2026, 6, 1) + min(30));
+    expect(getPeriodStart(ist(2026, 6, 1, 22, 40), "minute", 30, MCX_OPEN)).toBe(ist(2026, 6, 1, 22, 30));
+  });
+
+  it("60m gold buckets anchor 09:00–10:00–11:00…", () => {
+    expect(getPeriodStart(ist(2026, 6, 1, 9, 59), "minute", 60, MCX_OPEN)).toBe(goldOpen(2026, 6, 1));
+    expect(getPeriodStart(ist(2026, 6, 1, 10, 0), "minute", 60, MCX_OPEN)).toBe(goldOpen(2026, 6, 1) + min(60));
+  });
+
+  it("REGRESSION: omitting sessionOpenMin keeps the NSE 09:15 anchor everywhere", () => {
+    expect(getPeriodStart(ist(2026, 6, 1, 10, 7), "minute", 30)).toBe(open(2026, 6, 1) + min(30)); // 09:45–10:15 bar
+    expect(currentSessionStartMs(ist(2026, 6, 1, 12, 0))).toBe(open(2026, 6, 1));
+  });
+});

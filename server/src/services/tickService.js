@@ -354,28 +354,42 @@ export function getWsStatus() {
   };
 }
 
-// Start of the current NSE trading session (09:15 IST) at or before `nowMs`, as epoch ms. India has
-// no DST so a fixed +5:30 offset is exact. Pure/exported for unit tests.
+// Start of the current trading session at or before `nowMs`, as epoch ms. India has no DST so a
+// fixed +5:30 offset is exact. `sessionOpenMin` (IST minutes-since-midnight) defaults to the NSE
+// 09:15 anchor — every existing caller/test is byte-identical; MCX instruments pass 09:00
+// (instruments.js SESSION_PROFILES) so gold's first 15 minutes of ticks aren't dropped and its
+// candle buckets align with MCX/FYERS bar boundaries. Pure/exported for unit tests.
 const IST_OFFSET_MS = 330 * 60000;
-const SESSION_OPEN_MIN = 9 * 60 + 15; // 09:15 IST
-export function currentSessionStartMs(nowMs) {
+const SESSION_OPEN_MIN = 9 * 60 + 15; // 09:15 IST (NSE default)
+const MCX_SESSION_OPEN_MIN = 9 * 60; // 09:00 IST (kept in sync with instruments.js MCX_COMMODITY)
+export function currentSessionStartMs(nowMs, sessionOpenMin = SESSION_OPEN_MIN) {
   const istMs = nowMs + IST_OFFSET_MS;
   const istMidnight = Math.floor(istMs / 86400000) * 86400000;
-  let openIst = istMidnight + SESSION_OPEN_MIN * 60000;
+  let openIst = istMidnight + sessionOpenMin * 60000;
   if (istMs < openIst) openIst -= 86400000; // before today's open → the previous session
   return openIst - IST_OFFSET_MS;
 }
 
+// Default session anchor for a tickStore key. Keys arrive both as full FYERS symbols
+// ("MCX:GOLDM26AUGFUT") and as short names ("GOLDM26AUGFUT" via getSymbolShortName), so sniff
+// the root rather than the exchange prefix. Callers that know the instrument (autoTrader) can
+// pass an explicit anchor instead.
+function defaultSessionOpenMin(symbol) {
+  return String(symbol).toUpperCase().includes("GOLD") ? MCX_SESSION_OPEN_MIN : SESSION_OPEN_MIN;
+}
+
 // ─── OHLC Aggregation Engine ──────────────────────────────────────
-export function aggregateOHLC(symbol, interval, limit = 500) {
+export function aggregateOHLC(symbol, interval, limit = 500, sessionOpenMin = undefined) {
   const all = tickStore[symbol] || [];
   if (all.length === 0) return [];
+
+  const anchorMin = sessionOpenMin ?? defaultSessionOpenMin(symbol);
 
   // Drop pre-session ticks before aggregating. FYERS streams the frozen last index value overnight,
   // which otherwise builds flat, stale higher-timeframe candles at the open (the 30m/60m EMA sits at
   // yesterday's value). Keeping only the CURRENT session's ticks means the engine falls back to clean
   // REST history until enough fresh live ticks accumulate. Non-destructive: the raw buffer is untouched.
-  const cutoff = currentSessionStartMs(Date.now());
+  const cutoff = currentSessionStartMs(Date.now(), anchorMin);
   const ticks = all.filter((t) => t.timestamp >= cutoff);
   if (ticks.length === 0) return [];
 
@@ -401,7 +415,7 @@ export function aggregateOHLC(symbol, interval, limit = 500) {
 
   for (const tick of ticks) {
     const tickTime = tick.timestamp;
-    const periodStart = getPeriodStart(tickTime, unit, value);
+    const periodStart = getPeriodStart(tickTime, unit, value, anchorMin);
 
     if (periodStart !== currentPeriod) {
       // Save previous candle
@@ -454,7 +468,7 @@ function parseInterval(interval) {
 // 30m/60m candles disagreed with REST-history/backtest bars and shifted the EMA (a live-vs-
 // backtest parity break). Anchoring at session open yields identical boundaries for 5m/15m
 // (09:15 is on the 5/15-minute grid) and FIXES 30m/60m. Exported for unit tests.
-export function getPeriodStart(timestamp, unit, value) {
+export function getPeriodStart(timestamp, unit, value, sessionOpenMin = SESSION_OPEN_MIN) {
   if (unit === "second") {
     // Round down to nearest N seconds
     const date = new Date(timestamp);
@@ -464,7 +478,7 @@ export function getPeriodStart(timestamp, unit, value) {
   }
 
   if (unit === "minute") {
-    const sessionStart = currentSessionStartMs(timestamp);
+    const sessionStart = currentSessionStartMs(timestamp, sessionOpenMin);
     const periodMs = value * 60000;
     return sessionStart + Math.floor((timestamp - sessionStart) / periodMs) * periodMs;
   }
