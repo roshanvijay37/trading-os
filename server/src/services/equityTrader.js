@@ -36,7 +36,7 @@ import { detectAlertCandle, isValidTradingTime, isSquareOffTime } from "./emaStr
 import { SESSION_PROFILES, computeInstrumentPhase } from "./instruments.js";
 import { isInstrumentTradingDay } from "../utils/marketHolidays.js";
 import { computeEquityIntradayCosts } from "./equityCosts.js";
-import { alertInfo, alertWarn, alertCritical } from "./notifier.js";
+import { alertInfo, alertCritical } from "./notifier.js";
 import { refreshAccessToken } from "../routes/auth.js";
 
 const FYERS_APP_ID = process.env.FYERS_APP_ID;
@@ -59,23 +59,28 @@ const CONFIG = {
   TREND_EMA_PERIOD: 12,
   TARGET_MULTIPLIER: 3,
   TIMEFRAME_MINUTES: 60, // the validated timeframe (60m dominated 30m on every name)
-  // NOTE: deliberately NO per-day trade-count cap — the validated backtests ran without one
-  // binding, and adding it live would change the trade sequence (backtest↔live divergence).
-  // perScripTrades is still counted for display/audit only.
-  DAILY_LOSS_CAP: 6000, // ₹ global (≈3R): halts new entries AND flattens when breached
+  // PARITY RULE (user directive): this service has NOTHING the validated backtests didn't have —
+  // no per-day trade-count cap, no automatic daily-loss breaker. Any gate here that the backtest
+  // engine's runs never hit would change the live trade sequence vs what was validated. The only
+  // kill switches are MANUAL: Emergency Stop (blocks new entries, keeps managing exits) and Stop.
+  // perScripTrades / dailyRealizedPnL are display+audit counters only — they gate nothing.
   PAPER_TRADING: true, // fail-safe default; flip blocked while running (see updateEquityConfig)
   EMERGENCY_STOP: false,
   POLL_INTERVAL_MS: 30000,
   BROKERAGE_PER_ORDER: 20,
 };
 
-// MIS session profile: entries 09:15–14:00 IST, square-off 15:10 — passed to the SAME
-// isValidTradingTime/isSquareOffTime helpers the futures bot uses (emaStrategy.js).
+// MIS session profile: entries 09:15–14:00 IST, square-off 15:15 — the EXACT values the
+// validated backtests used (engine defaults), passed to the SAME isValidTradingTime/
+// isSquareOffTime helpers the futures bot uses (emaStrategy.js).
+// TODO(verify-before-live): confirm FYERS's MIS RMS auto-square-off time doesn't race our 15:15
+// exit — if the broker flattens at/before 15:15, pull this earlier for LIVE only (paper keeps
+// backtest parity either way).
 export const MIS_PROFILE = {
   sessionStartDecimal: 9.25,
   sessionEndDecimal: 14.0,
   squareOffHour: 15,
-  squareOffMinute: 10,
+  squareOffMinute: 15,
 };
 
 const CONFIG_FIELD_MAP = {
@@ -84,7 +89,6 @@ const CONFIG_FIELD_MAP = {
   leverage: "LEVERAGE",
   trendEmaPeriod: "TREND_EMA_PERIOD",
   targetMultiplier: "TARGET_MULTIPLIER",
-  dailyLossCap: "DAILY_LOSS_CAP",
   paperTrading: "PAPER_TRADING",
 };
 const PERSISTED_CONFIG_KEYS = [...Object.values(CONFIG_FIELD_MAP), "SCRIPS"];
@@ -95,7 +99,6 @@ const NUMERIC_BOUNDS = {
   leverage: { min: 1, max: 5 },
   trendEmaPeriod: { min: 5, max: 50, int: true },
   targetMultiplier: { min: 0.5, max: 5 },
-  dailyLossCap: { min: 500, max: 100000 },
 };
 
 // ─── STATE ───────────────────────────────────────────────────────────────────────────────
@@ -314,8 +317,7 @@ function committedMarginFor(scripName) {
 function canEnter(scripName) {
   if (CONFIG.EMERGENCY_STOP) return { ok: false, reason: "EMERGENCY_STOP" };
   if (!isValidTradingTime(MIS_PROFILE)) return { ok: false, reason: "OUTSIDE_ENTRY_WINDOW" };
-  // No per-day trade-count gate — parity with the validated backtests (see CONFIG note).
-  if (dailyRealizedPnL <= -CONFIG.DAILY_LOSS_CAP) return { ok: false, reason: "DAILY_LOSS_CAP" };
+  // No trade-count or daily-loss gates — strict parity with the validated backtests (CONFIG note).
   if (openPositions.some((p) => p.status === "OPEN" && p.underlying === scripName)) return { ok: false, reason: "POSITION_OPEN" };
   return { ok: true };
 }
@@ -585,18 +587,8 @@ async function monitorPositions(session) {
       console.error(`[EQUITY-TRADER] monitor error (${position.optionSymbol}):`, err.message);
     }
   }
-  // Daily-loss breaker must also FLATTEN, not just block entries (same C7 rule as the bot).
-  const stillOpen = openPositions.filter((p) => p.status === "OPEN");
-  if (stillOpen.length > 0 && dailyRealizedPnL <= -CONFIG.DAILY_LOSS_CAP) {
-    alertWarn("EQ_DAILY_LOSS_CAP", `Equity daily loss cap breached (₹${dailyRealizedPnL.toFixed(0)}) — flattening`, {});
-    for (const pos of stillOpen) {
-      try {
-        await closePosition(pos, session, "DAILY_LOSS_LIMIT");
-      } catch (err) {
-        console.error("[EQUITY-TRADER] daily-loss flatten failed:", err.message);
-      }
-    }
-  }
+  // Deliberately NO automatic daily-loss flatten — backtest parity (see CONFIG note). Manual
+  // Emergency Stop remains the operator's brake for a runaway day.
 }
 
 // ─── MAIN LOOP ────────────────────────────────────────────────────────────────────────────
@@ -706,12 +698,11 @@ export function getEquityStatus() {
     trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
     targetMultiplier: CONFIG.TARGET_MULTIPLIER,
     timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
-    dailyLossCap: CONFIG.DAILY_LOSS_CAP,
     dailyRealizedPnL: dailyRealizedPnL.toFixed(2),
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
     closedPositions: openPositions.filter((p) => p.status === "CLOSED"),
     pendingEntries: [...pendingEntries.values()],
-    misWindow: { entries: "09:15–14:00 IST", squareOff: "15:10 IST" },
+    misWindow: { entries: "09:15–14:00 IST", squareOff: "15:15 IST" },
   };
 }
 

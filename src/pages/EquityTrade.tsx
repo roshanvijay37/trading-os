@@ -60,7 +60,6 @@ interface EquityStatus {
   trendEmaPeriod: number;
   targetMultiplier: number;
   timeframeMinutes: number;
-  dailyLossCap: number;
   dailyRealizedPnL: string;
   openPositions: EquityPosition[];
   closedPositions: EquityPosition[];
@@ -81,7 +80,6 @@ export function EquityTrade() {
     leverage: 4,
     trendEmaPeriod: 12,
     targetMultiplier: 3,
-    dailyLossCap: 6000,
     scripEnabled: {} as Record<string, boolean>,
   });
   const seq = useRef(0);
@@ -101,7 +99,6 @@ export function EquityTrade() {
           leverage: s.leverage ?? prev.leverage,
           trendEmaPeriod: s.trendEmaPeriod ?? prev.trendEmaPeriod,
           targetMultiplier: s.targetMultiplier ?? prev.targetMultiplier,
-          dailyLossCap: s.dailyLossCap ?? prev.dailyLossCap,
           scripEnabled: Object.fromEntries((s.scrips || []).map((x: EquityScrip) => [x.name, x.enabled])),
         }));
       }
@@ -155,7 +152,7 @@ export function EquityTrade() {
         </span>
         <span className="text-2xs text-zinc-600">
           EMA5T · {status?.timeframeMinutes ?? 60}m · entries {status?.misWindow?.entries ?? "09:15–14:00"} · square-off{" "}
-          {status?.misWindow?.squareOff ?? "15:10"}
+          {status?.misWindow?.squareOff ?? "15:15"}
         </span>
         <span className={`ml-auto font-mono text-2xs ${dailyPnL >= 0 ? "text-gain" : "text-loss"}`}>
           Day P&L: {inr(dailyPnL)}
@@ -208,7 +205,6 @@ export function EquityTrade() {
                 ["MIS leverage (×)", "leverage", 1],
                 ["Trend EMA", "trendEmaPeriod", 1],
                 ["Target R:R", "targetMultiplier", 0.5],
-                ["Daily loss cap (₹)", "dailyLossCap", 500],
               ] as const
             ).map(([label, key, step]) => (
               <div key={key}>
@@ -376,8 +372,9 @@ export function EquityTrade() {
 
       <p className="flex items-center gap-2 text-3xs text-zinc-600">
         <Banknote size={10} />
-        Isolated from the futures bot (own service, state, audit). Validated basket: PF 4–5.4 @60m across all five
-        names, survives 5× slippage. Paper results are net of cash-intraday statutory charges.
+        Isolated from the futures bot (own service, state, audit). Strict backtest parity: no gates the validated
+        runs didn't have — the only brakes are manual (Emergency Stop / Stop). Validated basket: PF 4–5.4 @60m,
+        survives 5× slippage. Paper results are net of cash-intraday statutory charges.
       </p>
     </div>
   );

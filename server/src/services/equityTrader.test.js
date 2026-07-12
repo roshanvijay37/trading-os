@@ -104,10 +104,10 @@ describe("sanitizeEquityConfigUpdates", () => {
   });
 });
 
-describe("MIS_PROFILE — the validated intraday window", () => {
-  it("entries 9:15–14:00, square-off 15:10 (before broker RMS)", () => {
+describe("MIS_PROFILE — strict backtest parity (the engine defaults the validated runs used)", () => {
+  it("entries 9:15–14:00, square-off 15:15 — exactly what the backtests simulated", () => {
     expect(MIS_PROFILE.sessionStartDecimal).toBe(9.25);
     expect(MIS_PROFILE.sessionEndDecimal).toBe(14.0);
-    expect([MIS_PROFILE.squareOffHour, MIS_PROFILE.squareOffMinute]).toEqual([15, 10]);
+    expect([MIS_PROFILE.squareOffHour, MIS_PROFILE.squareOffMinute]).toEqual([15, 15]);
   });
 });
