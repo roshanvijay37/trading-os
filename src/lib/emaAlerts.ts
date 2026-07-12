@@ -136,7 +136,14 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
  *     (checkTimeFilter) refuses any new entry from that point on, so a "signal" like this would
  *     never actually become a trade no matter how price moved afterward.
  */
-export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): ResolvedAlert[] {
+export function resolveEmaAlerts(
+  candles: AlertCandle[],
+  alerts: AlertPoint[],
+  // entryCutoffHour: per-instrument entry cutoff (IST hour). Defaults to the NSE 14:00 rule;
+  // the Chart page passes 22 for MCX gold (its validated profile allows entries 09:00–22:00).
+  opts: { entryCutoffHour?: number } = {},
+): ResolvedAlert[] {
+  const entryCutoffHour = opts.entryCutoffHour ?? MAX_TIME_ENTRY_HOUR;
   return alerts.map((alert, k) => {
     const alertCandle = candles[alert.index];
     const isBullish = alert.type === "BULLISH";
@@ -168,7 +175,7 @@ export function resolveEmaAlerts(candles: AlertCandle[], alerts: AlertPoint[]): 
     const entry = gappedThrough ? (triggerOpen as number) : nominalEntry;
     const risk = Math.abs(entry - sl);
     const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
-    const pastEntryCutoff = triggerCandle.time !== undefined && istHourOf(triggerCandle.time) >= MAX_TIME_ENTRY_HOUR;
+    const pastEntryCutoff = triggerCandle.time !== undefined && istHourOf(triggerCandle.time) >= entryCutoffHour;
 
     let outcome: TradeOutcome = "OPEN";
     let outcomeIndex: number | null = null;

@@ -44,7 +44,19 @@ function getHolidayName(holidays: { date: string; name: string }[]): string | nu
   return found ? found.name : null;
 }
 
-function getMarketStatusText(holidays: { date: string; name: string }[]): string {
+// Session windows per exchange (IST minutes): NSE 9:15–15:30; MCX gold 9:00–23:30. The MCX
+// holiday calendar differs from NSE's — v1 reuses the NSE list (same conservative choice the
+// backend makes in marketHolidays.js's isInstrumentTradingDay).
+function sessionWindow(isGold: boolean): { openMin: number; closeMin: number } {
+  return isGold ? { openMin: 9 * 60, closeMin: 23 * 60 + 30 } : { openMin: 9 * 60 + 15, closeMin: 15 * 60 + 30 };
+}
+
+function istMinutesNow(): number {
+  const now = new Date();
+  return ((now.getUTCHours() * 60 + now.getUTCMinutes()) + 330) % (24 * 60);
+}
+
+function getMarketStatusText(holidays: { date: string; name: string }[], isGold: boolean): string {
   const now = new Date();
   const day = now.getUTCDay();
   if (day === 0) return "Sunday — Market Closed";
@@ -53,28 +65,21 @@ function getMarketStatusText(holidays: { date: string; name: string }[]): string
   if (holidayName) {
     return `Holiday — ${holidayName}`;
   }
-  const utc = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const ist = (utc + 330) % (24 * 60);
-  const h = Math.floor(ist / 60);
-  const m = ist % 60;
-  if (h === 9 && m < 15) return "Pre-market";
-  if (h < 9 || h > 15 || (h === 15 && m >= 30)) return "Market Closed";
+  const ist = istMinutesNow();
+  const { openMin, closeMin } = sessionWindow(isGold);
+  if (ist < openMin && ist >= openMin - 15) return "Pre-market";
+  if (ist < openMin || ist >= closeMin) return "Market Closed";
   return "Market Open — Auto-refreshing";
 }
 
-function isMarketOpen(holidays: { date: string; name: string }[]): boolean {
+function isMarketOpen(holidays: { date: string; name: string }[], isGold: boolean): boolean {
   const now = new Date();
   const day = now.getUTCDay();
   if (day === 0 || day === 6) return false;
   if (isMarketHoliday(holidays)) return false;
-  const utc = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const ist = (utc + 330) % (24 * 60);
-  const h = Math.floor(ist / 60);
-  const m = ist % 60;
-  if (h < 9 || h > 15) return false;
-  if (h === 9 && m < 15) return false;
-  if (h === 15 && m > 30) return false;
-  return true;
+  const ist = istMinutesNow();
+  const { openMin, closeMin } = sessionWindow(isGold);
+  return ist >= openMin && ist < closeMin;
 }
 
 export function Chart() {
@@ -110,7 +115,12 @@ export function Chart() {
   const symbols = [
     { value: "NSE:NIFTYBANK-INDEX", label: "BANKNIFTY FUT" },
     { value: "NSE:NIFTY50-INDEX", label: "NIFTY FUT" },
+    // Pseudo-symbol: the server resolves the continuous MCX gold contract (same flow as the
+    // indices' futures resolution below). Gold trades 09:00–23:30 IST — the live-refresh window
+    // and the signal entry-cutoff (22:00, not 14:00) follow its session automatically.
+    { value: "MCX:GOLD", label: "GOLD FUT (MCX)" },
   ];
+  const isGold = symbol === "MCX:GOLD";
 
   const timeframes = [
     { value: "1", label: "1m" },
@@ -124,9 +134,10 @@ export function Chart() {
   useEffect(() => {
     fetchHolidays().then((h) => {
       setHolidays(h);
-      setMarketOpen(isMarketOpen(h));
+      setMarketOpen(isMarketOpen(h, isGold));
     });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGold]);
 
   // Resolve the current tradable futures contract whenever the selected underlying changes.
   useEffect(() => {
@@ -211,14 +222,14 @@ export function Chart() {
     fetchData().finally(() => setLoading(false));
 
     const statusInterval = setInterval(() => {
-      setMarketOpen(isMarketOpen(holidays));
+      setMarketOpen(isMarketOpen(holidays, isGold));
     }, 60000);
 
     return () => {
       clearInterval(statusInterval);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [tradedSymbol, resolution, holidays]);
+  }, [tradedSymbol, resolution, holidays, isGold]);
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -270,7 +281,10 @@ export function Chart() {
   // Simulates each alert forward (did price actually reach the entry, then SL or target first) —
   // the same entry/SL/target formula and SL-checked-first tie-break the live bot's backtest uses
   // (see src/lib/emaAlerts.ts's resolveEmaAlerts doc comment for exactly what's mirrored).
-  const allResolved = resolveEmaAlerts(chartCandles, allAlerts);
+  // Gold's validated entry window runs to 22:00 IST (vs the NSE bot's 14:00 cutoff) — the
+  // tradeable-signal filter must judge gold alerts by gold's rule or every afternoon/evening
+  // signal would be wrongly hidden as "past cutoff".
+  const allResolved = resolveEmaAlerts(chartCandles, allAlerts, { entryCutoffHour: isGold ? 22 : 14 });
 
   // Only show signals that would actually become a trade: it must have triggered (a
   // NOT_TRIGGERED alert never opened a position) AND not be past the 14:00 IST entry cutoff
@@ -330,7 +344,7 @@ export function Chart() {
           <Activity size={9} className={marketOpen ? "animate-pulse" : ""} />
           {marketOpen ? "LIVE" : "CLOSED"}
         </span>
-        <span className="text-2xs text-zinc-600">{getMarketStatusText(holidays)}</span>
+        <span className="text-2xs text-zinc-600">{getMarketStatusText(holidays, isGold)}</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-panel border border-border bg-panel p-3">
@@ -387,7 +401,7 @@ export function Chart() {
           </button>
           <button
             onClick={() => setShowSignals((v) => !v)}
-            title="EMA5T alerts that triggered before the 14:00 IST entry cutoff — i.e. would actually become a trade. Not a claim about the bot's live signal/position state on this symbol/timeframe"
+            title={`EMA5T alerts that triggered before the ${isGold ? "22:00" : "14:00"} IST entry cutoff — i.e. would actually become a trade. Not a claim about the bot's live signal/position state on this symbol/timeframe`}
             className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-2 text-2xs font-medium transition ${
               showSignals ? "border-border-hover bg-surface text-zinc-200" : "border-border-subtle bg-surface text-zinc-500 hover:text-zinc-300"
             }`}
