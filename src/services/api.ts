@@ -238,6 +238,21 @@ export const backtestApi = {
     }),
 };
 
+// Equity MIS trader — the isolated cash-equity EMA5T service (5 volatile scrips, 60m).
+// Mirrors autoTradeApi's surface; completely separate backend service/state from the bot.
+export const equityTradeApi = {
+  start: () => fetchWithAuth("/equity-trade/start", { method: "POST" }),
+  stop: () => fetchWithAuth("/equity-trade/stop", { method: "POST" }),
+  getStatus: () => fetchWithAuth("/equity-trade/status"),
+  updateConfig: (config: Record<string, any>) =>
+    fetchWithAuth("/equity-trade/config", { method: "POST", body: JSON.stringify(config) }),
+  emergencyStop: (enabled: boolean) =>
+    fetchWithAuth("/equity-trade/emergency-stop", { method: "POST", body: JSON.stringify({ enabled }) }),
+  setPaperTrading: (enabled: boolean) =>
+    fetchWithAuth("/equity-trade/paper-trading", { method: "POST", body: JSON.stringify({ enabled }) }),
+  getAuditLog: (limit?: number) => fetchWithAuth(`/equity-trade/audit?limit=${limit || 100}`),
+};
+
 // Market — public aggregate analytics (no broker session required)
 export const marketApi = {
   getStatus: () => fetchWithAuth("/market/status"),

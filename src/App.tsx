@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { InstitutionalProvider } from "./store/InstitutionalProvider";
 import { Layout } from "./components/Layout";
 import { AutoTrade } from "./pages/AutoTrade";
+import { EquityTrade } from "./pages/EquityTrade";
 import { Journal } from "./pages/Journal";
 import { Chart } from "./pages/Chart";
 import { BacktestLab } from "./pages/BacktestLab";
@@ -14,6 +15,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<AutoTrade />} />
+          <Route path="/equity" element={<EquityTrade />} />
           <Route path="/chart" element={<Chart />} />
           {/* Old bookmarks: Command Center (dashboard+risk overview) removed — the bot page is
               now home; everything is configured/monitored there. Reports merged into Journal. */}
