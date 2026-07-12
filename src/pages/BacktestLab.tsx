@@ -126,7 +126,11 @@ export function BacktestLab() {
   // parameter-sensitivity check, same as Target R:R.
   const [trendEmaPeriod, setTrendEmaPeriod] = useState(12);
   const [slippage, setSlippage] = useState(0.02);
-  const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
+  // FIXED by default: matches how the bot actually trades (a constant 1 lot — it never compounds
+  // position size with equity), so a fresh Lab run mirrors live behavior. COMPOUND remains
+  // selectable for growth-curve what-ifs. Note: capital mode only changes sizing in RISK mode;
+  // in the default LOTS mode qty is fixed either way and this only affects the equity metrics.
+  const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("FIXED");
   // Live-parity risk gates — same figures the live bot's own config uses by default, but
   // editable here rather than silently hardcoded (matches the bot's own config, not a
   // separate backtest-only assumption).
