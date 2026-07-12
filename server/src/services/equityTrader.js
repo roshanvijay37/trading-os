@@ -10,11 +10,12 @@
  * COPIED from autoTrader.js rather than imported, because importing that module would drag in
  * its state file load and the rest of the futures bot's module graph.
  *
- * Strategy (validated 2026-07 across ADANIENT/RBLBANK/TMPV/ETERNAL/PAYTM + INDUSINDBK — see
- * memory/research): EMA5T, 60m bars, trend-EMA 12, target 3R, entries 09:15–14:00 IST,
- * square-off 15:10 (deliberately BEFORE the broker's own MIS RMS square-off so we exit, not
- * their algo). Sizing is RISK-based (cash equity has no lots): qty = risk ÷ stop-distance,
- * capped by per-scrip margin × MIS leverage.
+ * Strategy (validated 2026-07 across two waves — ADANIENT/RBLBANK/TMPV/ETERNAL/PAYTM, then
+ * BSE/ANGELONE/MAZDOCK/POLICYBZR/KAYNES; plus INDUSINDBK standalone = 11/11 names profitable):
+ * EMA5T, 60m bars, trend-EMA 12, target 3R, entries 09:15–14:00 IST, square-off 15:15 (the
+ * exact engine defaults the backtests simulated — see MIS_PROFILE). Sizing is RISK-based
+ * (cash equity has no lots): qty = risk ÷ stop-distance, capped by per-scrip margin × MIS
+ * leverage.
  *
  * PAPER-first: CONFIG.PAPER_TRADING defaults true; the live order path is fully wired through
  * orderExecution (INTRADAY product) but flagged verify-before-live (equity intraday statutory
@@ -47,11 +48,20 @@ const CONFIG = {
   // The validated volatile-stock basket. TMPV = the post-demerger ticker carrying the old
   // TATAMOTORS series (TATAMOTORS-EQ no longer exists on FYERS).
   SCRIPS: [
+    // Wave 1 (validated 2026-07-10): PF 4–5.4 @60m, every year green.
     { name: "ADANIENT", symbol: "NSE:ADANIENT-EQ", enabled: true },
     { name: "RBLBANK", symbol: "NSE:RBLBANK-EQ", enabled: true },
     { name: "TMPV", symbol: "NSE:TMPV-EQ", enabled: true },
     { name: "ETERNAL", symbol: "NSE:ETERNAL-EQ", enabled: true },
     { name: "PAYTM", symbol: "NSE:PAYTM-EQ", enabled: true },
+    // Wave 2 (validated 2026-07-13): PF 6.5–8.9 @60m, every year green. All NSE F&O members
+    // and surveillance-clean at add time — but KAYNES/ANGELONE/MAZDOCK have prior ASM history;
+    // an ASM re-entry cuts MIS leverage in LIVE (paper unaffected). Vet before real capital.
+    { name: "BSE", symbol: "NSE:BSE-EQ", enabled: true },
+    { name: "ANGELONE", symbol: "NSE:ANGELONE-EQ", enabled: true },
+    { name: "MAZDOCK", symbol: "NSE:MAZDOCK-EQ", enabled: true },
+    { name: "POLICYBZR", symbol: "NSE:POLICYBZR-EQ", enabled: true },
+    { name: "KAYNES", symbol: "NSE:KAYNES-EQ", enabled: true },
   ],
   PER_SCRIP_CAPITAL: 50000, // ₹ margin ring-fenced per scrip
   RISK_PER_TRADE: 2000, // ₹ risked to the structural stop per trade
@@ -150,6 +160,19 @@ function saveState() {
   }
 }
 
+// Code defines WHICH scrips exist; saved state only remembers the operator's enable/disable
+// choices. Merging (not replacing) lets a deploy extend the basket without an old state file
+// silently hiding the new scrips. Exported for tests.
+export function mergeSavedScrips(codeScrips, savedScrips) {
+  if (!Array.isArray(savedScrips)) return;
+  const saved = new Map(
+    savedScrips.filter((x) => x && typeof x.name === "string").map((x) => [x.name, x.enabled])
+  );
+  for (const scrip of codeScrips) {
+    if (typeof saved.get(scrip.name) === "boolean") scrip.enabled = saved.get(scrip.name);
+  }
+}
+
 function loadState() {
   try {
     if (!fs.existsSync(STATE_FILE)) return;
@@ -162,7 +185,9 @@ function loadState() {
     lastTradeDate = s.lastTradeDate || null;
     if (s.config) {
       for (const key of PERSISTED_CONFIG_KEYS) {
-        if (s.config[key] !== undefined) CONFIG[key] = s.config[key];
+        if (s.config[key] === undefined) continue;
+        if (key === "SCRIPS") mergeSavedScrips(CONFIG.SCRIPS, s.config.SCRIPS);
+        else CONFIG[key] = s.config[key];
       }
     }
   } catch (err) {

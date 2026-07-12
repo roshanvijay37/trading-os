@@ -23,7 +23,7 @@ export interface NavItemDef {
 
 export const navigation: NavItemDef[] = [
   { to: "/", label: "Trading Bot", icon: Bot, group: "Operations", keywords: "auto trade bot start stop emergency estop config paper ema5t futures dashboard home" },
-  { to: "/equity", label: "Equity MIS", icon: Banknote, group: "Operations", keywords: "equity mis cash intraday stocks adani rbl paytm eternal tmpv volatile" },
+  { to: "/equity", label: "Equity MIS", icon: Banknote, group: "Operations", keywords: "equity mis cash intraday stocks adani rbl paytm eternal tmpv bse angelone mazdock policybazaar kaynes volatile" },
   { to: "/chart", label: "Live Chart", icon: LineChart, group: "Operations", keywords: "candles price nifty banknifty sensex chart" },
   { to: "/options", label: "Options", icon: CandlestickChart, group: "Trading Desk", keywords: "options terminal chain workspace desk" },
   { to: "/backtest", label: "Backtest Lab", icon: TestTube, group: "Research", keywords: "backtest history simulate equity trades" },

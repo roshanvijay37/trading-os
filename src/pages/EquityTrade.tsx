@@ -3,7 +3,7 @@ import { Banknote, Play, Square, AlertTriangle, Activity } from "lucide-react";
 import { equityTradeApi } from "../services/api";
 
 /**
- * Equity MIS trader — the isolated cash-equity EMA5T service (5 volatile scrips, 60m, MIS
+ * Equity MIS trader — the isolated cash-equity EMA5T service (volatile-scrip basket, 60m, MIS
  * intraday). Completely separate from the futures bot: own backend service, state, audit.
  * Paper-first: the paper/live switch is server-guarded (blocked while running).
  */
@@ -373,8 +373,9 @@ export function EquityTrade() {
       <p className="flex items-center gap-2 text-3xs text-zinc-600">
         <Banknote size={10} />
         Isolated from the futures bot (own service, state, audit). Strict backtest parity: no gates the validated
-        runs didn't have — the only brakes are manual (Emergency Stop / Stop). Validated basket: PF 4–5.4 @60m,
-        survives 5× slippage. Paper results are net of cash-intraday statutory charges.
+        runs didn't have — the only brakes are manual (Emergency Stop / Stop). Validated basket: 10 names, PF
+        4–8.9 @60m (11/11 tested names profitable), survives 5× slippage. Paper results are net of cash-intraday
+        statutory charges.
       </p>
     </div>
   );

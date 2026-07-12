@@ -6,6 +6,7 @@ import {
   sanitizeEquityConfigUpdates,
   computeGapAdjustedTarget,
   dropInProgressCandle,
+  mergeSavedScrips,
   MIS_PROFILE,
 } from "./equityTrader.js";
 
@@ -101,6 +102,30 @@ describe("sanitizeEquityConfigUpdates", () => {
   it("scripEnabled keeps only known scrip names with boolean values", () => {
     const { clean } = sanitizeEquityConfigUpdates({ scripEnabled: { ADANIENT: false, FAKESCRIP: true, PAYTM: "yes" } });
     expect(clean.scripEnabled).toEqual({ ADANIENT: false });
+  });
+});
+
+describe("mergeSavedScrips — deploys can extend the basket without old state hiding new scrips", () => {
+  it("keeps the operator's enable/disable flags but never drops code-defined scrips", () => {
+    const code = [
+      { name: "ADANIENT", symbol: "NSE:ADANIENT-EQ", enabled: true },
+      { name: "BSE", symbol: "NSE:BSE-EQ", enabled: true },
+    ];
+    mergeSavedScrips(code, [
+      { name: "ADANIENT", enabled: false }, // operator had disabled it → preserved
+      { name: "DELISTED", enabled: true }, // no longer in code → dropped
+    ]);
+    expect(code.map((s) => [s.name, s.enabled])).toEqual([
+      ["ADANIENT", false],
+      ["BSE", true],
+    ]);
+  });
+
+  it("tolerates corrupt saved state (non-array, junk entries, non-boolean flags)", () => {
+    const code = [{ name: "BSE", symbol: "NSE:BSE-EQ", enabled: true }];
+    mergeSavedScrips(code, "corrupt");
+    mergeSavedScrips(code, [null, { enabled: false }, { name: "BSE", enabled: "yes" }]);
+    expect(code[0].enabled).toBe(true);
   });
 });
 
