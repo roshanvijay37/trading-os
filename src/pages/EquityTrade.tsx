@@ -60,7 +60,6 @@ interface EquityStatus {
   trendEmaPeriod: number;
   targetMultiplier: number;
   timeframeMinutes: number;
-  maxTradesPerScripPerDay: number;
   dailyLossCap: number;
   dailyRealizedPnL: string;
   openPositions: EquityPosition[];
@@ -82,7 +81,6 @@ export function EquityTrade() {
     leverage: 4,
     trendEmaPeriod: 12,
     targetMultiplier: 3,
-    maxTradesPerScripPerDay: 3,
     dailyLossCap: 6000,
     scripEnabled: {} as Record<string, boolean>,
   });
@@ -103,7 +101,6 @@ export function EquityTrade() {
           leverage: s.leverage ?? prev.leverage,
           trendEmaPeriod: s.trendEmaPeriod ?? prev.trendEmaPeriod,
           targetMultiplier: s.targetMultiplier ?? prev.targetMultiplier,
-          maxTradesPerScripPerDay: s.maxTradesPerScripPerDay ?? prev.maxTradesPerScripPerDay,
           dailyLossCap: s.dailyLossCap ?? prev.dailyLossCap,
           scripEnabled: Object.fromEntries((s.scrips || []).map((x: EquityScrip) => [x.name, x.enabled])),
         }));
@@ -211,7 +208,6 @@ export function EquityTrade() {
                 ["MIS leverage (×)", "leverage", 1],
                 ["Trend EMA", "trendEmaPeriod", 1],
                 ["Target R:R", "targetMultiplier", 0.5],
-                ["Max trades / scrip / day", "maxTradesPerScripPerDay", 1],
                 ["Daily loss cap (₹)", "dailyLossCap", 500],
               ] as const
             ).map(([label, key, step]) => (
@@ -270,9 +266,7 @@ export function EquityTrade() {
               <span className={`h-1.5 w-1.5 rounded-full ${s.enabled ? "bg-gain" : "bg-zinc-600"}`} />
             </div>
             <p className="mt-1 font-mono text-3xs text-zinc-600">{s.symbol}</p>
-            <p className="mt-2 text-3xs text-zinc-500">
-              Trades today: {s.tradesToday} / {status?.maxTradesPerScripPerDay ?? 3}
-            </p>
+            <p className="mt-2 text-3xs text-zinc-500">Trades today: {s.tradesToday}</p>
             <p className="text-3xs text-zinc-500">Margin used: {inr(s.committedMargin || 0)} / {inr(status?.perScripCapital || 50000)}</p>
           </div>
         ))}

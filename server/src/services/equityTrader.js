@@ -59,7 +59,9 @@ const CONFIG = {
   TREND_EMA_PERIOD: 12,
   TARGET_MULTIPLIER: 3,
   TIMEFRAME_MINUTES: 60, // the validated timeframe (60m dominated 30m on every name)
-  MAX_TRADES_PER_SCRIP_PER_DAY: 3,
+  // NOTE: deliberately NO per-day trade-count cap — the validated backtests ran without one
+  // binding, and adding it live would change the trade sequence (backtest↔live divergence).
+  // perScripTrades is still counted for display/audit only.
   DAILY_LOSS_CAP: 6000, // ₹ global (≈3R): halts new entries AND flattens when breached
   PAPER_TRADING: true, // fail-safe default; flip blocked while running (see updateEquityConfig)
   EMERGENCY_STOP: false,
@@ -82,7 +84,6 @@ const CONFIG_FIELD_MAP = {
   leverage: "LEVERAGE",
   trendEmaPeriod: "TREND_EMA_PERIOD",
   targetMultiplier: "TARGET_MULTIPLIER",
-  maxTradesPerScripPerDay: "MAX_TRADES_PER_SCRIP_PER_DAY",
   dailyLossCap: "DAILY_LOSS_CAP",
   paperTrading: "PAPER_TRADING",
 };
@@ -94,7 +95,6 @@ const NUMERIC_BOUNDS = {
   leverage: { min: 1, max: 5 },
   trendEmaPeriod: { min: 5, max: 50, int: true },
   targetMultiplier: { min: 0.5, max: 5 },
-  maxTradesPerScripPerDay: { min: 1, max: 10, int: true },
   dailyLossCap: { min: 500, max: 100000 },
 };
 
@@ -314,7 +314,7 @@ function committedMarginFor(scripName) {
 function canEnter(scripName) {
   if (CONFIG.EMERGENCY_STOP) return { ok: false, reason: "EMERGENCY_STOP" };
   if (!isValidTradingTime(MIS_PROFILE)) return { ok: false, reason: "OUTSIDE_ENTRY_WINDOW" };
-  if ((perScripTrades[scripName] || 0) >= CONFIG.MAX_TRADES_PER_SCRIP_PER_DAY) return { ok: false, reason: "MAX_TRADES_SCRIP" };
+  // No per-day trade-count gate — parity with the validated backtests (see CONFIG note).
   if (dailyRealizedPnL <= -CONFIG.DAILY_LOSS_CAP) return { ok: false, reason: "DAILY_LOSS_CAP" };
   if (openPositions.some((p) => p.status === "OPEN" && p.underlying === scripName)) return { ok: false, reason: "POSITION_OPEN" };
   return { ok: true };
@@ -706,7 +706,6 @@ export function getEquityStatus() {
     trendEmaPeriod: CONFIG.TREND_EMA_PERIOD,
     targetMultiplier: CONFIG.TARGET_MULTIPLIER,
     timeframeMinutes: CONFIG.TIMEFRAME_MINUTES,
-    maxTradesPerScripPerDay: CONFIG.MAX_TRADES_PER_SCRIP_PER_DAY,
     dailyLossCap: CONFIG.DAILY_LOSS_CAP,
     dailyRealizedPnL: dailyRealizedPnL.toFixed(2),
     openPositions: openPositions.filter((p) => p.status === "OPEN"),
