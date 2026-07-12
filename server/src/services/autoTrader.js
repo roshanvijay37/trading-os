@@ -1586,13 +1586,24 @@ export function futuresOrderSide(dir, purpose) {
  * TODO(verify): OPTION_TICK (₹0.05) is confirmed for option premiums — confirm NSE index futures
  * (NIFTY/BANKNIFTY) use the same tick size before relying on roundToTick here.
  */
-export function computeStopLimitPrice(dir, stopPrice, bufferPct) {
+export function computeStopLimitPrice(dir, stopPrice, bufferPct, tick = null) {
   const stop = Number(stopPrice) || 0;
   if (stop <= 0) return 0;
   const pct = Number(bufferPct) || 0;
-  if (dir === "LONG") return roundToTick(stop * (1 + pct / 100), "up");
-  if (dir === "SHORT") return roundToTick(stop * (1 - pct / 100), "down");
+  // Optional explicit tick (review finding): MCX gold quotes in ₹1 ticks, not the ₹0.05 grid
+  // roundToTick assumes — a 0.05-snapped SL-L price would be exchange-rejected on MCX while
+  // paper mode happily "fills" it. Callers pass the instrument's tick (getEntryTick below);
+  // omitted → the long-standing roundToTick behavior, byte-identical for every existing caller.
+  const snap = (v, mode) => (tick ? (mode === "up" ? Math.ceil(v / tick) * tick : Math.floor(v / tick) * tick) : roundToTick(v, mode));
+  if (dir === "LONG") return snap(stop * (1 + pct / 100), "up");
+  if (dir === "SHORT") return snap(stop * (1 - pct / 100), "down");
   throw new Error(`computeStopLimitPrice: unknown direction "${dir}"`);
+}
+
+// Entry-order price tick per instrument. MCX GOLD/GOLDM tick = ₹1; NSE index futures ₹0.05.
+// TODO(verify-before-live): confirm both against the FYERS contract spec before any real SL-L order.
+function getEntryTick(underlying) {
+  return (underlying?.exchange || "NSE") === "MCX" ? 1 : null; // null → legacy 0.05 roundToTick path
 }
 
 // Resolve the tradable (current-month, else next) futures contract by asking FYERS for a
@@ -1905,7 +1916,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const dataFresh = !isCandleStale(candles, tf);
 
   const entryLimitPrice = CONFIG.USE_STOPLIMIT_ENTRIES && CONFIG.LIMIT_BUFFER_PCT > 0
-    ? computeStopLimitPrice(dir, level, CONFIG.LIMIT_BUFFER_PCT)
+    ? computeStopLimitPrice(dir, level, CONFIG.LIMIT_BUFFER_PCT, getEntryTick(underlying))
     : 0;
 
   let entryOrderId = null;

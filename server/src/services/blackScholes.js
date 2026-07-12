@@ -146,7 +146,9 @@ export function getOptionDefaults(symbol = "") {
   // MCX gold (futures-only in this app): lotSize is the GOLDM point-value fallback (₹10/pt) so an
   // un-overridden gold run sizes sanely — the backtest route normally overrides lotSize with the
   // chosen contract's point value (instruments.js). IV/strike fields are placeholders (no gold options).
-  if (s.includes("GOLD"))
+  // MCX-prefixed only (review finding): a bare includes("GOLD") also captured NSE listings like
+  // GOLDBEES-EQ/GOLDIAM-EQ, silently changing their lot-size defaults from the NIFTY fallthrough.
+  if (s.startsWith("MCX:") && s.includes("GOLD"))
     return { iv: 0.14, strikeInterval: 100, lotSize: 10, expiryWeekday: 5, expiryFrequency: "MONTHLY" };
   // NIFTY 50 — 75→65 per NSE Jan-2026 series revision (FAOP70616); still weekly, but on TUESDAY —
   // confirmed 2026-07-08 by probing FYERS for real weekly contracts (Jul 14/21 Tuesdays returned

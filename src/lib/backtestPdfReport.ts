@@ -54,6 +54,7 @@ export interface BacktestReportInput {
 const FRIENDLY_INSTRUMENT: Record<string, string> = {
   "NSE:NIFTYBANK-INDEX": "Bank Nifty",
   "NSE:NIFTY50-INDEX": "Nifty 50",
+  "MCX:GOLD": "Gold (MCX)",
 };
 
 // Exported (not just internal) so the "no strategy details" mapping can be unit-tested directly.

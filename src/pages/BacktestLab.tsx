@@ -380,7 +380,9 @@ export function BacktestLab() {
       setResult({
         success: true,
         symbol,
-        instrumentSource,
+        // Gold always trades the real futures contract (the Data Source control is hidden and its
+        // stale state would mislabel the merged result "Index model" — review finding).
+        instrumentSource: isGold ? "FUTURES" : instrumentSource,
         tradedSymbol: baseRun.tradedSymbol,
         trades: allTrades,
         equityCurve: analytics.equityCurve,

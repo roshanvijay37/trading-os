@@ -18,7 +18,7 @@ import { computeAdvancedStats } from "../services/backtestStats.js";
 import { computeFuturesCosts } from "../services/futuresCosts.js";
 // Shared instrument/session registry (pure module): gold session profile, contract specs, and the
 // futures symbol builder previously duplicated between this file and autoTrader.js.
-import { SESSION_PROFILES, GOLD_CONTRACTS, buildFuturesSymbol, probeMonthsFor } from "../services/instruments.js";
+import { SESSION_PROFILES, GOLD_CONTRACTS, buildFuturesSymbol, probeMonthsFor, getBacktestProfile } from "../services/instruments.js";
 
 const router = express.Router();
 
@@ -901,6 +901,16 @@ router.post("/run", async (req, res) => {
     // point-value used for 1-lot sizing; both contracts track the same price series.
     let goldOverrides = null;
     if (EMA5T_UNDERLYINGS[symbol] === "GOLD") {
+      // Review findings: the pseudo-symbol resolves a REAL futures contract, so combinations
+      // that would silently fabricate results are rejected rather than mispriced — non-EMA5T
+      // strategies would report zero transaction costs on a real costed instrument, and
+      // BLACK_SCHOLES would price a gold options market that doesn't exist in this app.
+      if (strategy !== "EMA5T") {
+        return res.status(400).json({ error: `Gold backtesting supports only the EMA5T strategy (got ${strategy}).` });
+      }
+      if (pricingModel === "BLACK_SCHOLES") {
+        return res.status(400).json({ error: "Gold has no options model in this app — use pricingModel INDEX for MCX:GOLD." });
+      }
       const contractKey = req.body.contract === "GOLD" ? "GOLD" : "GOLDM";
       const resolved = await resolveCurrentFuturesSymbol("GOLD", session.accessToken, "MCX");
       if (!resolved) {
@@ -929,6 +939,23 @@ router.post("/run", async (req, res) => {
       }
       fetchSymbol = resolved;
       effectiveInstrumentSource = "FUTURES";
+    } else if (getBacktestProfile(symbol)) {
+      // A REAL MCX contract symbol (e.g. "MCX:GOLDM26AUGFUT" — the exact string /run itself
+      // returns as tradedSymbol): no resolution needed, but the commodity session profile + MCX
+      // cost table must still apply — otherwise gold candles get judged by NSE session gates and
+      // charged NSE STT (5bps) instead of CTT (1bps), silently wrong numbers (review finding).
+      // Any strategy is allowed here: the Chart page fetches gold candles via strategy EMA5 and
+      // discards the simulation; costs apply only to EMA5T, the same rule as everywhere else.
+      const p = getBacktestProfile(symbol);
+      effectiveInstrumentSource = "FUTURES";
+      goldOverrides = {
+        exchange: "MCX",
+        sessionStartDecimal: p.sessionStartDecimal,
+        sessionEndDecimal: p.sessionEndDecimal,
+        maxTimeEntryHour: p.entryCutoffHour,
+        squareOffHour: p.btSquareOffHour,
+        squareOffMinute: p.btSquareOffMinute,
+      };
     }
 
     const rawCandles = await fetchHistoricalData(fetchSymbol, resolution, fromTs, toTs, session.accessToken);
@@ -1009,7 +1036,10 @@ router.post("/run", async (req, res) => {
       toDate,
       totalCandles: candles.length,
       candles, // Include raw candles for chart rendering
-      instrumentSource,
+      // EFFECTIVE source, not the raw client field — for gold the server forces FUTURES (real
+      // contract, rupee point-value P&L, MCX costs) regardless of the client's stale/hidden
+      // Data Source state; echoing the raw value made the UI mislabel gold runs "Index model".
+      instrumentSource: effectiveInstrumentSource,
       tradedSymbol: fetchSymbol, // the exact symbol candles were fetched for (== symbol unless FUTURES)
       ...result,
     });
@@ -1155,6 +1185,13 @@ router.post("/run-multi", async (req, res) => {
   const session = getSession(sessionId);
   if (!session) {
     return res.status(401).json({ error: "Invalid or expired FYERS session" });
+  }
+
+  // Gold/MCX is not supported on this endpoint (no contract resolution or session overrides
+  // here, and "MCX:GOLD" isn't a real FYERS symbol — it previously surfaced as an opaque 500).
+  // The Lab's multi-timeframe button loops POST /run per timeframe, which fully handles gold.
+  if (getBacktestProfile(symbol)) {
+    return res.status(400).json({ error: "Gold/MCX symbols aren't supported on /run-multi — call /run per timeframe instead (the Lab's multi-timeframe button does this)." });
   }
 
   try {
