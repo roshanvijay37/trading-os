@@ -116,11 +116,15 @@ export function BacktestLab() {
   const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [capital, setCapital] = useState(1000000);
   const [riskPercent, setRiskPercent] = useState(1);
-  const [targetMult, setTargetMult] = useState(2);
+  // Target R:R defaults to 3 — the live bot's current validated config (the 2026-07 finer-grid
+  // sweep showed R:R monotonically improving 2→4 on both indices and gold; 3 is the chosen
+  // plateau point). Editable for sensitivity checks.
+  const [targetMult, setTargetMult] = useState(3);
   // EMA5T's no-lookahead trend gate (calculateEMA(closes, trendEmaPeriod) in the backend) —
-  // defaults to 20 to match the live bot; editable here for a parameter-sensitivity check, same
-  // as Target R:R.
-  const [trendEmaPeriod, setTrendEmaPeriod] = useState(20);
+  // defaults to 12 to match the live bot's current validated config (finer-grid sweep: lower
+  // trend-EMA monotonically better, 12 best across NIFTY/BANKNIFTY/gold); editable here for a
+  // parameter-sensitivity check, same as Target R:R.
+  const [trendEmaPeriod, setTrendEmaPeriod] = useState(12);
   const [slippage, setSlippage] = useState(0.02);
   const [capitalMode, setCapitalMode] = useState<"COMPOUND" | "FIXED">("COMPOUND");
   // Live-parity risk gates — same figures the live bot's own config uses by default, but
