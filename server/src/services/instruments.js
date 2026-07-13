@@ -55,11 +55,14 @@ export const GOLD_CONTRACTS = {
 // ─── IST calendar date ──────────────────────────────────────────────────────────────────────
 /**
  * IST calendar date ("YYYY-MM-DD") of an epoch-seconds instant (defaults to now). India has no
- * DST, so a fixed +5:30 offset is exact. Shared by autoTrader + equityTrader's cross-session
- * alert guard: an EMA5T alert candle must belong to TODAY's session to be tradeable — the
- * 2026-07-13 phantom-gold regression armed Friday's bar levels on Monday morning because no
- * consumer compared the alert candle's session day against the clock (every session this repo
- * trades — NSE and MCX — opens and closes within one IST calendar day, so date == session day).
+ * DST, so a fixed +5:30 offset is exact. Shared by autoTrader + equityTrader's DATA-FRESHNESS
+ * guard: the latest completed candle must belong to TODAY's session before any fill/arm
+ * decision — a stale feed still serving the previous session's bars must never drive orders.
+ * (History note: first cut gated by the ALERT candle's day, but the validated engine carries
+ * alerts across the day boundary and fills them at today's prices — 2026-07-13's gold shorts
+ * did exactly that at Monday's real 143,334 open. Alert-age gating was a live≠backtest
+ * regression; only acting on stale DATA is wrong. NSE and MCX sessions both fit within one IST
+ * calendar day, so date == session day.)
  */
 export function istDateKey(epochSec = Math.floor(Date.now() / 1000)) {
   return new Date((epochSec + 19800) * 1000).toISOString().slice(0, 10);

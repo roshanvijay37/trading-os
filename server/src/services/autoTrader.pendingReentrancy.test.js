@@ -110,12 +110,23 @@ describe("manageFuturesPending re-entrancy guard", () => {
     expect(placeStopEntry).toHaveBeenCalledTimes(2);
   });
 
-  it("refuses an alert candle from a PREVIOUS session (2026-07-13 phantom-gold regression)", async () => {
-    // Friday-bar-on-Monday shape: the alert candle's timestamp is exactly one day before the
-    // fake "now" (a different IST date), while the LATEST candle is fresh — the freshness check
-    // alone (isCandleStale) passes, so only the cross-session guard stands between this alert
-    // and a resting order at another session's prices.
-    const args = makeArgs({ underlyingName: "TESTUL-PREVSESS", alert: { timestamp: sameDayAlertTs() - 24 * 3600 } });
+  it("ARMS an alert carried over from a previous session when today's data is fresh (engine parity)", async () => {
+    // Friday-bar-on-Monday shape: the alert candle is from the previous session, the LATEST
+    // candle is fresh (today). The validated engine carries alerts across the day boundary and
+    // fills them at today's prices (2026-07-13: the gold shorts filled at Monday's real 143,334
+    // open) — a first-cut guard that gated by ALERT age blocked these and was a live≠backtest
+    // regression. Only acting on stale DATA is refused (next test).
+    const args = makeArgs({ underlyingName: "TESTUL-CARRYOVER", alert: { timestamp: sameDayAlertTs() - 24 * 3600 } });
+    await manageFuturesPending(args);
+    expect(placeStopEntry).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to act when the LATEST candle itself is from a previous session (stale feed)", async () => {
+    // The genuine failure mode: history hasn't caught up to today, so every price in hand is
+    // another session's. Both isCandleStale and the istDateKey(latest) gate refuse this cycle.
+    const staleBarTs = Math.floor(fakeNowMs / 1000) - 24 * 3600;
+    const args = makeArgs({ underlyingName: "TESTUL-STALEFEED" });
+    args.candles = [[staleBarTs, 100, 100.05, 99.95, 100, 1000]];
     await manageFuturesPending(args);
     expect(placeStopEntry).toHaveBeenCalledTimes(0);
   });

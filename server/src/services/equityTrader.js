@@ -463,60 +463,96 @@ async function ensureLiveStopLoss(position, session) {
   }
 }
 
+// One-shot-per-scrip-per-day stale-data audit marker (cleared by resetDailyCounters).
+let staleDataLogged = new Set();
+
+/**
+ * Resolve an armed pending against a completed bar: open the position on a fill, drop a dead
+ * order, or cancel when the entry gates no longer hold. Shared by the new-bar scan (Step 1)
+ * AND the same-cycle post-arm check (Step 2) — the engine's trigger scan INCLUDES the judging
+ * bar, so a just-armed order must be tested against that same bar immediately or live runs one
+ * full bar behind the validated backtest (2026-07-13: MAZDOCK hit target in the engine replay
+ * and lost money live purely from this lag).
+ */
+async function resolvePending(scrip, session, latest) {
+  const pend = pendingEntries.get(scrip.name);
+  if (!pend) return;
+  let fill;
+  if (CONFIG.PAPER_TRADING) {
+    fill = pend.entryOrderId
+      ? paperStopFillCheck({ dir: pend.dir, level: pend.level, limitPrice: 0, latestCandle: latest, qty: pend.qty })
+      : { status: "PENDING", filledQty: 0 };
+  } else {
+    fill = pend.entryOrderId ? await getOrderDetails(pend.entryOrderId, session) : { status: "PENDING", filledQty: 0 };
+  }
+  const filledQty = Number(fill.filledQty) || 0;
+  if (fill.status === "FILLED" || (fill.status === "PENDING" && filledQty > 0)) {
+    const signalId = `${scrip.name}-${pend.alertTimestamp}-${pend.dir}`;
+    if (!processedSignals.has(signalId)) {
+      processedSignals.add(signalId);
+      pendingEntries.delete(scrip.name);
+      const position = openPositionFromFill(scrip, pend, fill);
+      await ensureLiveStopLoss(position, session);
+      saveState();
+    } else {
+      pendingEntries.delete(scrip.name);
+      saveState();
+    }
+  } else if (["REJECTED", "CANCELLED", "EXPIRED"].includes(fill.status)) {
+    logAudit({ type: "EQ_ENTRY_ORDER_FAILED", scrip: scrip.name, status: fill.status });
+    pendingEntries.delete(scrip.name);
+    saveState();
+  } else {
+    // Still resting — re-validate the gates; cancel if no longer valid (time window, caps).
+    const gate = canEnter(scrip.name);
+    if (!gate.ok) {
+      if (!CONFIG.PAPER_TRADING && pend.entryOrderId) {
+        try {
+          await cancelOrder(pend.entryOrderId, session, logAudit);
+        } catch {
+          return; // couldn't confirm the cancel — keep tracking, retry next bar
+        }
+      }
+      pendingEntries.delete(scrip.name);
+      saveState();
+      logAudit({ type: "EQ_PENDING_CANCELLED", scrip: scrip.name, reason: gate.reason });
+    }
+  }
+}
+
 // ─── PER-SCRIP SCAN (runs only when a NEW completed 60m bar exists) ────────────────────────
 async function processScrip(scrip, session) {
+  // Fetch hygiene (2026-07-13: FYERS "request limit reached" blinded the last 3 scrips in the
+  // loop): 60m bars close hourly, but this refetched all 10 scrips every 30s cycle — ~1,200
+  // calls/hour of no-ops that tripped the burst limit exactly when stacked with the futures
+  // bot. Skip the fetch until the NEXT bar could even exist; near the boundary the normal 30s
+  // cycle retries until FYERS publishes the new bar.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const knownBar = lastBarTime[scrip.name];
+  if (knownBar && nowSec < knownBar + CONFIG.TIMEFRAME_MINUTES * 60 + 2) return;
+
   const candles = await fetchCandles(scrip.symbol, session);
   if (candles.length < CONFIG.TREND_EMA_PERIOD + 2) return;
   const latest = candles[candles.length - 1];
   if (lastBarTime[scrip.name] === latest[0]) return; // no new completed bar — nothing to do
+
+  // Data-freshness gate: fills and arms need TODAY's bars — a stale feed still serving the
+  // previous session's data must never drive orders. Checks the LATEST bar, not the alert bar:
+  // the engine carries an alert across the day boundary and fills it at today's prices
+  // (validated behavior) — gating by alert age was a live≠backtest regression (2026-07-13).
+  if (istDateKey(latest[0]) !== istDateKey()) {
+    const k = `${scrip.name}:${istDateKey()}`;
+    if (!staleDataLogged.has(k)) {
+      staleDataLogged.add(k);
+      logAudit({ type: "EQ_STALE_DATA", scrip: scrip.name, latestBarDay: istDateKey(latest[0]) });
+    }
+    return;
+  }
   lastBarTime[scrip.name] = latest[0];
 
   // Step 1: resolve any existing pending entry BEFORE considering a new alert (fill must never
   // be lost to a same-cycle overwrite — same ordering rule as the futures bot).
-  const pend = pendingEntries.get(scrip.name);
-  if (pend) {
-    let fill;
-    if (CONFIG.PAPER_TRADING) {
-      fill = pend.entryOrderId
-        ? paperStopFillCheck({ dir: pend.dir, level: pend.level, limitPrice: 0, latestCandle: latest, qty: pend.qty })
-        : { status: "PENDING", filledQty: 0 };
-    } else {
-      fill = pend.entryOrderId ? await getOrderDetails(pend.entryOrderId, session) : { status: "PENDING", filledQty: 0 };
-    }
-    const filledQty = Number(fill.filledQty) || 0;
-    if (fill.status === "FILLED" || (fill.status === "PENDING" && filledQty > 0)) {
-      const signalId = `${scrip.name}-${pend.alertTimestamp}-${pend.dir}`;
-      if (!processedSignals.has(signalId)) {
-        processedSignals.add(signalId);
-        pendingEntries.delete(scrip.name);
-        const position = openPositionFromFill(scrip, pend, fill);
-        await ensureLiveStopLoss(position, session);
-        saveState();
-      } else {
-        pendingEntries.delete(scrip.name);
-        saveState();
-      }
-    } else if (["REJECTED", "CANCELLED", "EXPIRED"].includes(fill.status)) {
-      logAudit({ type: "EQ_ENTRY_ORDER_FAILED", scrip: scrip.name, status: fill.status });
-      pendingEntries.delete(scrip.name);
-      saveState();
-    } else {
-      // Still resting — re-validate the gates; cancel if no longer valid (time window, caps).
-      const gate = canEnter(scrip.name);
-      if (!gate.ok) {
-        if (!CONFIG.PAPER_TRADING && pend.entryOrderId) {
-          try {
-            await cancelOrder(pend.entryOrderId, session, logAudit);
-          } catch {
-            return; // couldn't confirm the cancel — keep tracking, retry next bar
-          }
-        }
-        pendingEntries.delete(scrip.name);
-        saveState();
-        logAudit({ type: "EQ_PENDING_CANCELLED", scrip: scrip.name, reason: gate.reason });
-      }
-    }
-  }
+  await resolvePending(scrip, session, latest);
 
   // Step 2: detect a fresh alert on the completed bars and arm/refresh the resting entry.
   const alert = detectAlertCandle(candles, "EMA5T", CONFIG.TREND_EMA_PERIOD);
@@ -526,18 +562,6 @@ async function processScrip(scrip, session) {
   const stopLoss = dir === "LONG" ? alert.low : alert.high;
   const signalId = `${scrip.name}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
-
-  // Cross-session alert bleed guard — same rule as the futures bot (see EMA5T_ALERT_PREV_SESSION
-  // there and instruments.js's istDateKey doc): on the first bars after open, the alert candle
-  // (candles[len-2]) can be the PREVIOUS session's last bar, whose levels are another day's
-  // prices. The backtest's replay resets alerts at the IST day boundary and can never take that
-  // trade — refuse it live too. Marked processed so it logs once, not every poll.
-  if (istDateKey(alert.timestamp) !== istDateKey()) {
-    processedSignals.add(signalId);
-    saveState();
-    logAudit({ type: "EQ_ALERT_PREV_SESSION", scrip: scrip.name, dir, level, alertTimestamp: alert.timestamp, alertDay: istDateKey(alert.timestamp) });
-    return;
-  }
 
   const existing = pendingEntries.get(scrip.name);
   if (existing && existing.alertTimestamp === alert.timestamp && existing.dir === dir) return; // unchanged
@@ -602,6 +626,10 @@ async function processScrip(scrip, session) {
   });
   saveState();
   logAudit({ type: "EQ_ENTRY_ARMED", scrip: scrip.name, dir, level, stopLoss, qty, entryOrderId, skipped: entryOrderId ? null : true });
+
+  // Same-cycle retro-fill: the engine's trigger scan INCLUDES the judging bar (`latest`) — test
+  // the just-armed order against it now instead of waiting a full bar (see resolvePending doc).
+  if (entryOrderId) await resolvePending(scrip, session, latest);
 }
 
 // ─── MONITOR (every cycle, quote-driven — SL / target / square-off) ───────────────────────
@@ -636,6 +664,7 @@ function resetDailyCounters(today) {
   processedSignals = new Set();
   pendingEntries = new Map(); // resting MIS entries never carry across days
   lastBarTime = {};
+  staleDataLogged = new Set();
   openPositions = openPositions.filter((p) => p.status === "OPEN"); // drop yesterday's closed records
 }
 

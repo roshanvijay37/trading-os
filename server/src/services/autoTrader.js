@@ -1756,6 +1756,13 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   // this cycle entirely and retry once fresh data arrives — matches how staleness is already
   // treated elsewhere in this function (a reason to hold off, not to act).
   if (isCandleStale(candles, tf)) return;
+  // Absolute variant of the same rule: the latest completed candle must be from TODAY's IST
+  // session — belt-and-braces over isCandleStale's tolerance math across weekends/holidays.
+  // Deliberately checks the LATEST bar, not the alert bar: the engine carries an alert across
+  // the day boundary and fills it at today's prices (2026-07-13's gold shorts at Monday's real
+  // 143,334 open — validated behavior); a first-cut gate on alert age blocked those and was a
+  // live≠backtest regression, reverted same week.
+  if (istDateKey(latest[0]) !== istDateKey()) return;
 
   // ── Step 1: resolve any EXISTING pending entry's fate BEFORE considering a new alert — a fill
   // must never be lost to a same-cycle overwrite by a fresh alert (see manageFuturesPending doc).
@@ -1904,21 +1911,6 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   // next poll after a fill would arm an identical duplicate resting order at the same level.
   const signalId = `${key}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
-
-  // Cross-session alert bleed guard (2026-07-13 phantom-gold regression): after a session opens,
-  // the alert candle (candles[len-2]) can be the PREVIOUS session's last bar — Friday's gold bar
-  // judged by Monday's first bar passed every freshness check here (isCandleStale looks at the
-  // LATEST bar, which was seconds old) and armed a short at Friday's levels ~1,300 pts above the
-  // live market, then paper-"filled" and "hit target" at prices that never traded that day. The
-  // backtest can never take that trade — its replay resets pending alerts at the IST day
-  // boundary — so enforce the same rule live: only alerts from TODAY's session are tradeable.
-  // Marked processed so this logs once, not every 30s poll until the next bar closes.
-  if (istDateKey(alert.timestamp) !== istDateKey()) {
-    processedSignals.add(signalId);
-    saveState();
-    logAudit({ type: "EMA5T_ALERT_PREV_SESSION", key, dir, level, alertTimestamp: alert.timestamp, alertDay: istDateKey(alert.timestamp), timeframe: tf });
-    return;
-  }
 
   // A previous resting order for the OLD level must be cancelled before arming the new one.
   if (existing) {
