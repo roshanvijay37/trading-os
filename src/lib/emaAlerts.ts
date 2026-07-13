@@ -83,15 +83,18 @@ function detectAlert(close: number, high: number, low: number, ema: number, tren
 }
 
 /**
- * Finds 5-EMA alert candles, gated by the 20-EMA trend filter by default (EMA5T — the strategy
- * the live/paper bot actually trades). Pass `{ trendGate: false }` for the plain (legacy EMA5,
- * ungated) rule instead.
+ * Finds 5-EMA alert candles, gated by a slower trend-EMA filter by default (EMA5T — the strategy
+ * the live/paper bots actually trade). `trendPeriod` selects the gate's EMA length: defaults to
+ * the legacy 20, while the Chart page passes the live config's 12 (autoTrader.js and
+ * equityTrader.js both run TREND_EMA_PERIOD 12). Pass `{ trendGate: false }` for the plain
+ * (legacy EMA5, ungated) rule instead.
  */
-export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolean } = {}): AlertPoint[] {
+export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolean; trendPeriod?: number } = {}): AlertPoint[] {
   const trendGate = opts.trendGate !== false;
+  const trendPeriod = opts.trendPeriod ?? 20;
   const closes = candles.map((c) => c.close);
   const ema5Series = calculateEMA(closes, 5); // aligned to closes[4 .. end]
-  const ema20Series = trendGate ? calculateEMA(closes, 20) : null; // aligned to closes[19 .. end]
+  const trendSeries = trendGate ? calculateEMA(closes, trendPeriod) : null; // aligned to closes[trendPeriod-1 .. end]
 
   const alerts: AlertPoint[] = [];
   for (let i = 0; i <= candles.length - 2; i++) {
@@ -101,9 +104,9 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
 
     let trendEma: number | null = null;
     if (trendGate) {
-      const ema20Idx = i - 19; // value AT candle i
-      if (ema20Idx < 0) continue;
-      trendEma = ema20Series![ema20Idx];
+      const trendIdx = i - (trendPeriod - 1); // value AT candle i
+      if (trendIdx < 0) continue;
+      trendEma = trendSeries![trendIdx];
     }
 
     const { close, high, low } = candles[i];
@@ -115,8 +118,9 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
 
 /**
  * Simulates each alert forward through the candle history to see what actually happened —
- * nominal entry = alert candle's high/low, SL = alert candle's low/high, target = entry ± 2x
- * risk (matches autoTrader.js's EMA5T entry math exactly).
+ * nominal entry = alert candle's high/low, SL = alert candle's low/high, target = entry ±
+ * targetMultiplier × risk (matches autoTrader.js's EMA5T entry math exactly; default 2 is the
+ * legacy R:R, the Chart page passes the live config's 3).
  *
  * Four rules mirrored from the real system, all load-bearing for correctness:
  *  1. A resting entry order is cancelled the moment a NEWER alert appears (autoTrader.js's
@@ -141,9 +145,10 @@ export function resolveEmaAlerts(
   alerts: AlertPoint[],
   // entryCutoffHour: per-instrument entry cutoff (IST hour). Defaults to the NSE 14:00 rule;
   // the Chart page passes 22 for MCX gold (its validated profile allows entries 09:00–22:00).
-  opts: { entryCutoffHour?: number } = {},
+  opts: { entryCutoffHour?: number; targetMultiplier?: number } = {},
 ): ResolvedAlert[] {
   const entryCutoffHour = opts.entryCutoffHour ?? MAX_TIME_ENTRY_HOUR;
+  const targetMultiplier = opts.targetMultiplier ?? 2;
   return alerts.map((alert, k) => {
     const alertCandle = candles[alert.index];
     const isBullish = alert.type === "BULLISH";
@@ -163,7 +168,7 @@ export function resolveEmaAlerts(
 
     if (triggerIndex === null) {
       const risk = Math.abs(nominalEntry - sl);
-      const target = isBullish ? nominalEntry + 2 * risk : nominalEntry - 2 * risk;
+      const target = isBullish ? nominalEntry + targetMultiplier * risk : nominalEntry - targetMultiplier * risk;
       return { alertIndex: alert.index, type: alert.type, entry: nominalEntry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null, pastEntryCutoff: false };
     }
 
@@ -174,7 +179,7 @@ export function resolveEmaAlerts(
     const gappedThrough = triggerOpen !== undefined && (isBullish ? triggerOpen >= nominalEntry : triggerOpen <= nominalEntry);
     const entry = gappedThrough ? (triggerOpen as number) : nominalEntry;
     const risk = Math.abs(entry - sl);
-    const target = isBullish ? entry + 2 * risk : entry - 2 * risk;
+    const target = isBullish ? entry + targetMultiplier * risk : entry - targetMultiplier * risk;
     const pastEntryCutoff = triggerCandle.time !== undefined && istHourOf(triggerCandle.time) >= entryCutoffHour;
 
     let outcome: TradeOutcome = "OPEN";

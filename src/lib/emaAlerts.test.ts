@@ -78,6 +78,19 @@ describe("findEmaAlerts — trendGate: true (EMA5T, the default and what the liv
   it("returns no alerts with fewer than 20 candles (can't seed the 20-EMA)", () => {
     expect(findEmaAlerts(flat(100, 19))).toEqual([]);
   });
+
+  it("trendPeriod default is exactly the legacy 20 (parameterization is a pure refactor)", () => {
+    // Same nontrivial rise+pullback fixture as above — explicit 20 must reproduce the default
+    // output bar-for-bar, or the Chart page's trendPeriod:12 option changed legacy behavior too.
+    const rise = [102, 104, 106, 108, 110, 112, 114, 116, 118].map((close) => ({ close, high: close, low: close }));
+    const candles: AlertCandle[] = [
+      ...flat(100, 20),
+      ...rise,
+      { close: 110, high: 110, low: 107 },
+      { close: 110, high: 111, low: 109 },
+    ];
+    expect(findEmaAlerts(candles, { trendPeriod: 20 })).toEqual(findEmaAlerts(candles));
+  });
 });
 
 describe("resolveEmaAlerts", () => {
@@ -96,6 +109,19 @@ describe("resolveEmaAlerts", () => {
     const alerts = [{ index: 0, type: "BULLISH" as const }];
     const [result] = resolveEmaAlerts(candles, alerts);
     expect(result).toMatchObject({ entry: 110, sl: 107, target: 116, triggerIndex: 1, outcome: "TARGET", outcomeIndex: 2 });
+  });
+
+  it("targetMultiplier: 3 stretches the target to entry + 3×risk (the live books' R:R)", () => {
+    // Same alert shape as above: entry 110, sl 107, risk 3 → 3R target = 119 (not the 2R 116).
+    const candles = [
+      c(108, 110, 107), // alert candle
+      c(112, 111, 109), // triggers entry (high 111 >= 110)
+      c(117, 118, 115), // would have resolved the DEFAULT 2R target (high 118 >= 116) — not 3R's 119
+      c(120, 121, 119), // 3R target hit (high 121 >= 119); SL never touched
+    ];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts, { targetMultiplier: 3 });
+    expect(result).toMatchObject({ entry: 110, sl: 107, target: 119, outcome: "TARGET", outcomeIndex: 3 });
   });
 
   it("resolves SL when a later candle hits it before target", () => {

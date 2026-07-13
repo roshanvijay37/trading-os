@@ -44,6 +44,37 @@ function getHolidayName(holidays: { date: string; name: string }[]): string | nu
   return found ? found.name : null;
 }
 
+// The live books' config: trend-EMA 12 and target 3R is what autoTrader.js (BN + gold futures)
+// AND equityTrader.js (the MIS basket) actually trade — and what the validated backtests ran.
+// The chart's overlay + signal simulation judge by the same rule, or they would show alerts and
+// targets the bots would never take.
+const TREND_EMA_PERIOD = 12;
+const TARGET_MULTIPLIER = 3;
+
+// Keep in sync with equityTrader.js CONFIG.SCRIPS (the Equity MIS basket, wave 1 + wave 2).
+const EQUITY_SCRIPS = ["ADANIENT", "RBLBANK", "TMPV", "ETERNAL", "PAYTM", "BSE", "ANGELONE", "MAZDOCK", "POLICYBZR", "KAYNES"];
+
+const symbolGroups = [
+  {
+    label: "Futures (bot)",
+    options: [
+      { value: "NSE:NIFTYBANK-INDEX", label: "BANKNIFTY FUT" },
+      { value: "NSE:NIFTY50-INDEX", label: "NIFTY FUT" },
+      // Pseudo-symbol: the server resolves the continuous MCX gold contract (same flow as the
+      // indices' futures resolution below). Gold trades 09:00–23:30 IST — the live-refresh window
+      // and the signal entry-cutoff (22:00, not 14:00) follow its session automatically.
+      { value: "MCX:GOLD", label: "GOLD FUT (MCX)" },
+    ],
+  },
+  {
+    // Cash-equity scrips chart the traded instrument directly (no futures contract to resolve);
+    // NSE session window and the 14:00 entry cutoff both match the equity service's MIS profile.
+    label: "Equity MIS (cash)",
+    options: EQUITY_SCRIPS.map((name) => ({ value: `NSE:${name}-EQ`, label: name })),
+  },
+];
+const allSymbols = symbolGroups.flatMap((g) => g.options);
+
 // Session windows per exchange (IST minutes): NSE 9:15–15:30; MCX gold 9:00–23:30. The MCX
 // holiday calendar differs from NSE's — v1 reuses the NSE list (same conservative choice the
 // backend makes in marketHolidays.js's isInstrumentTradingDay).
@@ -91,13 +122,13 @@ export function Chart() {
   const [holidays, setHolidays] = useState<{ date: string; name: string }[]>([]);
   const [marketOpen, setMarketOpen] = useState(false);
   const [lastUpdate, setLastUpdate] = useState("");
-  // EMA 5 / EMA 20 — the same two indicators EMA5T's live/paper bot uses for its alert rule and
-  // trend gate (server/src/services/emaStrategy.js), computed here with the identical canonical
-  // math (src/lib/strategies/engine.ts's calculateEMA). Shown on the actual futures contract the
-  // bot trades (resolved below) — still a general-purpose overlay, not a claim that this IS the
-  // bot's live signal state, since the bot scans on its own poll cycle independently of this page.
+  // EMA 5 / trend EMA — the same two indicators EMA5T's live/paper bots use for the alert rule
+  // and trend gate (server/src/services/emaStrategy.js), computed here with the identical
+  // canonical math (src/lib/strategies/engine.ts's calculateEMA) and the LIVE trend period
+  // (TREND_EMA_PERIOD above). Still a general-purpose overlay, not a claim that this IS a bot's
+  // live signal state, since each bot scans on its own poll cycle independently of this page.
   const [showEma5, setShowEma5] = useState(true);
-  const [showEma20, setShowEma20] = useState(true);
+  const [showTrendEma, setShowTrendEma] = useState(true);
   // Marks only alerts that would actually become a trade — triggered AND before the 14:00 IST
   // entry cutoff (see the tradeable filter below, src/lib/emaAlerts.ts). Same honesty caveat as
   // the EMA lines above: a general application of the rule to whatever's on screen, not a live
@@ -112,15 +143,8 @@ export function Chart() {
   const [tradedSymbol, setTradedSymbol] = useState<string | null>(null);
   const [resolvingFutures, setResolvingFutures] = useState(false);
 
-  const symbols = [
-    { value: "NSE:NIFTYBANK-INDEX", label: "BANKNIFTY FUT" },
-    { value: "NSE:NIFTY50-INDEX", label: "NIFTY FUT" },
-    // Pseudo-symbol: the server resolves the continuous MCX gold contract (same flow as the
-    // indices' futures resolution below). Gold trades 09:00–23:30 IST — the live-refresh window
-    // and the signal entry-cutoff (22:00, not 14:00) follow its session automatically.
-    { value: "MCX:GOLD", label: "GOLD FUT (MCX)" },
-  ];
   const isGold = symbol === "MCX:GOLD";
+  const isEquity = symbol.endsWith("-EQ");
 
   const timeframes = [
     { value: "1", label: "1m" },
@@ -140,11 +164,17 @@ export function Chart() {
   }, [isGold]);
 
   // Resolve the current tradable futures contract whenever the selected underlying changes.
+  // Cash-equity scrips ARE the traded instrument — no contract resolution, chart them directly.
   useEffect(() => {
     let cancelled = false;
     setTradedSymbol(null);
-    setResolvingFutures(true);
     setError("");
+    if (isEquity) {
+      setTradedSymbol(symbol);
+      setResolvingFutures(false);
+      return;
+    }
+    setResolvingFutures(true);
     backtestApi
       .resolveFuturesRange(symbol)
       .then((res) => {
@@ -267,24 +297,27 @@ export function Chart() {
       data: values.map((value, i) => ({ time: chartCandles[offset + i].time, value })),
     });
   }
-  if (showEma20 && closes.length >= 20) {
-    const values = calculateEMA(closes, 20);
+  if (showTrendEma && closes.length >= TREND_EMA_PERIOD) {
+    const values = calculateEMA(closes, TREND_EMA_PERIOD);
     const offset = closes.length - values.length;
     overlays.push({
-      label: "EMA 20",
+      label: `EMA ${TREND_EMA_PERIOD}`,
       color: "#3b82f6",
       data: values.map((value, i) => ({ time: chartCandles[offset + i].time, value })),
     });
   }
 
-  const allAlerts = showSignals ? findEmaAlerts(chartCandles) : [];
+  const allAlerts = showSignals ? findEmaAlerts(chartCandles, { trendPeriod: TREND_EMA_PERIOD }) : [];
   // Simulates each alert forward (did price actually reach the entry, then SL or target first) —
   // the same entry/SL/target formula and SL-checked-first tie-break the live bot's backtest uses
   // (see src/lib/emaAlerts.ts's resolveEmaAlerts doc comment for exactly what's mirrored).
   // Gold's validated entry window runs to 22:00 IST (vs the NSE bot's 14:00 cutoff) — the
   // tradeable-signal filter must judge gold alerts by gold's rule or every afternoon/evening
   // signal would be wrongly hidden as "past cutoff".
-  const allResolved = resolveEmaAlerts(chartCandles, allAlerts, { entryCutoffHour: isGold ? 22 : 14 });
+  const allResolved = resolveEmaAlerts(chartCandles, allAlerts, {
+    entryCutoffHour: isGold ? 22 : 14,
+    targetMultiplier: TARGET_MULTIPLIER,
+  });
 
   // Only show signals that would actually become a trade: it must have triggered (a
   // NOT_TRIGGERED alert never opened a position) AND not be past the 14:00 IST entry cutoff
@@ -355,8 +388,12 @@ export function Chart() {
             onChange={(e) => setSymbol(e.target.value)}
             className="rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover"
           >
-            {symbols.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
+            {symbolGroups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
@@ -391,13 +428,14 @@ export function Chart() {
             EMA 5
           </button>
           <button
-            onClick={() => setShowEma20((v) => !v)}
+            onClick={() => setShowTrendEma((v) => !v)}
+            title="The trend-gate EMA, at the LIVE config's period (all three books trade trend-EMA 12)"
             className={`flex items-center gap-1.5 rounded-panel border px-2.5 py-2 text-2xs font-medium transition ${
-              showEma20 ? "border-info/30 bg-info-dim text-info" : "border-border-subtle bg-surface text-zinc-500 hover:text-zinc-300"
+              showTrendEma ? "border-info/30 bg-info-dim text-info" : "border-border-subtle bg-surface text-zinc-500 hover:text-zinc-300"
             }`}
           >
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-info" />
-            EMA 20
+            EMA {TREND_EMA_PERIOD}
           </button>
           <button
             onClick={() => setShowSignals((v) => !v)}
@@ -440,7 +478,7 @@ export function Chart() {
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <h2 className="text-2xs font-semibold uppercase tracking-wider text-zinc-400">
-                {symbols.find((s) => s.value === symbol)?.label}
+                {allSymbols.find((s) => s.value === symbol)?.label}
               </h2>
               <span className="rounded-panel border border-border-subtle bg-surface px-2 py-0.5 text-2xs text-zinc-600">
                 {timeframes.find((t) => t.value === resolution)?.label}
