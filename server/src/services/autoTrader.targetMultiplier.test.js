@@ -64,7 +64,9 @@ describe("CONFIG.TARGET_MULTIPLIER wiring", () => {
     const underlyingName = "TESTUL-TMULT3";
     const key = `${underlyingName}:EMA5T:15m`;
     const underlying = { name: underlyingName, symbol: `NSE:${underlyingName}-INDEX`, lotSize: 30, marginPerLot: 1000 };
-    const alert = { type: "BULLISH_ALERT", high: 100.5, low: 99.5, timestamp: 42 };
+    // Same-day timestamp: the cross-session alert guard (phantom-gold fix) refuses alerts whose
+    // candle isn't from today's IST session — a fixed "timestamp: 42" (1970) never arms.
+    const alert = { type: "BULLISH_ALERT", high: 100.5, low: 99.5, timestamp: Math.floor(fakeNowMs / 1000) - 2 * 15 * 60 };
     const futSymbol = `NSE:${underlyingName}FUT`;
 
     // Arm: a candle that does NOT cross the alert level (100.5) yet.

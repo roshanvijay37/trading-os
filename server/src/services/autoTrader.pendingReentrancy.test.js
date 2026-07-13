@@ -66,6 +66,11 @@ describe("manageFuturesPending re-entrancy guard", () => {
     return [[candleTs, 100, 100.05, 99.95, 100, 1000]];
   }
 
+  // Alert timestamps must be from TODAY'S (fake) session — the cross-session alert guard
+  // (EMA5T_ALERT_PREV_SESSION, the 2026-07-13 phantom-gold fix) refuses any alert candle whose
+  // IST date isn't the current one, so a fixed "timestamp: 1" (1970) never arms anything.
+  const sameDayAlertTs = (barsAgo = 2, tf = 15) => Math.floor(fakeNowMs / 1000) - barsAgo * tf * 60;
+
   // marginPerLot deliberately small so the arm gate's committedMargin+marginReq<=CONFIG.CAPITAL
   // check passes regardless of CONFIG.CAPITAL's real value — this test is about the concurrency
   // guard, not re-proving the margin gate (covered elsewhere).
@@ -77,7 +82,7 @@ describe("manageFuturesPending re-entrancy guard", () => {
       tf: 15,
       candles: freshCandles(),
       futSymbol: `NSE:${underlyingName}FUT`,
-      alert: { type: "BULLISH_ALERT", high: 100.5, low: 99.5, timestamp: 1, ...overrides.alert },
+      alert: { type: "BULLISH_ALERT", high: 100.5, low: 99.5, timestamp: sameDayAlertTs(), ...overrides.alert },
       session: {},
     };
   }
@@ -97,11 +102,22 @@ describe("manageFuturesPending re-entrancy guard", () => {
     await manageFuturesPending(args);
     expect(placeStopEntry).toHaveBeenCalledTimes(1);
 
-    // A genuinely NEW alert (different level) on the same key legitimately re-arms — proves the
-    // guard released after the first call rather than permanently blocking this key.
-    const secondArgs = makeArgs({ underlyingName: "TESTUL-RELEASE", alert: { high: 101.5, low: 100.5, timestamp: 2 } });
+    // A genuinely NEW alert (different level, different same-day bar) on the same key
+    // legitimately re-arms — proves the guard released after the first call rather than
+    // permanently blocking this key.
+    const secondArgs = makeArgs({ underlyingName: "TESTUL-RELEASE", alert: { high: 101.5, low: 100.5, timestamp: sameDayAlertTs(1) } });
     await manageFuturesPending(secondArgs);
     expect(placeStopEntry).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses an alert candle from a PREVIOUS session (2026-07-13 phantom-gold regression)", async () => {
+    // Friday-bar-on-Monday shape: the alert candle's timestamp is exactly one day before the
+    // fake "now" (a different IST date), while the LATEST candle is fresh — the freshness check
+    // alone (isCandleStale) passes, so only the cross-session guard stands between this alert
+    // and a resting order at another session's prices.
+    const args = makeArgs({ underlyingName: "TESTUL-PREVSESS", alert: { timestamp: sameDayAlertTs() - 24 * 3600 } });
+    await manageFuturesPending(args);
+    expect(placeStopEntry).toHaveBeenCalledTimes(0);
   });
 
   it("two concurrent calls for DIFFERENT keys are not blocked by each other (the guard is per-key)", async () => {
