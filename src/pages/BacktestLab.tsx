@@ -105,6 +105,23 @@ interface BacktestResult {
   candles?: Candle[];
 }
 
+// The Equity MIS basket (keep in sync with equityTrader.js CONFIG.SCRIPS). `shares` is the fixed
+// per-trade quantity the 2026-07 validation runs used (≈ ₹5L notional at each scrip's median
+// price) — sent as lotSize so a Lab run reproduces the validated numbers. Without it the server's
+// getOptionDefaults falls through to the NIFTY lotSize (65), silently mis-sizing cash equities.
+const EQUITY_SCRIPS: { name: string; symbol: string; shares: number }[] = [
+  { name: "ADANIENT", symbol: "NSE:ADANIENT-EQ", shares: 300 },
+  { name: "RBLBANK", symbol: "NSE:RBLBANK-EQ", shares: 2500 },
+  { name: "TMPV", symbol: "NSE:TMPV-EQ", shares: 800 },
+  { name: "ETERNAL", symbol: "NSE:ETERNAL-EQ", shares: 2000 },
+  { name: "PAYTM", symbol: "NSE:PAYTM-EQ", shares: 700 },
+  { name: "BSE", symbol: "NSE:BSE-EQ", shares: 200 },
+  { name: "ANGELONE", symbol: "NSE:ANGELONE-EQ", shares: 2000 },
+  { name: "MAZDOCK", symbol: "NSE:MAZDOCK-EQ", shares: 200 },
+  { name: "POLICYBZR", symbol: "NSE:POLICYBZR-EQ", shares: 300 },
+  { name: "KAYNES", symbol: "NSE:KAYNES-EQ", shares: 100 },
+];
+
 export function BacktestLab() {
   const [symbol, setSymbol] = useState("NSE:NIFTYBANK-INDEX");
   const [resolution, setResolution] = useState("15");
@@ -246,6 +263,10 @@ export function BacktestLab() {
   const prevInstrumentSourceRef = useRef(instrumentSource);
   const isGold = symbol === "MCX:GOLD";
   const wasGoldRef = useRef(isGold);
+  // Cash-equity scrips: the -EQ series IS the traded instrument — no futures resolution, and the
+  // run body forces INDEX regardless of the (hidden) Data Source control's stale state.
+  const equityScrip = EQUITY_SCRIPS.find((s) => s.symbol === symbol);
+  const isEquity = !!equityScrip;
 
   // Futures mode: auto-fill From/To to the contract's REAL available window (resolved server-side —
   // FYERS has no "list active contracts" or date-range endpoint, so guessing dates wastes a run).
@@ -258,7 +279,9 @@ export function BacktestLab() {
 
     // Gold ALWAYS rides the futures-range resolution (there is no gold index — the continuous
     // contract is the only data source), regardless of the Data Source toggle (hidden for gold).
-    if (isGold || instrumentSource === "FUTURES") {
+    // Equity scrips never do (cash series, no contract to resolve — even if the hidden Data
+    // Source control was left on FUTURES by a previously selected index symbol).
+    if (isGold || (instrumentSource === "FUTURES" && !isEquity)) {
       let cancelled = false;
       setResolvingRange(true);
       setError(null);
@@ -309,7 +332,7 @@ export function BacktestLab() {
         slippage: slippage / 100,
         capitalMode,
         pricingModel: "INDEX",
-        instrumentSource,
+        instrumentSource: isEquity ? "INDEX" : instrumentSource,
         maxTradesPerDay,
         maxRiskPerDayPercent,
         positionSizingMode,
@@ -318,6 +341,9 @@ export function BacktestLab() {
         minVix,
         // Gold only: which contract's point-value sizes the 1-lot P&L (server ignores otherwise).
         ...(isGold ? { contract: goldContract } : {}),
+        // Equity only: the validated per-scrip share count — otherwise the server falls back to
+        // an index lot size that means nothing for a cash scrip.
+        ...(equityScrip ? { lotSize: equityScrip.shares } : {}),
       });
       setResult(res);
     } catch (err: any) {
@@ -360,7 +386,7 @@ export function BacktestLab() {
             slippage: slippage / 100,
             capitalMode,
             pricingModel: "INDEX",
-            instrumentSource,
+            instrumentSource: isEquity ? "INDEX" : instrumentSource,
             maxTradesPerDay,
             maxRiskPerDayPercent,
             positionSizingMode,
@@ -371,6 +397,7 @@ export function BacktestLab() {
             minVixFilter,
             minVix,
             ...(isGold ? { contract: goldContract } : {}),
+            ...(equityScrip ? { lotSize: equityScrip.shares } : {}),
           })
         )
       );
@@ -389,8 +416,9 @@ export function BacktestLab() {
         success: true,
         symbol,
         // Gold always trades the real futures contract (the Data Source control is hidden and its
-        // stale state would mislabel the merged result "Index model" — review finding).
-        instrumentSource: isGold ? "FUTURES" : instrumentSource,
+        // stale state would mislabel the merged result "Index model" — review finding). Equity is
+        // always the cash series for the mirror-image reason.
+        instrumentSource: isGold ? "FUTURES" : isEquity ? "INDEX" : instrumentSource,
         tradedSymbol: baseRun.tradedSymbol,
         trades: allTrades,
         equityCurve: analytics.equityCurve,
@@ -661,9 +689,16 @@ export function BacktestLab() {
           <div>
             <label className="mb-1 block text-2xs text-zinc-600">Symbol</label>
             <select value={symbol} onChange={(e) => setSymbol(e.target.value)} className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-200 outline-none focus:border-border-hover">
-              <option value="NSE:NIFTY50-INDEX">NIFTY 50</option>
-              <option value="NSE:NIFTYBANK-INDEX">BANKNIFTY</option>
-              <option value="MCX:GOLD">GOLD (MCX)</option>
+              <optgroup label="Futures (bot)">
+                <option value="NSE:NIFTY50-INDEX">NIFTY 50</option>
+                <option value="NSE:NIFTYBANK-INDEX">BANKNIFTY</option>
+                <option value="MCX:GOLD">GOLD (MCX)</option>
+              </optgroup>
+              <optgroup label="Equity MIS (cash)">
+                {EQUITY_SCRIPS.map((s) => (
+                  <option key={s.symbol} value={s.symbol}>{s.name}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
           <div>
@@ -677,6 +712,11 @@ export function BacktestLab() {
                 <option value="GOLDM">GOLDM mini (₹10/point)</option>
                 <option value="GOLD">GOLD big (₹100/point)</option>
               </select>
+            </div>
+          ) : isEquity ? (
+            <div>
+              <label className="mb-1 block text-2xs text-zinc-600">Data Source</label>
+              <div className="w-full rounded-panel border border-border-subtle bg-surface px-3 py-2 text-2xs text-zinc-400">Cash series (the traded instrument)</div>
             </div>
           ) : (
             <div>
@@ -707,6 +747,14 @@ export function BacktestLab() {
               {isGold && !resolvingRange && (
                 <> Gold runs on its own session automatically: entries 09:00–22:00 IST, square-off on the 23:00 bar, MCX costs. Validated profile: Trend EMA 12, Target R:R 3.</>
               )}
+            </div>
+          )}
+          {isEquity && (
+            <div className="sm:col-span-2 lg:col-span-4 -mt-1 rounded-panel border border-border-subtle bg-surface px-3 py-2 text-3xs text-zinc-500">
+              Equity MIS scrip: NSE cash series, entries 09:15–14:00 IST, square-off 15:15 — the exact windows the live
+              Equity MIS service trades. Fixed Lots sizing uses <span className="font-mono text-zinc-300">{equityScrip!.shares} shares</span>/trade
+              (the validated ≈₹5L-notional sizing; ₹ figures scale with it, PF/win-rate don't). Costs use the futures
+              statutory table — slightly conservative vs real cash-MIS charges.
             </div>
           )}
           <div>
