@@ -759,7 +759,11 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId, pape
 
   // C4: report NET P&L — deduct brokerage + statutory futures costs (STT/exchange/stamp/GST on
   // notional turnover, NOT the options premium model) so the dashboard/audit isn't optimistic.
-  // Paper mode has no real costs. The round-trip cost is charged ONCE for the whole position (on
+  // PAPER TOO (2026-07-13 parity finding): paper used to report GROSS ("no real costs"), but the
+  // validated backtests report NET via this exact function — the whole point of the paper run is
+  // to reproduce backtest accounting, and gross-vs-net was a silent ~₹300-500/trade flattery.
+  // The equity service already charges model costs in paper; futures now matches.
+  // The round-trip cost is charged ONCE for the whole position (on
   // the original entry qty), so a multi-leg exit — where earlier legs were realized GROSS via
   // settleLeg — never double-counts brokerage / buy-side charges.
   // `paperTrading` defaults to a fresh CONFIG read for callers with no closePositionInner-style
@@ -769,7 +773,7 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId, pape
   const dirMult = position.side === "SHORT" ? -1 : 1;
   const gross = (exitPrice - position.avgFillPrice) * exitQty * dirMult;
   const costQty = position.origEntryQty || exitQty;
-  const costs = paperTrading ? 0 : computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER, side: position.side, exchange: getUnderlyingByName(position.underlying)?.exchange || "NSE" });
+  const costs = computeFuturesCosts(position.avgFillPrice, exitPrice, costQty, { brokeragePerOrder: CONFIG.BROKERAGE_PER_ORDER, side: position.side, exchange: getUnderlyingByName(position.underlying)?.exchange || "NSE" });
   const pnl = gross - costs;
   position.realizedPnl = (position.realizedPnl || 0) + pnl; // accumulate across any partial exits
   position.pnl = position.realizedPnl;
