@@ -52,6 +52,19 @@ export const GOLD_CONTRACTS = {
   GOLD: { root: "GOLD", pointValue: 100, marginPerLot: 800000 },
 };
 
+// ─── IST calendar date ──────────────────────────────────────────────────────────────────────
+/**
+ * IST calendar date ("YYYY-MM-DD") of an epoch-seconds instant (defaults to now). India has no
+ * DST, so a fixed +5:30 offset is exact. Shared by autoTrader + equityTrader's cross-session
+ * alert guard: an EMA5T alert candle must belong to TODAY's session to be tradeable — the
+ * 2026-07-13 phantom-gold regression armed Friday's bar levels on Monday morning because no
+ * consumer compared the alert candle's session day against the clock (every session this repo
+ * trades — NSE and MCX — opens and closes within one IST calendar day, so date == session day).
+ */
+export function istDateKey(epochSec = Math.floor(Date.now() / 1000)) {
+  return new Date((epochSec + 19800) * 1000).toISOString().slice(0, 10);
+}
+
 // ─── Futures symbol construction (shared by live + backtest — ends the duplicated builders) ─
 export const MONTH_CODES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 

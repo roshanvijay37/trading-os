@@ -7,6 +7,7 @@ import {
   probeMonthsFor,
   computeInstrumentPhase,
   getBacktestProfile,
+  istDateKey,
 } from "./instruments.js";
 
 const min = (h, m = 0) => h * 60 + m;
@@ -112,6 +113,26 @@ describe("GOLD_CONTRACTS", () => {
     expect(GOLD_CONTRACTS.GOLD.pointValue).toBe(100);
     expect(GOLD_CONTRACTS.GOLDM.pointValue).toBe(10);
     expect(GOLD_CONTRACTS.GOLDM.root).toBe("GOLDM");
+  });
+});
+
+// ─── istDateKey — the cross-session alert guard's clock ──────────────────────────────────────
+describe("istDateKey", () => {
+  it("converts epoch seconds to the IST calendar date", () => {
+    // 2026-07-13T03:55:00Z == 09:25 IST Monday (verified against FYERS candle data that day)
+    expect(istDateKey(1783914900)).toBe("2026-07-13");
+  });
+
+  it("flips the date exactly at IST midnight (18:30 UTC)", () => {
+    expect(istDateKey(1783881000)).toBe("2026-07-13"); // 2026-07-12T18:30:00Z == 00:00 IST
+    expect(istDateKey(1783880999)).toBe("2026-07-12"); // one second earlier == 23:59:59 IST
+  });
+
+  it("regression (2026-07-13 phantom gold): Friday's 22:30 IST bar is a different session day than the Monday 09:30 scan", () => {
+    const fridayGoldBar = 1783702800; // 2026-07-10T17:00:00Z == 22:30 IST Friday
+    const mondayScan = 1783915204; // 2026-07-13T04:00:04Z == 09:30:04 IST Monday (the phantom arm)
+    expect(istDateKey(fridayGoldBar)).toBe("2026-07-10");
+    expect(istDateKey(fridayGoldBar)).not.toBe(istDateKey(mondayScan));
   });
 });
 

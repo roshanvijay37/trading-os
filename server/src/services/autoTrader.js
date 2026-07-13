@@ -50,6 +50,7 @@ import {
   probeMonthsFor,
   computeInstrumentPhase,
   computeLoopPlan,
+  istDateKey,
 } from "./instruments.js";
 
 import fs from "fs";
@@ -1899,6 +1900,21 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   // next poll after a fill would arm an identical duplicate resting order at the same level.
   const signalId = `${key}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
+
+  // Cross-session alert bleed guard (2026-07-13 phantom-gold regression): after a session opens,
+  // the alert candle (candles[len-2]) can be the PREVIOUS session's last bar — Friday's gold bar
+  // judged by Monday's first bar passed every freshness check here (isCandleStale looks at the
+  // LATEST bar, which was seconds old) and armed a short at Friday's levels ~1,300 pts above the
+  // live market, then paper-"filled" and "hit target" at prices that never traded that day. The
+  // backtest can never take that trade — its replay resets pending alerts at the IST day
+  // boundary — so enforce the same rule live: only alerts from TODAY's session are tradeable.
+  // Marked processed so this logs once, not every 30s poll until the next bar closes.
+  if (istDateKey(alert.timestamp) !== istDateKey()) {
+    processedSignals.add(signalId);
+    saveState();
+    logAudit({ type: "EMA5T_ALERT_PREV_SESSION", key, dir, level, alertTimestamp: alert.timestamp, alertDay: istDateKey(alert.timestamp), timeframe: tf });
+    return;
+  }
 
   // A previous resting order for the OLD level must be cancelled before arming the new one.
   if (existing) {

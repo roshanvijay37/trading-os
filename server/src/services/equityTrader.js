@@ -34,7 +34,7 @@ import {
   isTokenErrorData,
 } from "./orderExecution.js";
 import { detectAlertCandle, isValidTradingTime, isSquareOffTime } from "./emaStrategy.js";
-import { SESSION_PROFILES, computeInstrumentPhase } from "./instruments.js";
+import { SESSION_PROFILES, computeInstrumentPhase, istDateKey } from "./instruments.js";
 import { isInstrumentTradingDay } from "../utils/marketHolidays.js";
 import { computeEquityIntradayCosts } from "./equityCosts.js";
 import { alertInfo, alertCritical } from "./notifier.js";
@@ -526,6 +526,18 @@ async function processScrip(scrip, session) {
   const stopLoss = dir === "LONG" ? alert.low : alert.high;
   const signalId = `${scrip.name}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
+
+  // Cross-session alert bleed guard — same rule as the futures bot (see EMA5T_ALERT_PREV_SESSION
+  // there and instruments.js's istDateKey doc): on the first bars after open, the alert candle
+  // (candles[len-2]) can be the PREVIOUS session's last bar, whose levels are another day's
+  // prices. The backtest's replay resets alerts at the IST day boundary and can never take that
+  // trade — refuse it live too. Marked processed so it logs once, not every poll.
+  if (istDateKey(alert.timestamp) !== istDateKey()) {
+    processedSignals.add(signalId);
+    saveState();
+    logAudit({ type: "EQ_ALERT_PREV_SESSION", scrip: scrip.name, dir, level, alertTimestamp: alert.timestamp, alertDay: istDateKey(alert.timestamp) });
+    return;
+  }
 
   const existing = pendingEntries.get(scrip.name);
   if (existing && existing.alertTimestamp === alert.timestamp && existing.dir === dir) return; // unchanged
