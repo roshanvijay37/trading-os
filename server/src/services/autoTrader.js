@@ -877,17 +877,17 @@ function settleLeg(position, exitPrice, qty, source) {
  * level Set rather than a persisted flag. Exported only for the reentrancy test — not part of the
  * public API surface used by routes.
  */
-export async function closePosition(position, session, reason) {
+export async function closePosition(position, session, reason, exitPriceOverride = null) {
   if (closingPositionIds.has(position.id)) return;
   closingPositionIds.add(position.id);
   try {
-    await closePositionInner(position, session, reason);
+    await closePositionInner(position, session, reason, exitPriceOverride);
   } finally {
     closingPositionIds.delete(position.id);
   }
 }
 
-async function closePositionInner(position, session, reason) {
+async function closePositionInner(position, session, reason, exitPriceOverride = null) {
   if (position.status !== "OPEN") return;
 
   // Snapshot once: CONFIG.PAPER_TRADING can flip mid-close (operator stops the bot, changes mode,
@@ -1005,7 +1005,24 @@ async function closePositionInner(position, session, reason) {
   }
 
   const currentLTP = position.currentLTP || position.avgFillPrice;
-  const paperFillPrice = reason === "TARGET" ? position.target : currentLTP;
+  // Paper exit fills mirror the validated engine's conventions (2026-07-14 parity round):
+  // TARGET/STOPLOSS fill AT the level with the engine's exit slippage applied in the adverse
+  // direction (backtest.js:598-607 — the engine never fills better than the level; the raw LTP
+  // the 30s poll happened to catch is finer-grained than anything the engine models and was a
+  // systematic paper≠backtest gap on every exit). SQUARE_OFF/MARKET_CLOSE keep LTP (engine uses
+  // the bar close — the polled price at that same wall-clock instant is the honest equivalent).
+  const EXIT_SLIP = 0.0002; // engine default (backtest.js:247)
+  const isLong = position.side !== "SHORT"; // options legs are always long
+  let paperFillPrice = currentLTP;
+  if (Number(exitPriceOverride) > 0) {
+    // Bar backstop passes an engine-exact fill (gap-at-open-aware) — it takes priority.
+    paperFillPrice = Number(exitPriceOverride);
+  } else if (reason === "TARGET") {
+    paperFillPrice = position.target * (isLong ? 1 - EXIT_SLIP : 1 + EXIT_SLIP);
+  } else if (reason === "STOPLOSS") {
+    const slLevel = position.currentSL || position.stopLoss;
+    paperFillPrice = slLevel * (isLong ? 1 - EXIT_SLIP : 1 + EXIT_SLIP);
+  }
 
   const exitOrder = await placeMarketExit({
     symbol: position.optionSymbol,
@@ -1440,13 +1457,22 @@ async function monitorPositions(session) {
       // Local backstop. In paper mode this is the only stop. In live mode the broker SL-M order is
       // primary (reconciled above first); this catches a broker SL stuck PENDING through a fast
       // move/gap. closePosition verifies the broker SL isn't already filled before placing an exit.
-      const slHit = dirMult === 1 ? ltp <= position.currentSL : ltp >= position.currentSL;
-      const targetHit = dirMult === 1 ? ltp >= position.target : ltp <= position.target;
+      // PAPER futures exits are BAR-driven only (manageFuturesPendingInner's engine backstop) —
+      // 2026-07-14 parity round. A quote exit takes whichever level trades first, but the
+      // validated engine resolves both-levels-in-one-bar as SL-FIRST; exiting here would win
+      // trades the engine loses. LIVE keeps intra-bar exits (broker SL is primary anyway).
+      // Exception: a position whose instrument is no longer SELECTED never reaches the scan path
+      // (its backstop is dead) — quote exits must keep protecting it.
+      const barBackstopCovers = getActiveUnderlyings().some((u) => u.name === position.underlying);
+      if (!CONFIG.PAPER_TRADING || position.kind !== "FUT" || !barBackstopCovers) {
+        const slHit = dirMult === 1 ? ltp <= position.currentSL : ltp >= position.currentSL;
+        const targetHit = dirMult === 1 ? ltp >= position.target : ltp <= position.target;
 
-      if (slHit) {
-        await closePosition(position, session, "STOPLOSS");
-      } else if (targetHit) {
-        await closePosition(position, session, "TARGET");
+        if (slHit) {
+          await closePosition(position, session, "STOPLOSS");
+        } else if (targetHit) {
+          await closePosition(position, session, "TARGET");
+        }
       }
     } catch (error) {
       console.error(`[AUTO-TRADER] Monitor error:`, error.message);
@@ -1826,6 +1852,33 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   // live≠backtest regression, reverted same week.
   if (istDateKey(latest[0]) !== istDateKey()) return;
 
+  // Engine-parity bar backstop — the ONLY SL/target exit path in paper (the quote monitor
+  // deliberately skips FUT exits in paper; see monitorPositions). Mirrors the engine exactly:
+  // exits on the completed bar's extremes, SL checked before target, gap-at-open honored,
+  // engine exit slippage, and only bars strictly AFTER the entry bar are checked (the engine's
+  // exit scan starts on the iteration after entry).
+  if (CONFIG.PAPER_TRADING) {
+    const pos = openPositions.find(
+      (x) => x.status === "OPEN" && x.kind === "FUT" && x.underlying === underlying.name &&
+        x.signal?.timeframe === tf && (!x.entryBarTime || latest[0] > x.entryBarTime)
+    );
+    if (pos) {
+      const slip = 0.0002; // engine default (backtest.js:247)
+      const [, bOpen, bHigh, bLow] = latest;
+      const isLong = pos.side === "LONG";
+      const slLevel = pos.currentSL || pos.stopLoss;
+      const slHit = isLong ? bLow <= slLevel : bHigh >= slLevel;
+      const targetHit = isLong ? bHigh >= pos.target : bLow <= pos.target;
+      if (slHit) {
+        const raw = isLong ? Math.min(bOpen, slLevel) : Math.max(bOpen, slLevel);
+        await closePosition(pos, session, "STOPLOSS", raw * (isLong ? 1 - slip : 1 + slip));
+      } else if (targetHit) {
+        const raw = isLong ? Math.min(bOpen, pos.target) : Math.max(bOpen, pos.target);
+        await closePosition(pos, session, "TARGET", raw * (isLong ? 1 - slip : 1 + slip));
+      }
+    }
+  }
+
   // ── Step 1: resolve any EXISTING pending entry's fate BEFORE considering a new alert — a fill
   // must never be lost to a same-cycle overwrite by a fresh alert (see manageFuturesPending doc).
   const p = pendingEntries.get(key);
@@ -1864,6 +1917,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
       const position = {
         id: paperTrading ? `PAPER-FUT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` : `FUT-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         entryOrderId: p.entryOrderId,
+        entryBarTime: latest[0], // start of the bar the paper fill was simulated against (exit-scan floor)
         slOrderId: null,
         marginAtEntry: p.marginEst,
         kind: "FUT",
@@ -2048,7 +2102,14 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     marginEst: marginReq,
   });
   saveState();
-  logAudit({ type: "EMA5T_PENDING_ARMED", key, dir, level, stopLoss: sl, timeframe: tf, live: !!entryOrderId });
+  // alertBar/judgeBar OHLC recorded for parity forensics (2026-07-14: FYERS restates intraday
+  // bars after hours — logging what the bot actually SAW lets any future live-vs-engine diff be
+  // attributed to data drift vs rule drift in seconds).
+  logAudit({
+    type: "EMA5T_PENDING_ARMED", key, dir, level, stopLoss: sl, timeframe: tf, live: !!entryOrderId,
+    alertBarTs: alert.timestamp, alertBar: { o: alert.candle?.[1], h: alert.high, l: alert.low, c: alert.close },
+    judgeBarTs: latest[0], judgeBar: { o: latest[1], h: latest[2], l: latest[3], c: latest[4] },
+  });
 }
 
 // ΓöÇΓöÇΓöÇ MARKET STATUS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ

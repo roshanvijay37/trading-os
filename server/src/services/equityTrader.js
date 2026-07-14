@@ -382,10 +382,22 @@ function canEnter(scripName, barStartSec) {
 }
 
 // ─── POSITION LIFECYCLE ───────────────────────────────────────────────────────────────────
-async function closePosition(position, session, reason) {
+async function closePosition(position, session, reason, exitPriceOverride = null) {
   if (position.status !== "OPEN") return;
   const paper = CONFIG.PAPER_TRADING;
   let exitPrice = position.currentLTP || position.avgFillPrice;
+  // Paper exit fills mirror the validated engine (2026-07-14 parity round): TARGET/STOPLOSS
+  // fill AT the level with the engine's exit slippage in the adverse direction — never at the
+  // raw polled LTP (finer-grained than anything the engine models; a systematic paper≠backtest
+  // gap on every exit). SQUARE_OFF/MARKET_CLOSE keep LTP (engine exits those at the bar close).
+  // The bar backstop passes an explicit engine-exact fill (gap-at-open-aware) that takes priority.
+  if (paper && exitPriceOverride > 0) {
+    exitPrice = exitPriceOverride;
+  } else if (paper && (reason === "TARGET" || reason === "STOPLOSS")) {
+    const EXIT_SLIP = 0.0002; // engine default (backtest.js:247)
+    const level = reason === "TARGET" ? position.target : (position.currentSL || position.stopLoss);
+    exitPrice = level * (position.side === "LONG" ? 1 - EXIT_SLIP : 1 + EXIT_SLIP);
+  }
   try {
     if (!paper) {
       // Live: cancel the resting SL first (never leave a naked SL working after a market exit),
@@ -436,13 +448,14 @@ async function closePosition(position, session, reason) {
   alertInfo("EQ_POSITION_CLOSED", `${position.underlying} ${position.side} closed (${reason}) P&L ₹${pnl.toFixed(0)}`, { paper });
 }
 
-function openPositionFromFill(scrip, pend, fill) {
+function openPositionFromFill(scrip, pend, fill, entryBarTime = null) {
   const qty = Math.min(fill.filledQty || pend.qty, pend.qty);
   const entryFillPrice = fill.avgFillPrice || pend.level;
   const target = computeGapAdjustedTarget(pend.dir, entryFillPrice, pend.stopLoss, CONFIG.TARGET_MULTIPLIER);
   const position = {
     id: `${CONFIG.PAPER_TRADING ? "PAPER-" : ""}EQ-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     entryOrderId: pend.entryOrderId,
+    entryBarTime, // start of the bar the paper fill was simulated against (exit-scan floor)
     slOrderId: null,
     marginAtEntry: pend.marginEst,
     kind: "EQ_MIS",
@@ -528,7 +541,7 @@ async function resolvePending(scrip, session, latest) {
     if (!processedSignals.has(signalId)) {
       processedSignals.add(signalId);
       pendingEntries.delete(scrip.name);
-      const position = openPositionFromFill(scrip, pend, fill);
+      const position = openPositionFromFill(scrip, pend, fill, latest[0]);
       await ensureLiveStopLoss(position, session);
       saveState();
     } else {
@@ -618,7 +631,11 @@ async function processBar(scrip, session, candles, latest) {
   // the 30s quote polls happened to see — a spike through the stop that mean-reverts between
   // polls must still stop out, or paper diverges from every validated number.
   if (CONFIG.PAPER_TRADING) {
-    const pos = openPositions.find((p) => p.status === "OPEN" && p.underlying === scrip.name);
+    // Only bars strictly AFTER the entry bar are exit-checked (the engine's exit scan starts on
+    // the iteration after entry — the entry bar's own post-fill range is never exit-checked).
+    const pos = openPositions.find(
+      (p) => p.status === "OPEN" && p.underlying === scrip.name && (!p.entryBarTime || latest[0] > p.entryBarTime)
+    );
     if (pos) {
       const slip = 0.0002; // engine default (backtest.js:247)
       const [, bOpen, bHigh, bLow] = latest;
@@ -627,12 +644,10 @@ async function processBar(scrip, session, candles, latest) {
       const targetHit = isLong ? bHigh >= pos.target : bLow <= pos.target;
       if (slHit) {
         const raw = isLong ? Math.min(bOpen, pos.currentSL) : Math.max(bOpen, pos.currentSL);
-        pos.currentLTP = raw * (isLong ? 1 - slip : 1 + slip);
-        await closePosition(pos, session, "STOPLOSS");
+        await closePosition(pos, session, "STOPLOSS", raw * (isLong ? 1 - slip : 1 + slip));
       } else if (targetHit) {
         const raw = isLong ? Math.min(bOpen, pos.target) : Math.max(bOpen, pos.target);
-        pos.currentLTP = raw * (isLong ? 1 - slip : 1 + slip);
-        await closePosition(pos, session, "TARGET");
+        await closePosition(pos, session, "TARGET", raw * (isLong ? 1 - slip : 1 + slip));
       }
     }
   }
@@ -730,7 +745,13 @@ async function processBar(scrip, session, candles, latest) {
     skippedReason: entryOrderId ? null : (gate.ok ? (qty < 1 ? "QTY_ZERO" : marginOk ? "ORDER_FAILED" : "MARGIN") : gate.reason),
   });
   saveState();
-  logAudit({ type: "EQ_ENTRY_ARMED", scrip: scrip.name, dir, level, stopLoss, qty, entryOrderId, skipped: entryOrderId ? null : true });
+  // alertBar/judgeBar OHLC recorded for parity forensics (FYERS restates intraday bars after
+  // hours — logging what the service actually SAW attributes future diffs to data vs rules).
+  logAudit({
+    type: "EQ_ENTRY_ARMED", scrip: scrip.name, dir, level, stopLoss, qty, entryOrderId, skipped: entryOrderId ? null : true,
+    alertBarTs: alert.timestamp, alertBar: { o: alert.candle?.[1], h: alert.high, l: alert.low, c: alert.close },
+    judgeBarTs: latest[0], judgeBar: { o: latest[1], h: latest[2], l: latest[3], c: latest[4] },
+  });
 
   // Same-cycle retro-fill: the engine's trigger scan INCLUDES the judging bar (`latest`) — test
   // the just-armed order against it now instead of waiting a full bar (see resolvePending doc).
@@ -754,11 +775,21 @@ async function monitorPositions(session) {
       position.currentLTP = ltp;
       const dirMult = position.side === "SHORT" ? -1 : 1;
       position.unrealizedPnl = (ltp - position.avgFillPrice) * position.quantity * dirMult;
-      const slHit = dirMult === 1 ? ltp <= position.currentSL : ltp >= position.currentSL;
-      const targetHit = dirMult === 1 ? ltp >= position.target : ltp <= position.target;
-      if (slHit) await closePosition(position, session, "STOPLOSS");
-      else if (targetHit) await closePosition(position, session, "TARGET");
-      else await ensureLiveStopLoss(position, session); // self-heal a missing live SL
+      // PAPER exits are BAR-driven only (processBar's engine backstop) — 2026-07-14 parity round.
+      // A quote-driven exit fires on whichever level trades first chronologically, but the
+      // validated engine resolves a both-levels-in-one-bar tie as SL-FIRST (its conservative
+      // OHLC convention). Exiting here would win trades the engine loses. LIVE keeps intra-bar
+      // exits (a real broker SL is working anyway; live-money can't wait for bar closes).
+      // Exception: a DISABLED scrip's position never reaches processScrip (its backstop is
+      // dead) — quote exits must keep protecting it.
+      const barBackstopCovers = CONFIG.SCRIPS.some((s) => s.enabled && s.name === position.underlying);
+      if (!CONFIG.PAPER_TRADING || !barBackstopCovers) {
+        const slHit = dirMult === 1 ? ltp <= position.currentSL : ltp >= position.currentSL;
+        const targetHit = dirMult === 1 ? ltp >= position.target : ltp <= position.target;
+        if (slHit) await closePosition(position, session, "STOPLOSS");
+        else if (targetHit) await closePosition(position, session, "TARGET");
+        else await ensureLiveStopLoss(position, session); // self-heal a missing live SL
+      }
     } catch (err) {
       console.error(`[EQUITY-TRADER] monitor error (${position.optionSymbol}):`, err.message);
     }
