@@ -18,6 +18,43 @@ import marketRoutes from "./routes/market.js";
 import optionsRoutes from "./routes/options.js";
 import { WebSocketServer } from "ws";
 import { addWsClient, removeWsClient } from "./services/tickService.js";
+import { alertCritical } from "./services/notifier.js";
+import { getWasRunningBeforeBoot as botWasRunning } from "./services/autoTrader.js";
+import { getWasRunningBeforeBoot as equityWasRunning } from "./services/equityTrader.js";
+
+// ── Crash containment (2026-07-14 audit) ────────────────────────────────────────────────────
+// Without these, one unhandled rejection anywhere leaves the process in an undefined state (or
+// node kills it silently) while both trading loops report isRunning=true to nobody. Alert the
+// operator, then exit(1) so PM2 restarts a CLEAN process — the bots deliberately do NOT
+// auto-resume (surprise trading after a restart is worse than a paused book); the boot alert
+// below tells the operator to press Start.
+function fatal(kind, err) {
+  console.error(`[FATAL] ${kind}:`, err);
+  try {
+    alertCritical("PROCESS_CRASH", `${kind}: ${err?.message || String(err).slice(0, 300)} — process restarting; BOTS ARE STOPPED until you press Start.`, {});
+  } catch {
+    /* alerting must never block the exit */
+  }
+  setTimeout(() => process.exit(1), 1500);
+}
+process.on("uncaughtException", (err) => fatal("uncaughtException", err));
+process.on("unhandledRejection", (err) => fatal("unhandledRejection", err));
+
+// Boot forensics: if either state file says its loop was running when the process died, the
+// operator must know the book is now silently stopped.
+setTimeout(() => {
+  try {
+    if (botWasRunning() || equityWasRunning()) {
+      alertCritical(
+        "BOTS_NOT_RESUMED",
+        `Server restarted while ${[botWasRunning() && "futures bot", equityWasRunning() && "equity MIS"].filter(Boolean).join(" + ")} was RUNNING. Nothing auto-resumes — reconnect FYERS and press Start.`,
+        {}
+      );
+    }
+  } catch (err) {
+    console.error("[BOOT] was-running check failed:", err.message);
+  }
+}, 3000);
 
 const app = express();
 const PORT = process.env.PORT || 3001;

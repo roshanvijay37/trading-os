@@ -60,6 +60,9 @@ import { computeExecutionStats } from "./executionStats.js";
 import { computeHealthSnapshot } from "./healthSnapshot.js";
 // Statutory + brokerage cost model, shared with the backtest so live P&L is reported NET (not gross).
 import { computeFuturesCosts } from "./futuresCosts.js";
+// Operator alerts for events that MUST reach a human (2026-07-14 audit: this bot trades
+// unattended MCX evenings yet every "MANUAL REVIEW NEEDED" went to pm2 logs nobody reads).
+import { alertCritical } from "./notifier.js";
 
 // ΓöÇΓöÇΓöÇ CONFIGURATION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const CONFIG = {
@@ -257,6 +260,13 @@ const PERSISTED_CONFIG_KEYS = Object.values(CONFIG_FIELD_MAP);
 
 // ─── SESSION REFERENCE ────────────────────────────────────────────────
 let currentSession = null;
+let loopGeneration = 0; // stop/start reentrancy guard: only the newest loop chain may reschedule
+let lastLoopErrorAlertAt = 0; // throttle for BOT_LOOP_ERROR operator alerts
+// key ("UNDERLYING:EMA5T:<tf>m") -> epoch sec of the last position exit on that stream (engine
+// dead-alert guard: alerts on bars that completed while a position was open never arm).
+// Declared here — NOT next to its consumer — because loadState() (line ~405) assigns it at
+// module init, long before later declarations would have executed (TDZ).
+let lastExitAtByKey = new Map();
 
 // ─── STATE ────────────────────────────────────────────────────────────
 let isRunning = false;
@@ -328,9 +338,14 @@ function saveState() {
         lastTradeDate,
         processedSignals: Array.from(processedSignals),
         pendingEntries: Array.from(pendingEntries.entries()),
+        lastExitAtByKey: Array.from(lastExitAtByKey.entries()),
         dailyPnL,
         dailyRealizedPnL,
         consecutiveLosses,
+        // Crash forensics: true while the operator has the bot started. NOT auto-resumed on boot
+        // (surprise trading after a deploy restart would be worse) — index.js raises a critical
+        // alert instead so the operator knows the book stopped.
+        desiredRunning: isRunning,
         config,
       },
       null,
@@ -348,6 +363,13 @@ function saveState() {
   }
 }
 
+// True when the state file says the bot was running when the process died/restarted — surfaced
+// (never auto-resumed) via getWasRunningBeforeBoot for index.js's boot alert.
+let wasRunningBeforeBoot = false;
+export function getWasRunningBeforeBoot() {
+  return wasRunningBeforeBoot;
+}
+
 function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
@@ -363,6 +385,8 @@ function loadState() {
       lastTradeDate = s.lastTradeDate || null;
       processedSignals = new Set(s.processedSignals || []);
       pendingEntries = new Map(s.pendingEntries || []);
+      lastExitAtByKey = new Map(s.lastExitAtByKey || []);
+      wasRunningBeforeBoot = s.desiredRunning === true;
       dailyPnL = s.dailyPnL || 0;
       dailyRealizedPnL = s.dailyRealizedPnL || 0;
       consecutiveLosses = s.consecutiveLosses || 0;
@@ -460,20 +484,31 @@ async function fetchCandlesWithTickFallback(symbol, session, timeframeMinutes) {
   // (~10:45-14:30 IST) on 15m. Require the SAME depth EMA5T actually needs before trusting
   // tick-only data over the (now 21-calendar-day-deep) REST fallback.
   if (tickRows.length >= 21) {
-    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol, timeframe: tf, count: tickRows.length });
+    logDataSourceOnChange(`${symbol}:${tf}`, { type: "DATA_SOURCE", source: "websocket", symbol, timeframe: tf, count: tickRows.length });
     return tickRows;
   }
-  logAudit({ type: "DATA_SOURCE", source: "history_api", symbol, timeframe: tf, reason: "insufficient_tick_data", tickCount: tickRows.length });
+  logDataSourceOnChange(`${symbol}:${tf}`, { type: "DATA_SOURCE", source: "history_api", symbol, timeframe: tf, reason: "insufficient_tick_data", tickCount: tickRows.length });
   return dropInProgressCandle(await fetchLatestCandles(symbol, session, timeframeMinutes), timeframeMinutes); // C6
+}
+
+// DATA_SOURCE audit hygiene (2026-07-14 audit): logging every poll produced ~10.5k lines/day,
+// evicting the day's REAL trade events from the 5,000-entry in-memory buffer by afternoon and
+// growing the file unboundedly. Log only when a stream's source CHANGES — the information is
+// the transition (websocket↔history/quotes), not the steady state.
+const lastDataSourceByKey = new Map();
+function logDataSourceOnChange(streamKey, entry) {
+  if (lastDataSourceByKey.get(streamKey) === entry.source) return;
+  lastDataSourceByKey.set(streamKey, entry.source);
+  logAudit(entry);
 }
 
 async function fetchOptionQuoteWithTickFallback(optionSymbol, session) {
   const tick = getLatestTick(optionSymbol);
   if (tick && tick.ltp > 0) {
-    logAudit({ type: "DATA_SOURCE", source: "websocket", symbol: optionSymbol, ltp: tick.ltp });
+    logDataSourceOnChange(`q:${optionSymbol}`, { type: "DATA_SOURCE", source: "websocket", symbol: optionSymbol, ltp: tick.ltp });
     return { lp: tick.ltp, bid: tick.ltp, ask: tick.ltp, oi: 0 };
   }
-  logAudit({ type: "DATA_SOURCE", source: "quotes_api", symbol: optionSymbol, reason: "no_tick" });
+  logDataSourceOnChange(`q:${optionSymbol}`, { type: "DATA_SOURCE", source: "quotes_api", symbol: optionSymbol, reason: "no_tick" });
   return fetchOptionQuote(optionSymbol, session);
 }
 
@@ -511,6 +546,7 @@ function noteAuthFailure() {
     console.error(
       `[AUTO-TRADER] ⚠️ FYERS AUTH FAILING (${consecutiveAuthFailures}×) — token likely expired. New orders/exits will fail; open positions are protected only by the resting exchange stop. Reconnect FYERS.`
     );
+    alertCritical("BOT_AUTH_FAILING", `FYERS auth failing (${consecutiveAuthFailures}×) — token likely dead. Bot cannot trade or exit; reconnect FYERS now.`, {});
   }
 }
 function noteAuthSuccess() {
@@ -779,6 +815,10 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId, pape
   position.pnl = position.realizedPnl;
   dailyRealizedPnL += pnl;
   consecutiveLosses = position.realizedPnl < 0 ? consecutiveLosses + 1 : 0;
+  // Engine dead-alert guard bookkeeping (see EMA5T_ALERT_DURING_POSITION in the arm path).
+  if (position.signal?.strategy === "EMA5T" && position.signal?.timeframe) {
+    lastExitAtByKey.set(`${position.underlying}:EMA5T:${position.signal.timeframe}m`, Math.floor(Date.now() / 1000));
+  }
 
   recalcDailyPnL();
   saveState();
@@ -1380,6 +1420,13 @@ async function monitorPositions(session) {
         // reconcile would see slOrderId=null and re-arm a DUPLICATE live stop for the same position.
         saveState();
       }
+      // Square-off is TIME-driven — checked BEFORE the quote fetch so a rate-limited or dead
+      // feed at 15:15 (NSE) / 23:15 (gold) can never defer the exit to the session-boundary
+      // force-close at a stale price (2026-07-14 audit). closePosition tolerates a stale LTP.
+      if (isSquareOffTime(getSessionProfileFor(position.underlying))) {
+        await closePosition(position, session, "SQUARE_OFF");
+        continue;
+      }
       const quote = await fetchOptionQuoteWithTickFallback(position.optionSymbol, session);
       const ltp = quote?.lp || 0;
       if (ltp <= 0) continue;
@@ -1400,9 +1447,6 @@ async function monitorPositions(session) {
         await closePosition(position, session, "STOPLOSS");
       } else if (targetHit) {
         await closePosition(position, session, "TARGET");
-      } else if (isSquareOffTime(getSessionProfileFor(position.underlying))) {
-        // Per-instrument square-off: NSE 15:15 (unchanged), gold 23:15 (its session runs to 23:30).
-        await closePosition(position, session, "SQUARE_OFF");
       }
     } catch (error) {
       console.error(`[AUTO-TRADER] Monitor error:`, error.message);
@@ -1663,9 +1707,13 @@ export async function checkEntryOrderFill({ paperTrading, entryOrderId, dir, lev
   // would then be LESS safe than live (which already short-circuits to PENDING here).
   if (!entryOrderId) return { status: "PENDING", filledQty: 0 };
   if (paperTrading) {
-    const crossed = dir === "LONG" ? latestCandle[2] >= level : latestCandle[3] <= level;
+    // STRICT crossing — the validated engine enters only on high > level / low < level
+    // (backtest.js:494); an exact-touch bar is NOT a fill. Was >=/<= (2026-07-14 audit).
+    const crossed = dir === "LONG" ? latestCandle[2] > level : latestCandle[3] < level;
     if (!crossed) return { status: "PENDING", filledQty: 0 };
-    const slip = 0.0005; // same stop-fill slippage the 6-year validation charged
+    // Engine's slippage default (backtest.js:247) — the constant every validated run used.
+    // The old 0.0005 here claimed validation parity but the engine default is 0.0002.
+    const slip = 0.0002;
     // If the candle's OPEN already cleared the level, the market gapped straight through it —
     // a real resting stop order fills at (or near) the open, not at the stale nominal level.
     // Without this, paper mode always pretends the fill happened right at the alert level
@@ -1732,6 +1780,20 @@ export async function cancelPendingEntryOrder(p, paperTrading, session) {
  * never both reach manageFuturesPendingInner concurrently. Exported only for the reentrancy
  * test — not part of the public API surface used by routes.
  */
+/**
+ * Entry-window check judged by the TRIGGER BAR's start time — engine parity (2026-07-14 audit):
+ * the validated engine gates entries on the trigger candle's clock (liveEntryGate receives the
+ * BAR's hour), so a bar STARTING before the cutoff may trigger even though it closes after.
+ * checkTimeFilter's wall clock at arm time (bar close + poll) structurally missed every
+ * validated trade whose trigger bar straddles the cutoff (14:00 NSE / 22:00 gold).
+ */
+function barWithinEntryWindowFut(underlying, barStartSec) {
+  const p = getSessionProfileFor(underlying) || {};
+  const dec = ((Number(barStartSec) + 19800) % 86400) / 3600;
+  const cutoffHour = p.entryCutoffHour ?? 14;
+  return dec >= (p.sessionStartDecimal ?? 9.25) && Math.floor(dec) < cutoffHour;
+}
+
 export async function manageFuturesPending(args) {
   if (pendingKeysInFlight.has(args.key)) return;
   pendingKeysInFlight.add(args.key);
@@ -1849,6 +1911,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
         if (!cancelled.ok) {
           console.error(`[AUTO-TRADER] Could not confirm cancellation of the unfilled remainder for ${key} (entryOrderId ${p.entryOrderId}) — MANUAL REVIEW NEEDED: it may still be resting live at the broker with no local tracking.`);
           logAudit({ type: "ORPHANED_ENTRY_REMAINDER", key, entryOrderId: p.entryOrderId, dir: p.dir, level: p.level });
+          alertCritical("BOT_ORPHANED_ORDER", `Partial fill on ${key}: remainder order ${p.entryOrderId} could not be cancelled and may still be working at the broker. MANUAL REVIEW.`, {});
         }
       }
       // Never leave a live (or paper-parity) position without a resting protective stop for even
@@ -1868,7 +1931,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     // Still resting (PENDING, nothing filled yet) — re-validate it's still worth holding. Any gate
     // tripping cancels the resting order (real cancelOrder live; a no-op for paper/never-placed).
     // Data freshness is already guaranteed by the function's own top-of-function stale check.
-    const timeOk = checkTimeFilter(underlying);
+    const timeOk = barWithinEntryWindowFut(underlying, latest[0]);
     const riskOk = canTakeTrade(underlying);
     if (!timeOk || !riskOk) {
       const cancelled = await cancelPendingEntryOrder(p, paperTrading, session);
@@ -1895,7 +1958,10 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   if (hasOpenPositionForKey(openPositions, underlying.name, tf)) return;
 
   const existing = pendingEntries.get(key);
-  if (existing && existing.alertTimestamp === alert.timestamp) return; // no change
+  // "Unchanged" only counts when the pending actually HAS a working order — a null-id pending
+  // (placement failed / gates were closed at arm time) must fall through and retry now that this
+  // cycle's gates may pass (2026-07-14 audit: one transient failure latched the alert un-armed).
+  if (existing && existing.alertTimestamp === alert.timestamp && existing.entryOrderId) return; // no change
 
   const dir = alert.type === "BULLISH_ALERT" ? "LONG" : "SHORT";
   const level = dir === "LONG" ? alert.high : alert.low;
@@ -1911,6 +1977,18 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   // next poll after a fill would arm an identical duplicate resting order at the same level.
   const signalId = `${key}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
+
+  // Engine parity (2026-07-14 audit): the engine records alerts only while FLAT and nulls the
+  // alert on exit — an alert bar that completed while a position was open (other than the exit
+  // bar itself) can never arm. Without this, an intra-bar exit revives a mid-position alert and
+  // the next cycle retro-fills it from an already-elapsed bar — a trade no backtest contains.
+  const lastExit = lastExitAtByKey.get(key);
+  if (lastExit && alert.timestamp + Number(tf) * 60 <= lastExit) {
+    processedSignals.add(signalId);
+    logAudit({ type: "EMA5T_ALERT_DURING_POSITION", key, dir, alertTimestamp: alert.timestamp, lastExitAt: lastExit });
+    saveState();
+    return;
+  }
 
   // A previous resting order for the OLD level must be cancelled before arming the new one.
   if (existing) {
@@ -1932,7 +2010,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     : 0;
 
   let entryOrderId = null;
-  if (checkTimeFilter(underlying) && canTakeTrade(underlying) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
+  if (barWithinEntryWindowFut(underlying, latest[0]) && canTakeTrade(underlying) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
     try {
       const order = await placeStopEntry({
         symbol: futSymbol,
@@ -2012,11 +2090,17 @@ function resetDailyCounters(today) {
   openPositions = openPositions.filter((p) => p.status !== "CLOSED");
   processedSignals.clear();
   pendingEntries.clear(); // resting stop entries never carry across days
+  lastExitAtByKey.clear(); // yesterday's exits never kill today's alerts
 }
 
 // ΓöÇΓöÇΓöÇ MAIN LOOP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-async function tradingLoop(session) {
-  if (!isRunning) return;
+async function tradingLoop(gen) {
+  // Generation guard: a stop→start while a prior cycle is mid-await must not leave TWO chains
+  // rescheduling forever. Session comes from the module var so a morning re-login adopted via
+  // startAutoTrader immediately applies to the running loop (2026-07-14 audit: the loop was
+  // pinned to its Start-time session and traded a whole day on a dead token).
+  if (!isRunning || gen !== loopGeneration) return;
+  const session = currentSession;
   // Clear any previously scheduled tick so the loop can never double-arm into two
   // concurrent timer chains (which would double order flow).
   if (pollInterval) {
@@ -2095,16 +2179,32 @@ async function tradingLoop(session) {
   } catch (err) {
     console.error(`[AUTO-TRADER] Trading loop cycle error:`, err.message);
     logAudit({ type: "LOOP_ERROR", error: err.message });
+    // Page the operator on repeated cycle failures (throttled to once per 10 min).
+    if (Date.now() - lastLoopErrorAlertAt > 10 * 60 * 1000) {
+      lastLoopErrorAlertAt = Date.now();
+      alertCritical("BOT_LOOP_ERROR", `Futures bot loop error: ${err.message}`, {});
+    }
   } finally {
-    if (isRunning) {
-      pollInterval = setTimeout(() => tradingLoop(session), rescheduleMs);
+    if (isRunning && gen === loopGeneration) {
+      pollInterval = setTimeout(() => tradingLoop(gen), rescheduleMs);
     }
   }
 }
 
 // ─── PUBLIC API ───────────────────────────────────────────────────────
 export async function startAutoTrader(sessionId) {
-  if (isRunning) return { status: "ALREADY_RUNNING" };
+  if (isRunning) {
+    // Adopt the fresh session (morning re-login pressing Start again): the running loop reads
+    // currentSession each cycle, so this un-pins it from a dying overnight token immediately.
+    const { getSession } = await import("../routes/auth.js");
+    const fresh = getSession(sessionId);
+    if (fresh && fresh !== currentSession) {
+      currentSession = fresh;
+      logAudit({ type: "SESSION_ADOPTED" });
+      return { status: "SESSION_ADOPTED" };
+    }
+    return { status: "ALREADY_RUNNING" };
+  }
   // Claim isRunning IMMEDIATELY — before the first await — not after the whole startup sequence
   // completes. The dynamic import below already yields to the event loop, so a later claim leaves
   // a window where TWO concurrent Start calls can both pass the guard above (double-scheduling two
@@ -2180,7 +2280,8 @@ export async function startAutoTrader(sessionId) {
     // entries (reconcileOk stays false) if it can't complete.
     await reconcilePositionsWithBroker(session);
 
-    tradingLoop(session);
+    saveState(); // persist desiredRunning=true for crash forensics
+    tradingLoop(++loopGeneration);
     return {
       status: "STARTED",
       config: {
@@ -2206,6 +2307,8 @@ export async function startAutoTrader(sessionId) {
 export function stopAutoTrader() {
   if (!isRunning) return { status: "NOT_RUNNING" };
   isRunning = false;
+  loopGeneration++; // invalidate any in-flight cycle's reschedule
+  saveState(); // persist desiredRunning=false
   if (pollInterval) {
     clearTimeout(pollInterval);
     pollInterval = null;

@@ -123,6 +123,8 @@ let perScripTrades = {}; // scripName -> count today
 let dailyRealizedPnL = 0;
 let lastTradeDate = null;
 let lastBarTime = {}; // scripName -> epoch sec of last COMPLETED bar acted on
+let lastExitAt = {}; // scripName -> epoch sec of the last position exit (engine dead-alert guard)
+let loopGeneration = 0; // stop/start reentrancy guard: only the newest loop chain may reschedule
 const auditLog = [];
 
 const STATE_FILE = path.join(process.cwd(), "equity-trade-state.json");
@@ -150,6 +152,11 @@ function saveState() {
       perScripTrades,
       dailyRealizedPnL,
       lastTradeDate,
+      lastExitAt,
+      // Crash forensics: true while the operator has the service started. NOT auto-resumed on
+      // boot (surprise trading after a deploy restart would be worse) — index.js raises a
+      // critical alert instead so the operator knows the books stopped.
+      desiredRunning: isRunning,
       config,
     };
     const tmp = STATE_FILE + ".tmp";
@@ -173,6 +180,13 @@ export function mergeSavedScrips(codeScrips, savedScrips) {
   }
 }
 
+// True when the state file says the service was running when the process died/restarted —
+// surfaced (never auto-resumed) via getWasRunningBeforeBoot for index.js's boot alert.
+let wasRunningBeforeBoot = false;
+export function getWasRunningBeforeBoot() {
+  return wasRunningBeforeBoot;
+}
+
 function loadState() {
   try {
     if (!fs.existsSync(STATE_FILE)) return;
@@ -183,6 +197,8 @@ function loadState() {
     perScripTrades = s.perScripTrades || {};
     dailyRealizedPnL = Number(s.dailyRealizedPnL) || 0;
     lastTradeDate = s.lastTradeDate || null;
+    lastExitAt = s.lastExitAt || {};
+    wasRunningBeforeBoot = s.desiredRunning === true;
     if (s.config) {
       for (const key of PERSISTED_CONFIG_KEYS) {
         if (s.config[key] === undefined) continue;
@@ -226,14 +242,18 @@ export function dropInProgressCandle(candles, timeframeMinutes, nowSec = Math.fl
 }
 
 /**
- * Paper resting-stop fill check — byte-equivalent semantics to autoTrader's checkEntryOrderFill
- * paper branch (candle-crossing, gap-through at open, 0.05% stop-fill slippage, SL-L limit cap).
+ * Paper resting-stop fill check — engine-parity semantics (2026-07-14 audit alignment):
+ * STRICT crossing (the validated engine's tryEnterFromAlert enters only on high > level /
+ * low < level — backtest.js:494; an exact-touch bar is NOT a fill), gap-through at open uses
+ * the engine's INCLUSIVE open >= level (backtest.js:406), and slippage is the engine's default
+ * 0.0002 (backtest.js:247 — the constant every validated run used; the old 0.0005 here silently
+ * worsened paper fills vs the numbers being validated against). SL-L limit cap unchanged.
  * Pure/exported for unit tests. latestCandle row = [timeSec, open, high, low, close, volume].
  */
 export function paperStopFillCheck({ dir, level, limitPrice = 0, latestCandle, qty }) {
-  const crossed = dir === "LONG" ? latestCandle[2] >= level : latestCandle[3] <= level;
+  const crossed = dir === "LONG" ? latestCandle[2] > level : latestCandle[3] < level;
   if (!crossed) return { status: "PENDING", filledQty: 0 };
-  const slip = 0.0005;
+  const slip = 0.0002;
   const open = latestCandle[1];
   const gappedThrough = dir === "LONG" ? open >= level : open <= level;
   const fillBase = gappedThrough ? open : level;
@@ -339,9 +359,23 @@ function committedMarginFor(scripName) {
   return total;
 }
 
-function canEnter(scripName) {
+/**
+ * Entry-window check judged by the TRIGGER BAR's start time — engine parity (2026-07-14 audit):
+ * the validated engine gates entries on the trigger candle's clock (liveEntryGate receives the
+ * BAR's hour, so a bar STARTING before the 14:00 cutoff may trigger even though it closes
+ * after — 2026-07-13 BSE was a validated engine trade that live refused by wall clock).
+ */
+function barWithinEntryWindow(barStartSec) {
+  const dec = ((barStartSec + 19800) % 86400) / 3600;
+  return dec >= MIS_PROFILE.sessionStartDecimal && Math.floor(dec) < Math.floor(MIS_PROFILE.sessionEndDecimal);
+}
+
+function canEnter(scripName, barStartSec) {
   if (CONFIG.EMERGENCY_STOP) return { ok: false, reason: "EMERGENCY_STOP" };
-  if (!isValidTradingTime(MIS_PROFILE)) return { ok: false, reason: "OUTSIDE_ENTRY_WINDOW" };
+  // Bar-clock gate when a trigger bar is in hand (arm/fill decisions); wall-clock fallback keeps
+  // any barless caller safe.
+  const windowOk = barStartSec ? barWithinEntryWindow(barStartSec) : isValidTradingTime(MIS_PROFILE);
+  if (!windowOk) return { ok: false, reason: "OUTSIDE_ENTRY_WINDOW" };
   // No trade-count or daily-loss gates — strict parity with the validated backtests (CONFIG note).
   if (openPositions.some((p) => p.status === "OPEN" && p.underlying === scripName)) return { ok: false, reason: "POSITION_OPEN" };
   return { ok: true };
@@ -394,6 +428,9 @@ async function closePosition(position, session, reason) {
   position.realizedPnl = pnl;
   position.pnl = pnl;
   dailyRealizedPnL += pnl;
+  // Engine parity: alerts on bars that completed while this position was open are dead (see the
+  // EQ_ALERT_DURING_POSITION guard) — remember WHEN the exit happened to enforce that.
+  lastExitAt[position.underlying] = Math.floor(Date.now() / 1000);
   saveState();
   logAudit({ type: "EQ_POSITION_CLOSED", id: position.id, scrip: position.underlying, reason, exitPrice, gross, costs, pnl });
   alertInfo("EQ_POSITION_CLOSED", `${position.underlying} ${position.side} closed (${reason}) P&L ₹${pnl.toFixed(0)}`, { paper });
@@ -503,8 +540,9 @@ async function resolvePending(scrip, session, latest) {
     pendingEntries.delete(scrip.name);
     saveState();
   } else {
-    // Still resting — re-validate the gates; cancel if no longer valid (time window, caps).
-    const gate = canEnter(scrip.name);
+    // Still resting — re-validate the gates against the CURRENT trigger bar; cancel if no longer
+    // valid (a bar starting at/after the cutoff can never trigger in the engine either).
+    const gate = canEnter(scrip.name, latest[0]);
     if (!gate.ok) {
       if (!CONFIG.PAPER_TRADING && pend.entryOrderId) {
         try {
@@ -520,16 +558,23 @@ async function resolvePending(scrip, session, latest) {
   }
 }
 
+// Epoch sec of today's NSE session start (09:15 IST) for a given nowSec. India has no DST.
+function todaySessionStartSec(nowSec) {
+  const istDayStartUtc = nowSec - ((nowSec + 19800) % 86400); // 00:00 IST as epoch sec
+  return istDayStartUtc + Math.round(MIS_PROFILE.sessionStartDecimal * 3600);
+}
+
 // ─── PER-SCRIP SCAN (runs only when a NEW completed 60m bar exists) ────────────────────────
 async function processScrip(scrip, session) {
   // Fetch hygiene (2026-07-13: FYERS "request limit reached" blinded the last 3 scrips in the
-  // loop): 60m bars close hourly, but this refetched all 10 scrips every 30s cycle — ~1,200
-  // calls/hour of no-ops that tripped the burst limit exactly when stacked with the futures
-  // bot. Skip the fetch until the NEXT bar could even exist; near the boundary the normal 30s
-  // cycle retries until FYERS publishes the new bar.
+  // loop). lastBarTime holds the last consumed bar's START — that bar completed at +1 period,
+  // and the NEXT bar can only complete at +2 periods. The first cut used +1 period, which
+  // expires the instant the known bar becomes consumable — i.e. it never actually skipped
+  // (2026-07-14 audit finding). Near the boundary the 30s cycle retries until FYERS publishes.
   const nowSec = Math.floor(Date.now() / 1000);
+  const tfSec = CONFIG.TIMEFRAME_MINUTES * 60;
   const knownBar = lastBarTime[scrip.name];
-  if (knownBar && nowSec < knownBar + CONFIG.TIMEFRAME_MINUTES * 60 + 2) return;
+  if (knownBar && nowSec < knownBar + 2 * tfSec + 2) return;
 
   const candles = await fetchCandles(scrip.symbol, session);
   if (candles.length < CONFIG.TREND_EMA_PERIOD + 2) return;
@@ -546,9 +591,51 @@ async function processScrip(scrip, session) {
       staleDataLogged.add(k);
       logAudit({ type: "EQ_STALE_DATA", scrip: scrip.name, latestBarDay: istDateKey(latest[0]) });
     }
+    // Expected every morning 09:15→10:15 (today's first bar doesn't exist yet). Park a sentinel
+    // "bar" one period BEFORE today's first bar so the skip-gate above holds until the first
+    // real bar can complete — without this, all 10 scrips refetched every 30s for the whole
+    // first hour (the exact burst that blinded Monday). A mid-day stale feed re-parks the same
+    // sentinel (already in the past) and so still retries on the normal 30s cycle.
+    lastBarTime[scrip.name] = todaySessionStartSec(nowSec) - tfSec;
     return;
   }
+  // Optimistic stamp; unstamped in the catch below so a transient failure mid-bar (rate limit,
+  // order-API hiccup) retries THIS bar next cycle instead of silently consuming it (audit
+  // finding: a throw after the stamp lost the bar's alert forever).
   lastBarTime[scrip.name] = latest[0];
+  try {
+    await processBar(scrip, session, candles, latest);
+  } catch (err) {
+    delete lastBarTime[scrip.name];
+    throw err;
+  }
+}
+
+async function processBar(scrip, session, candles, latest) {
+  // Step 0 — engine-parity bar backstop for open positions (PAPER only; live positions carry a
+  // real broker SL). The validated engine exits on the completed bar's extremes at the LEVEL
+  // (SL checked before target, gap-through at open honored, engine slippage) regardless of what
+  // the 30s quote polls happened to see — a spike through the stop that mean-reverts between
+  // polls must still stop out, or paper diverges from every validated number.
+  if (CONFIG.PAPER_TRADING) {
+    const pos = openPositions.find((p) => p.status === "OPEN" && p.underlying === scrip.name);
+    if (pos) {
+      const slip = 0.0002; // engine default (backtest.js:247)
+      const [, bOpen, bHigh, bLow] = latest;
+      const isLong = pos.side === "LONG";
+      const slHit = isLong ? bLow <= pos.currentSL : bHigh >= pos.currentSL;
+      const targetHit = isLong ? bHigh >= pos.target : bLow <= pos.target;
+      if (slHit) {
+        const raw = isLong ? Math.min(bOpen, pos.currentSL) : Math.max(bOpen, pos.currentSL);
+        pos.currentLTP = raw * (isLong ? 1 - slip : 1 + slip);
+        await closePosition(pos, session, "STOPLOSS");
+      } else if (targetHit) {
+        const raw = isLong ? Math.min(bOpen, pos.target) : Math.max(bOpen, pos.target);
+        pos.currentLTP = raw * (isLong ? 1 - slip : 1 + slip);
+        await closePosition(pos, session, "TARGET");
+      }
+    }
+  }
 
   // Step 1: resolve any existing pending entry BEFORE considering a new alert (fill must never
   // be lost to a same-cycle overwrite — same ordering rule as the futures bot).
@@ -563,20 +650,28 @@ async function processScrip(scrip, session) {
   const signalId = `${scrip.name}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
 
+  // Engine parity (2026-07-14 audit): alerts on bars that completed while a position was open
+  // are DEAD — the engine records alerts only when flat and nulls the alert on exit; only the
+  // exit bar itself can re-qualify (as prevCandle on the next iteration). Without this, an
+  // intra-bar exit lets a mid-position alert arm and retro-fill from a bar that elapsed during
+  // the position — a trade the validated backtest structurally never contains.
+  const exitAt = lastExitAt[scrip.name];
+  if (exitAt && alert.timestamp + CONFIG.TIMEFRAME_MINUTES * 60 <= exitAt) {
+    processedSignals.add(signalId);
+    logAudit({ type: "EQ_ALERT_DURING_POSITION", scrip: scrip.name, dir, alertTimestamp: alert.timestamp, lastExitAt: exitAt });
+    saveState();
+    return;
+  }
+
   const existing = pendingEntries.get(scrip.name);
-  if (existing && existing.alertTimestamp === alert.timestamp && existing.dir === dir) return; // unchanged
+  // "Unchanged" only counts when the pending actually HAS a working order — a null-id pending
+  // (placement failed / gates were closed) must fall through and retry now that this cycle's
+  // gates may pass (audit finding: one transient failure permanently latched the alert un-armed).
+  if (existing && existing.alertTimestamp === alert.timestamp && existing.dir === dir && existing.entryOrderId) return;
 
-  const gate = canEnter(scrip.name);
-  const { qty, marginReq, riskAtEntry } = computeEquityQty({
-    entryLevel: level,
-    stopLoss,
-    riskPerTrade: CONFIG.RISK_PER_TRADE,
-    perScripCapital: CONFIG.PER_SCRIP_CAPITAL,
-    leverage: CONFIG.LEVERAGE,
-  });
-  const marginOk = committedMarginFor(scrip.name) + marginReq <= CONFIG.PER_SCRIP_CAPITAL;
-
-  // Replace a stale pending (older alert) — cancel its live order first.
+  // Replace a stale pending (older alert) BEFORE the margin math — its marginEst would otherwise
+  // be double-counted against the new arm (it's about to be dropped either way), spuriously
+  // skipping every alert-refresh with reason MARGIN (audit finding; mirrors autoTrader's order).
   if (existing) {
     if (!CONFIG.PAPER_TRADING && existing.entryOrderId) {
       try {
@@ -587,6 +682,16 @@ async function processScrip(scrip, session) {
     }
     pendingEntries.delete(scrip.name);
   }
+
+  const gate = canEnter(scrip.name, latest[0]);
+  const { qty, marginReq, riskAtEntry } = computeEquityQty({
+    entryLevel: level,
+    stopLoss,
+    riskPerTrade: CONFIG.RISK_PER_TRADE,
+    perScripCapital: CONFIG.PER_SCRIP_CAPITAL,
+    leverage: CONFIG.LEVERAGE,
+  });
+  const marginOk = committedMarginFor(scrip.name) + marginReq <= CONFIG.PER_SCRIP_CAPITAL;
 
   let entryOrderId = null;
   if (gate.ok && qty >= 1 && marginOk) {
@@ -637,6 +742,13 @@ async function monitorPositions(session) {
   for (const position of openPositions) {
     if (position.status !== "OPEN") continue;
     try {
+      // Square-off is TIME-driven — checked BEFORE the quote fetch so a rate-limited or dead
+      // feed at 15:15 can never defer the MIS exit to the 15:30 force-close at a stale price
+      // (audit finding). closePosition tolerates a missing fresh quote.
+      if (isSquareOffTime(MIS_PROFILE)) {
+        await closePosition(position, session, "SQUARE_OFF");
+        continue;
+      }
       const ltp = await fetchQuote(position.optionSymbol, session);
       if (!(ltp > 0)) continue;
       position.currentLTP = ltp;
@@ -646,7 +758,6 @@ async function monitorPositions(session) {
       const targetHit = dirMult === 1 ? ltp >= position.target : ltp <= position.target;
       if (slHit) await closePosition(position, session, "STOPLOSS");
       else if (targetHit) await closePosition(position, session, "TARGET");
-      else if (isSquareOffTime(MIS_PROFILE)) await closePosition(position, session, "SQUARE_OFF");
       else await ensureLiveStopLoss(position, session); // self-heal a missing live SL
     } catch (err) {
       console.error(`[EQUITY-TRADER] monitor error (${position.optionSymbol}):`, err.message);
@@ -664,12 +775,18 @@ function resetDailyCounters(today) {
   processedSignals = new Set();
   pendingEntries = new Map(); // resting MIS entries never carry across days
   lastBarTime = {};
+  lastExitAt = {}; // yesterday's exits never kill today's alerts
   staleDataLogged = new Set();
   openPositions = openPositions.filter((p) => p.status === "OPEN"); // drop yesterday's closed records
 }
 
-async function loop(session) {
-  if (!isRunning) return;
+async function loop(gen) {
+  // Generation guard: a stop→start while a prior cycle is mid-await must not leave TWO chains
+  // rescheduling forever (double polling, double closePosition races) — only the newest
+  // generation may continue (audit finding). Session comes from the module var so a morning
+  // re-login adopted via startEquityTrader immediately applies to the running loop.
+  if (!isRunning || gen !== loopGeneration) return;
+  const session = currentSession;
   if (pollTimer) {
     clearTimeout(pollTimer);
     pollTimer = null;
@@ -712,15 +829,27 @@ async function loop(session) {
     console.error("[EQUITY-TRADER] loop cycle error:", err.message);
     logAudit({ type: "EQ_LOOP_ERROR", error: err.message });
   } finally {
-    if (isRunning) {
-      pollTimer = setTimeout(() => loop(session), rescheduleMs);
+    if (isRunning && gen === loopGeneration) {
+      pollTimer = setTimeout(() => loop(gen), rescheduleMs);
     }
   }
 }
 
 // ─── PUBLIC API (mirrors autoTrader's shape for the routes/UI) ─────────────────────────────
 export async function startEquityTrader(sessionId) {
-  if (isRunning) return { status: "ALREADY_RUNNING" };
+  if (isRunning) {
+    // Adopt the fresh session (morning re-login pressing Start again): the running loop reads
+    // currentSession each cycle, so this immediately un-pins it from a dying overnight token
+    // (audit finding: bots pinned to the Start-time session traded a whole day on a dead token).
+    const { getSession } = await import("../routes/auth.js");
+    const fresh = getSession(sessionId);
+    if (fresh && fresh !== currentSession) {
+      currentSession = fresh;
+      logAudit({ type: "EQ_SESSION_ADOPTED" });
+      return { status: "SESSION_ADOPTED" };
+    }
+    return { status: "ALREADY_RUNNING" };
+  }
   isRunning = true;
   try {
     const { getSession } = await import("../routes/auth.js");
@@ -733,7 +862,8 @@ export async function startEquityTrader(sessionId) {
         `${CONFIG.TIMEFRAME_MINUTES}m | paper: ${CONFIG.PAPER_TRADING}`
     );
     logAudit({ type: "EQ_STARTED", paper: CONFIG.PAPER_TRADING });
-    loop(session);
+    saveState(); // persist desiredRunning=true for crash forensics
+    loop(++loopGeneration);
     return { status: "STARTED", paperTrading: CONFIG.PAPER_TRADING };
   } catch (err) {
     isRunning = false;
@@ -743,11 +873,13 @@ export async function startEquityTrader(sessionId) {
 
 export function stopEquityTrader() {
   isRunning = false;
+  loopGeneration++; // invalidate any in-flight cycle's reschedule
   if (pollTimer) {
     clearTimeout(pollTimer);
     pollTimer = null;
   }
   logAudit({ type: "EQ_STOPPED" });
+  saveState(); // persist desiredRunning=false
   return { status: "STOPPED" };
 }
 
@@ -783,6 +915,20 @@ export function updateEquityConfig(updates) {
   if (clean.scripEnabled) {
     for (const s of CONFIG.SCRIPS) {
       if (clean.scripEnabled[s.name] !== undefined) s.enabled = clean.scripEnabled[s.name];
+      // Disabling a scrip must not orphan its armed pending — the scan loop filters to enabled
+      // scrips, so nothing would ever resolve or cancel it (in LIVE the resting stop order would
+      // stay working at the broker and could fill untracked — audit finding).
+      if (clean.scripEnabled[s.name] === false && pendingEntries.has(s.name)) {
+        const pend = pendingEntries.get(s.name);
+        pendingEntries.delete(s.name);
+        logAudit({ type: "EQ_PENDING_CANCELLED", scrip: s.name, reason: "SCRIP_DISABLED" });
+        if (!CONFIG.PAPER_TRADING && pend.entryOrderId) {
+          cancelOrder(pend.entryOrderId, currentSession, logAudit).catch((err) => {
+            logAudit({ type: "EQ_PENDING_CANCEL_FAILED", scrip: s.name, orderId: pend.entryOrderId, error: err.message });
+            alertCritical("EQ_ORPHAN_ORDER", `Cancel failed for disabled ${s.name} — order ${pend.entryOrderId} may still be working at the broker. MANUAL REVIEW.`, {});
+          });
+        }
+      }
     }
     delete clean.scripEnabled;
   }

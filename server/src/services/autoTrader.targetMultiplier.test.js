@@ -99,10 +99,10 @@ describe("CONFIG.TARGET_MULTIPLIER wiring", () => {
     // Nominal (arm-time) target: level + multiplier * (level - stopLoss) = 100.5 + 3*1.0 = 103.5.
     expect(opened.nominalTarget).toBeCloseTo(103.5, 5);
 
-    // Gap-adjusted (fill-time) target, computed off the REAL fill price (level * 1.0005), not the
-    // stale nominal level — proves computeGapAdjustedTarget's call site now passes the configured
-    // multiplier through instead of silently defaulting to 2.
-    const avgFillPrice = 100.5 * 1.0005;
+    // Gap-adjusted (fill-time) target, computed off the REAL fill price (level * 1.0002 — the
+    // engine's slippage default), not the stale nominal level — proves computeGapAdjustedTarget's
+    // call site passes the configured multiplier through instead of silently defaulting to 2.
+    const avgFillPrice = 100.5 * 1.0002;
     const expectedAdjustedTarget = avgFillPrice + 3 * (avgFillPrice - 99.5);
     expect(opened.target).toBeCloseTo(expectedAdjustedTarget, 5);
 

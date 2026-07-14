@@ -22,18 +22,26 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, latestCandle, qty: 30 });
     expect(result.status).toBe("FILLED");
     expect(result.filledQty).toBe(30);
-    expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
+    expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0002, 5);
   });
 
   it("FILLS a SHORT when the candle's low crosses the resting level, with downward slippage", async () => {
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54950, latestCandle, qty: 30 });
     expect(result.status).toBe("FILLED");
-    expect(result.avgFillPrice).toBeCloseTo(54950 * 0.9995, 5);
+    expect(result.avgFillPrice).toBeCloseTo(54950 * 0.9998, 5);
   });
 
   it("is PENDING when a SHORT resting level has not been crossed by the candle's low", async () => {
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54800, latestCandle, qty: 30 });
     expect(result.status).toBe("PENDING");
+  });
+
+  it("exact-touch is NOT a fill — engine parity (the backtest enters only on a STRICT break)", async () => {
+    // latestCandle high is exactly 55200 / low exactly 54900 — touching, never beyond.
+    const long = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55200, latestCandle, qty: 30 });
+    expect(long.status).toBe("PENDING");
+    const short = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54900, latestCandle, qty: 30 });
+    expect(short.status).toBe("PENDING");
   });
 
   it("LIVE mode with no entryOrderId yet (gated out at placement time) is PENDING without any network call", async () => {
@@ -68,20 +76,20 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     const gapCandle = [1_700_000_000, 55000, 55200, 54950, 55100, 1000]; // open 55000 > level 54800
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 54800, latestCandle: gapCandle, qty: 30 });
     expect(result.status).toBe("FILLED");
-    expect(result.avgFillPrice).toBeCloseTo(55000 * 1.0005, 5);
+    expect(result.avgFillPrice).toBeCloseTo(55000 * 1.0002, 5);
   });
 
   it("FILLS a SHORT at the candle's OPEN (with slippage) when the open already gapped past the level", async () => {
     const gapCandle = [1_700_000_000, 55000, 55050, 54800, 54900, 1000]; // open 55000 < level 55300
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 55300, latestCandle: gapCandle, qty: 30 });
     expect(result.status).toBe("FILLED");
-    expect(result.avgFillPrice).toBeCloseTo(55000 * 0.9995, 5);
+    expect(result.avgFillPrice).toBeCloseTo(55000 * 0.9998, 5);
   });
 
   it("still fills at the LEVEL (not the open) when the open has NOT gapped past it", async () => {
     // open 55000 is below the LONG level 55100 — no gap, fill must stay anchored to the level.
     const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, latestCandle, qty: 30 });
-    expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
+    expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0002, 5);
   });
 
   // SL-L semantics: a real stop-limit never fills worse than its limit — it stays resting instead.
@@ -90,13 +98,13 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     it("limitPrice: 0 (feature off) is identical to omitting it entirely", async () => {
       const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, limitPrice: 0, latestCandle, qty: 30 });
       expect(result.status).toBe("FILLED");
-      expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
+      expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0002, 5);
     });
 
     it("LONG still FILLS when the gap-adjusted price is within the limit", async () => {
       const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, limitPrice: 55200, latestCandle, qty: 30 });
       expect(result.status).toBe("FILLED");
-      expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0005, 5);
+      expect(result.avgFillPrice).toBeCloseTo(55100 * 1.0002, 5);
     });
 
     it("LONG stays PENDING (never fills worse than the limit) when the gap-adjusted price would exceed it", async () => {
@@ -108,7 +116,7 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     it("SHORT still FILLS when the gap-adjusted price is within the limit", async () => {
       const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54950, limitPrice: 54900, latestCandle, qty: 30 });
       expect(result.status).toBe("FILLED");
-      expect(result.avgFillPrice).toBeCloseTo(54950 * 0.9995, 5);
+      expect(result.avgFillPrice).toBeCloseTo(54950 * 0.9998, 5);
     });
 
     it("SHORT stays PENDING (never fills worse than the limit) when the gap-adjusted price would exceed it", async () => {
@@ -118,7 +126,7 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     });
 
     it("a limit set exactly AT the gap-adjusted price still fills (boundary, not strictly exceeded)", async () => {
-      const exact = 55100 * 1.0005;
+      const exact = 55100 * 1.0002;
       const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "LONG", level: 55100, limitPrice: exact, latestCandle, qty: 30 });
       expect(result.status).toBe("FILLED");
     });

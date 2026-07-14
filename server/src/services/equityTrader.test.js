@@ -37,13 +37,13 @@ describe("computeEquityQty — ₹risk-per-trade sizing with MIS leverage cap", 
   });
 });
 
-describe("paperStopFillCheck — resting stop entry semantics (mirrors the futures bot's paper branch)", () => {
+describe("paperStopFillCheck — engine-parity resting stop semantics (strict cross, engine slippage)", () => {
   const bar = (o, h, l, c) => [1720000000, o, h, l, c, 1000];
 
-  it("LONG fills when the bar's high crosses the level, at level + 0.05% slip", () => {
+  it("LONG fills when the bar's high crosses the level, at level + 0.02% slip (engine default)", () => {
     const f = paperStopFillCheck({ dir: "LONG", level: 1000, latestCandle: bar(990, 1005, 985, 1002), qty: 80 });
     expect(f.status).toBe("FILLED");
-    expect(f.avgFillPrice).toBeCloseTo(1000 * 1.0005, 6);
+    expect(f.avgFillPrice).toBeCloseTo(1000 * 1.0002, 6);
     expect(f.filledQty).toBe(80);
   });
 
@@ -52,15 +52,22 @@ describe("paperStopFillCheck — resting stop entry semantics (mirrors the futur
     expect(f.status).toBe("PENDING");
   });
 
+  it("exact-touch is NOT a fill — the validated engine enters only on a STRICT break (high > level)", () => {
+    const f = paperStopFillCheck({ dir: "LONG", level: 1000, latestCandle: bar(990, 1000, 985, 996), qty: 80 });
+    expect(f.status).toBe("PENDING");
+    const s = paperStopFillCheck({ dir: "SHORT", level: 950, latestCandle: bar(960, 962, 950, 955), qty: 100 });
+    expect(s.status).toBe("PENDING");
+  });
+
   it("gap-through: bar OPENS beyond the level → fills at the open (gap risk honored)", () => {
     const f = paperStopFillCheck({ dir: "LONG", level: 1000, latestCandle: bar(1010, 1015, 1005, 1012), qty: 80 });
-    expect(f.avgFillPrice).toBeCloseTo(1010 * 1.0005, 6);
+    expect(f.avgFillPrice).toBeCloseTo(1010 * 1.0002, 6);
   });
 
   it("SHORT mirrors: low crosses the level, fill at level − slip", () => {
     const f = paperStopFillCheck({ dir: "SHORT", level: 950, latestCandle: bar(960, 962, 945, 948), qty: 100 });
     expect(f.status).toBe("FILLED");
-    expect(f.avgFillPrice).toBeCloseTo(950 * 0.9995, 6);
+    expect(f.avgFillPrice).toBeCloseTo(950 * 0.9998, 6);
   });
 });
 
