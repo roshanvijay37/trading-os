@@ -120,7 +120,9 @@ describe("checkEntryOrderFill (paper branch — the exact resting-order fill sim
     });
 
     it("SHORT stays PENDING (never fills worse than the limit) when the gap-adjusted price would exceed it", async () => {
-      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54950, limitPrice: 54930, latestCandle, qty: 30 });
+      // Fill = 54950 × 0.9998 = 54939.01 — a limit ABOVE that (54945) means the modeled fill is
+      // worse than the SL-L would tolerate, so the order keeps resting.
+      const result = await checkEntryOrderFill({ paperTrading: true, entryOrderId: armedId, dir: "SHORT", level: 54950, limitPrice: 54945, latestCandle, qty: 30 });
       expect(result.status).toBe("PENDING");
       expect(result.filledQty).toBe(0);
     });
