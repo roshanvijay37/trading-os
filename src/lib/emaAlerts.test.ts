@@ -160,6 +160,66 @@ describe("resolveEmaAlerts", () => {
     expect(result).toMatchObject({ triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null });
   });
 
+  it("exact-touch does NOT trigger — the engine enters only on a STRICT break (2026-07-14 parity)", () => {
+    // Bullish alert @0: entry 110. Later high EXACTLY 110 — touching, never beyond.
+    const candles = [c(108, 110, 107), c(109, 110, 106), c(108, 109, 105)];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ triggerIndex: null, outcome: "NOT_TRIGGERED" });
+  });
+
+  it("the pending survives THROUGH the next alert's own bar (replacement lands one iteration later, engine parity)", () => {
+    // Alert 1 @0 (bullish, entry 110); alert 2's bar is idx2 — and idx2 itself breaks 110.
+    // The engine replaces the pending only at idx3 (alert 2's judging iteration), so the old
+    // order legitimately fills ON idx2.
+    const candles = [
+      c(108, 110, 107),
+      c(109, 109, 106), // no trigger
+      c(111, 112, 105), // alert 2's bar — but also breaks 110 strictly → fills alert 1
+      c(100, 101, 95),
+    ];
+    const alerts = [
+      { index: 0, type: "BULLISH" as const },
+      { index: 2, type: "BEARISH" as const },
+    ];
+    const [first] = resolveEmaAlerts(candles, alerts);
+    expect(first).toMatchObject({ triggerIndex: 2 });
+  });
+
+  it("day boundary kills the pending — the trigger scan never crosses into the next session (engine nulls the alert)", () => {
+    const D1 = 1_700_000_000; // some day, IST
+    const D2 = D1 + 86_400; // next IST day
+    const ct2 = (time: number, close: number, high: number, low: number) => ({ time, close, high, low });
+    const candles = [
+      ct2(D1, 108, 110, 107), // alert bar
+      ct2(D1 + 900, 109, 109, 106), // same day: no trigger
+      ct2(D2, 112, 113, 111), // NEXT day: would break 110 — engine already killed the pending
+    ];
+    const alerts = [{ index: 0, type: "BULLISH" as const }];
+    const [result] = resolveEmaAlerts(candles, alerts);
+    expect(result).toMatchObject({ triggerIndex: null, outcome: "NOT_TRIGGERED" });
+  });
+
+  it("suppresses an alert whose judging bar falls inside an open trade (engine records alerts only while flat)", () => {
+    // Trade 1: alert @0 triggers on idx1 and stays open through idx3 (SL 107 / target 116 never
+    // hit until idx3). Alert @2's judging bar is idx3 — inside the open trade → suppressed,
+    // even though idx3 would have broken its level.
+    const candles = [
+      c(108, 110, 107), // alert 1 (entry 110, sl 107, target 116)
+      c(112, 111, 109), // triggers trade 1
+      c(110, 111, 108), // alert 2 forms here (mid-position)
+      c(114, 115, 108.5), // would break alert 2's high (111) — but trade 1 is still open
+      c(118, 119, 114), // trade 1 target (116) hits here
+    ];
+    const alerts = [
+      { index: 0, type: "BULLISH" as const },
+      { index: 2, type: "BULLISH" as const },
+    ];
+    const [first, second] = resolveEmaAlerts(candles, alerts);
+    expect(first).toMatchObject({ triggerIndex: 1, outcome: "TARGET", outcomeIndex: 4 });
+    expect(second).toMatchObject({ triggerIndex: null, outcome: "NOT_TRIGGERED", suppressed: true });
+  });
+
   it("bounds the trigger search at the NEXT alert's candle — a newer alert cancels the old pending order", () => {
     const candles = [
       c(108, 110, 107), // idx0: alert 1 (bullish, entry 110)

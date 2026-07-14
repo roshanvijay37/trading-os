@@ -41,6 +41,11 @@ export interface ResolvedAlert {
   /** Index of the candle where the outcome resolved (TARGET/SL only). */
   outcomeIndex: number | null;
   /**
+   * True when the alert's judging bar fell inside an open simulated trade — the engine records
+   * alerts only while flat, so this alert never existed for it (2026-07-14 parity rewrite).
+   */
+  suppressed?: boolean;
+  /**
    * True when the trigger (fill) candle falls at/after CONFIG.MAX_TIME_ENTRY_HOUR (14:00 IST) —
    * the live/paper bot's canTakeTrade gate refuses any new entry from that point on
    * (server/src/services/autoTrader.js's checkTimeFilter), so a signal like this would never
@@ -117,28 +122,25 @@ export function findEmaAlerts(candles: AlertCandle[], opts: { trendGate?: boolea
 }
 
 /**
- * Simulates each alert forward through the candle history to see what actually happened —
- * nominal entry = alert candle's high/low, SL = alert candle's low/high, target = entry ±
- * targetMultiplier × risk (matches autoTrader.js's EMA5T entry math exactly; default 2 is the
- * legacy R:R, the Chart page passes the live config's 3).
+ * SEQUENTIAL engine simulation of the alert list (2026-07-14 parity rewrite — this now mirrors
+ * routes/backtest.js's EMA5T loop, not just per-alert heuristics). Nominal entry = alert
+ * candle's high/low, SL = the opposite extreme, target = entry ± targetMultiplier × risk
+ * (default 2 is the legacy R:R; the Chart passes the live config's 3).
  *
- * Four rules mirrored from the real system, all load-bearing for correctness:
- *  1. A resting entry order is cancelled the moment a NEWER alert appears (autoTrader.js's
- *     manageFuturesPending: "a previous resting order... must be cancelled before arming the
- *     new one") — so the trigger search for alert k is bounded by alert k+1's candle index.
- *     Once actually triggered, later alerts don't affect the now-open position.
- *  2. When a single candle's range spans BOTH the SL and target, SL wins — this matches
- *     routes/backtest.js's if/else-if exit-check order (SL checked before target), the
- *     conservative convention for resolving intrabar ambiguity from OHLC-only data.
- *  3. If the triggering candle's OPEN already cleared the nominal entry level, the market gapped
- *     straight through it — the real fill happens at (or near) the open, not the stale nominal
- *     level. The SL stays at the alert candle's fixed structural level, but the target is
- *     recomputed from the real (gap-adjusted) entry to preserve the intended risk:reward — this
- *     mirrors checkEntryOrderFill/computeGapAdjustedTarget (autoTrader.js) and buildPosition
- *     (routes/backtest.js) exactly. Keep this in sync if any of those change.
- *  4. A trigger at/after 14:00 IST is flagged via pastEntryCutoff — the bot's canTakeTrade gate
- *     (checkTimeFilter) refuses any new entry from that point on, so a "signal" like this would
- *     never actually become a trade no matter how price moved afterward.
+ * Engine rules mirrored, all load-bearing:
+ *  1. ONE pending at a time: a newer alert replaces the old one at its own judging iteration —
+ *     so alert k's trigger scan runs from its judging bar THROUGH alert k+1's bar (inclusive).
+ *  2. STRICT trigger: high > level / low < level (backtest.js:494) — exact touch never fills.
+ *  3. Day boundary kills the pending (engine nulls alertCandle at IST day change): the scan
+ *     never crosses into the next session. Timeless candles (tests) skip this check.
+ *  4. Alerts recorded only while FLAT: an alert whose judging bar falls inside an open simulated
+ *     trade never existed (suppressed) — the exit bar itself re-qualifies. Unresolved trades
+ *     square off at their session's end for suppression purposes (outcome stays OPEN on screen).
+ *  5. SL-first on a both-levels bar (backtest.js's exit-check order).
+ *  6. Gap-through at open (INCLUSIVE, backtest.js:406) fills at the open; target re-derived from
+ *     the real fill (computeGapAdjustedTarget parity).
+ *  7. A trigger bar at/after the cutoff hour is flagged pastEntryCutoff — the engine blocks AND
+ *     consumes such triggers, so it opens no position and no suppression span.
  */
 export function resolveEmaAlerts(
   candles: AlertCandle[],
@@ -149,31 +151,50 @@ export function resolveEmaAlerts(
 ): ResolvedAlert[] {
   const entryCutoffHour = opts.entryCutoffHour ?? MAX_TIME_ENTRY_HOUR;
   const targetMultiplier = opts.targetMultiplier ?? 2;
-  return alerts.map((alert, k) => {
+  const istDayOf = (t?: number) => (t === undefined ? undefined : Math.floor((t + 19800) / 86400));
+
+  const results: ResolvedAlert[] = [];
+  let openFrom = -1;
+  let openUntil = -1; // candle-index span [openFrom .. openUntil] of the current simulated trade
+
+  for (let k = 0; k < alerts.length; k++) {
+    const alert = alerts[k];
     const alertCandle = candles[alert.index];
     const isBullish = alert.type === "BULLISH";
     const nominalEntry = isBullish ? alertCandle.high : alertCandle.low;
     const sl = isBullish ? alertCandle.low : alertCandle.high;
+    const judgeIdx = alert.index + 1;
 
-    const nextAlertIndex = k + 1 < alerts.length ? alerts[k + 1].index : candles.length;
+    const notTriggered = (suppressed: boolean): ResolvedAlert => {
+      const risk = Math.abs(nominalEntry - sl);
+      const target = isBullish ? nominalEntry + targetMultiplier * risk : nominalEntry - targetMultiplier * risk;
+      return { alertIndex: alert.index, type: alert.type, entry: nominalEntry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null, pastEntryCutoff: false, suppressed };
+    };
 
+    // Rule 4: recorded only while flat — the exit bar (judged one iteration later) re-qualifies.
+    if (judgeIdx > openFrom && judgeIdx <= openUntil) {
+      results.push(notTriggered(true));
+      continue;
+    }
+
+    // Rules 1-3: trigger scan.
+    const nextAlertBar = k + 1 < alerts.length ? alerts[k + 1].index : candles.length - 1;
+    const judgeDay = istDayOf(candles[judgeIdx]?.time);
     let triggerIndex: number | null = null;
-    for (let i = alert.index + 1; i < nextAlertIndex && i < candles.length; i++) {
-      const c = candles[i];
-      if (isBullish ? c.high >= nominalEntry : c.low <= nominalEntry) {
-        triggerIndex = i;
+    for (let j = judgeIdx; j <= nextAlertBar && j < candles.length; j++) {
+      const c = candles[j];
+      if (judgeDay !== undefined && istDayOf(c.time) !== judgeDay) break; // rule 3
+      if (isBullish ? c.high > nominalEntry : c.low < nominalEntry) {
+        triggerIndex = j;
         break;
       }
     }
-
     if (triggerIndex === null) {
-      const risk = Math.abs(nominalEntry - sl);
-      const target = isBullish ? nominalEntry + targetMultiplier * risk : nominalEntry - targetMultiplier * risk;
-      return { alertIndex: alert.index, type: alert.type, entry: nominalEntry, sl, target, triggerIndex: null, outcome: "NOT_TRIGGERED", outcomeIndex: null, pastEntryCutoff: false };
+      results.push(notTriggered(false));
+      continue;
     }
 
-    // Gap-adjusted fill (rule 3 above). `open` is optional — callers that don't supply it
-    // (e.g. existing tests) just get no gap adjustment, never a crash.
+    // Rule 6: gap-adjusted fill. `open`/`time` are optional — timeless test candles never crash.
     const triggerCandle = candles[triggerIndex];
     const triggerOpen = triggerCandle.open;
     const gappedThrough = triggerOpen !== undefined && (isBullish ? triggerOpen >= nominalEntry : triggerOpen <= nominalEntry);
@@ -182,22 +203,34 @@ export function resolveEmaAlerts(
     const target = isBullish ? entry + targetMultiplier * risk : entry - targetMultiplier * risk;
     const pastEntryCutoff = triggerCandle.time !== undefined && istHourOf(triggerCandle.time) >= entryCutoffHour;
 
+    // Rule 5 exits — never across the trigger's session (rule 4's square-off equivalent).
     let outcome: TradeOutcome = "OPEN";
     let outcomeIndex: number | null = null;
-    for (let i = triggerIndex; i < candles.length; i++) {
-      const c = candles[i];
+    const triggerDay = istDayOf(triggerCandle.time);
+    let lastSameDayBar = triggerIndex;
+    for (let j = triggerIndex; j < candles.length; j++) {
+      const c = candles[j];
+      if (triggerDay !== undefined && istDayOf(c.time) !== triggerDay) break;
+      lastSameDayBar = j;
       if (isBullish ? c.low <= sl : c.high >= sl) {
         outcome = "SL";
-        outcomeIndex = i;
+        outcomeIndex = j;
         break;
       }
       if (isBullish ? c.high >= target : c.low <= target) {
         outcome = "TARGET";
-        outcomeIndex = i;
+        outcomeIndex = j;
         break;
       }
     }
 
-    return { alertIndex: alert.index, type: alert.type, entry, sl, target, triggerIndex, outcome, outcomeIndex, pastEntryCutoff };
-  });
+    // Rule 7: a blocked trigger opens no position and no suppression span.
+    if (!pastEntryCutoff) {
+      openFrom = triggerIndex;
+      openUntil = outcomeIndex !== null ? outcomeIndex : lastSameDayBar;
+    }
+
+    results.push({ alertIndex: alert.index, type: alert.type, entry, sl, target, triggerIndex, outcome, outcomeIndex, pastEntryCutoff });
+  }
+  return results;
 }
