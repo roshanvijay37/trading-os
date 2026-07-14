@@ -816,8 +816,12 @@ function finalizeClose(position, { exitPrice, exitQty, reason, exitOrderId, pape
   dailyRealizedPnL += pnl;
   consecutiveLosses = position.realizedPnl < 0 ? consecutiveLosses + 1 : 0;
   // Engine dead-alert guard bookkeeping (see EMA5T_ALERT_DURING_POSITION in the arm path).
+  // Stamp the EXIT BAR's start — the bar backstop sets _exitBarTime; other exits (square-off,
+  // market-close, live) fall back to "the bar before now", conservative by at most one bar.
   if (position.signal?.strategy === "EMA5T" && position.signal?.timeframe) {
-    lastExitAtByKey.set(`${position.underlying}:EMA5T:${position.signal.timeframe}m`, Math.floor(Date.now() / 1000));
+    const tfSec = Number(position.signal.timeframe) * 60;
+    const exitBar = Number(position._exitBarTime) || Math.floor(Date.now() / 1000) - tfSec;
+    lastExitAtByKey.set(`${position.underlying}:EMA5T:${position.signal.timeframe}m`, exitBar);
   }
 
   recalcDailyPnL();
@@ -1461,9 +1465,11 @@ async function monitorPositions(session) {
       // 2026-07-14 parity round. A quote exit takes whichever level trades first, but the
       // validated engine resolves both-levels-in-one-bar as SL-FIRST; exiting here would win
       // trades the engine loses. LIVE keeps intra-bar exits (broker SL is primary anyway).
-      // Exception: a position whose instrument is no longer SELECTED never reaches the scan path
-      // (its backstop is dead) — quote exits must keep protecting it.
-      const barBackstopCovers = getActiveUnderlyings().some((u) => u.name === position.underlying);
+      // Exception: a position whose instrument OR timeframe is no longer selected never reaches
+      // the scan path (its backstop is dead) — quote exits must keep protecting it.
+      const barBackstopCovers =
+        getActiveUnderlyings().some((u) => u.name === position.underlying) &&
+        getTimeframes().map(Number).includes(Number(position.signal?.timeframe));
       if (!CONFIG.PAPER_TRADING || position.kind !== "FUT" || !barBackstopCovers) {
         const slHit = dirMult === 1 ? ltp <= position.currentSL : ltp >= position.currentSL;
         const targetHit = dirMult === 1 ? ltp >= position.target : ltp <= position.target;
@@ -1537,6 +1543,22 @@ function canTakeTrade(underlying) {
   if (!checkDailyLossLimit()) return false;
   if (!checkMaxTrades()) return false;
   if (!checkTimeFilter(underlying)) return false;
+  if (!checkCorrelationFilter(underlying)) return false;
+  if (!checkMinVixFilter()) return false;
+  return true;
+}
+
+/**
+ * canTakeTrade minus its two WALL-CLOCK time checks (isValidTradingTime + checkTimeFilter) —
+ * for arm/fill decisions that are gated by the TRIGGER BAR's clock instead (engine parity,
+ * 2026-07-14 fleet: the wall clock at bar-close+poll blocked every validated trade whose
+ * trigger bar straddles the cutoff; callers pair this with barWithinEntryWindowFut(latest[0])).
+ */
+function canTakeTradeAtBar(underlying) {
+  if (CONFIG.EMERGENCY_STOP) return false;
+  if (!reconcileOk) return false;
+  if (!checkDailyLossLimit()) return false;
+  if (!checkMaxTrades()) return false;
   if (!checkCorrelationFilter(underlying)) return false;
   if (!checkMinVixFilter()) return false;
   return true;
@@ -1816,7 +1838,9 @@ export async function cancelPendingEntryOrder(p, paperTrading, session) {
 function barWithinEntryWindowFut(underlying, barStartSec) {
   const p = getSessionProfileFor(underlying) || {};
   const dec = ((Number(barStartSec) + 19800) % 86400) / 3600;
-  const cutoffHour = p.entryCutoffHour ?? 14;
+  // entryCutoffHour null → the long-standing operator knob governs (same contract as
+  // checkTimeFilter); gold's profile fixes 22.
+  const cutoffHour = p.entryCutoffHour ?? CONFIG.MAX_TIME_ENTRY_HOUR ?? 14;
   return dec >= (p.sessionStartDecimal ?? 9.25) && Math.floor(dec) < cutoffHour;
 }
 
@@ -1871,9 +1895,11 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
       const targetHit = isLong ? bHigh >= pos.target : bLow <= pos.target;
       if (slHit) {
         const raw = isLong ? Math.min(bOpen, slLevel) : Math.max(bOpen, slLevel);
+        pos._exitBarTime = latest[0]; // dead-alert guard stamps the exit BAR, not the wall clock
         await closePosition(pos, session, "STOPLOSS", raw * (isLong ? 1 - slip : 1 + slip));
       } else if (targetHit) {
         const raw = isLong ? Math.min(bOpen, pos.target) : Math.max(bOpen, pos.target);
+        pos._exitBarTime = latest[0];
         await closePosition(pos, session, "TARGET", raw * (isLong ? 1 - slip : 1 + slip));
       }
     }
@@ -1892,6 +1918,17 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
       // FYERS reports a partial fill as PENDING with filledQty>0 (no dedicated PARTIAL code) — a
       // partial is handled identically to a full fill, just sized at whatever actually filled.
       const signalId = `${key}-${p.alertTimestamp}-${p.dir}`;
+      // Engine parity (2026-07-14 fleet): the engine gates the CROSSING bar before entering and
+      // a blocked trigger CONSUMES the alert. A paper fill must pass the same gate or it
+      // fabricates a trade the engine refuses (post-cutoff triggers, emergency stop, risk
+      // gates). LIVE fills are reality and always booked.
+      if (paperTrading && !(barWithinEntryWindowFut(underlying, latest[0]) && canTakeTradeAtBar(underlying))) {
+        processedSignals.add(signalId);
+        pendingEntries.delete(key);
+        saveState();
+        logAudit({ type: "EMA5T_TRIGGER_BLOCKED", key, dir: p.dir, level: p.level, judgeBarTs: latest[0] });
+        return;
+      }
       if (processedSignals.has(signalId)) {
         // Already turned into a position on a prior cycle (persisted-state race after a crash) —
         // never open a second one for the same fill.
@@ -2032,12 +2069,13 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
   const signalId = `${key}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
 
-  // Engine parity (2026-07-14 audit): the engine records alerts only while FLAT and nulls the
-  // alert on exit — an alert bar that completed while a position was open (other than the exit
-  // bar itself) can never arm. Without this, an intra-bar exit revives a mid-position alert and
-  // the next cycle retro-fills it from an already-elapsed bar — a trade no backtest contains.
+  // Engine parity (2026-07-14 audit, stamp re-cut same day): the engine records alerts only
+  // while FLAT and nulls the alert on exit — an alert bar that completed while a position was
+  // open can never arm, but the EXIT BAR itself re-qualifies (prevCandle next iteration — the
+  // engine-legal stop-and-reverse). The stored stamp is the exit BAR's start (a wall-clock
+  // stamp wrongly killed the exit bar's alert once exits became bar-driven). Kill strictly-older.
   const lastExit = lastExitAtByKey.get(key);
-  if (lastExit && alert.timestamp + Number(tf) * 60 <= lastExit) {
+  if (lastExit && alert.timestamp < lastExit) {
     processedSignals.add(signalId);
     logAudit({ type: "EMA5T_ALERT_DURING_POSITION", key, dir, alertTimestamp: alert.timestamp, lastExitAt: lastExit });
     saveState();
@@ -2064,7 +2102,7 @@ async function manageFuturesPendingInner({ key, underlying, tf, candles, futSymb
     : 0;
 
   let entryOrderId = null;
-  if (barWithinEntryWindowFut(underlying, latest[0]) && canTakeTrade(underlying) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
+  if (barWithinEntryWindowFut(underlying, latest[0]) && canTakeTradeAtBar(underlying) && dataFresh && committedMargin + marginReq <= CONFIG.CAPITAL) {
     try {
       const order = await placeStopEntry({
         symbol: futSymbol,
@@ -2664,6 +2702,29 @@ export function updateConfig(updates) {
   for (const [incoming, target] of Object.entries(CONFIG_FIELD_MAP)) {
     if (updates[incoming] !== undefined) {
       CONFIG[target] = updates[incoming];
+    }
+  }
+  // Deselect sweep (2026-07-14 fleet, mirrors the equity scrip-disable sweep): a pending whose
+  // instrument or timeframe is no longer selected can never be resolved or cancelled by the
+  // scan loop — its LIVE resting order would keep working at the broker with nothing polling it.
+  const activeNames = new Set(getActiveUnderlyings().map((u) => u.name));
+  const activeTfs = new Set(getTimeframes().map(Number));
+  for (const [key, p] of [...pendingEntries.entries()]) {
+    if (activeNames.has(p.underlying) && activeTfs.has(Number(p.timeframe))) continue;
+    pendingEntries.delete(key);
+    logAudit({ type: "EMA5T_PENDING_CANCELLED", key, reason: "DESELECTED" });
+    if (!CONFIG.PAPER_TRADING && p.entryOrderId && currentSession) {
+      cancelPendingEntryOrder(p, false, currentSession)
+        .then((r) => {
+          if (!r.ok) {
+            logAudit({ type: "EMA5T_PENDING_CANCEL_FAILED", key, orderId: p.entryOrderId });
+            alertCritical("BOT_ORPHAN_ORDER", `Cancel failed for deselected ${key} — order ${p.entryOrderId} may still be working at the broker. MANUAL REVIEW.`, {});
+          }
+        })
+        .catch((err) => {
+          logAudit({ type: "EMA5T_PENDING_CANCEL_FAILED", key, orderId: p.entryOrderId, error: err.message });
+          alertCritical("BOT_ORPHAN_ORDER", `Cancel failed for deselected ${key} — order ${p.entryOrderId} may still be working at the broker. MANUAL REVIEW.`, {});
+        });
     }
   }
   saveState();

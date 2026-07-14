@@ -441,8 +441,11 @@ async function closePosition(position, session, reason, exitPriceOverride = null
   position.pnl = pnl;
   dailyRealizedPnL += pnl;
   // Engine parity: alerts on bars that completed while this position was open are dead (see the
-  // EQ_ALERT_DURING_POSITION guard) — remember WHEN the exit happened to enforce that.
-  lastExitAt[position.underlying] = Math.floor(Date.now() / 1000);
+  // EQ_ALERT_DURING_POSITION guard). Stamp the EXIT BAR's start — the backstop sets
+  // _exitBarTime; other exits (square-off/market-close/live) fall back to "the bar before now",
+  // conservative by at most one bar.
+  lastExitAt[position.underlying] =
+    Number(position._exitBarTime) || Math.floor(Date.now() / 1000) - CONFIG.TIMEFRAME_MINUTES * 60;
   saveState();
   logAudit({ type: "EQ_POSITION_CLOSED", id: position.id, scrip: position.underlying, reason, exitPrice, gross, costs, pnl });
   alertInfo("EQ_POSITION_CLOSED", `${position.underlying} ${position.side} closed (${reason}) P&L ₹${pnl.toFixed(0)}`, { paper });
@@ -538,6 +541,22 @@ async function resolvePending(scrip, session, latest) {
   const filledQty = Number(fill.filledQty) || 0;
   if (fill.status === "FILLED" || (fill.status === "PENDING" && filledQty > 0)) {
     const signalId = `${scrip.name}-${pend.alertTimestamp}-${pend.dir}`;
+    // Engine parity (2026-07-14 fleet finding): the engine gates the CROSSING bar BEFORE
+    // entering (tryEnterFromAlert runs liveEntryGate first) and a blocked trigger CONSUMES the
+    // alert. A paper fill must pass the same gate or it fabricates a trade the engine
+    // structurally refuses — post-cutoff triggers, emergency stop. LIVE fills are reality
+    // (the broker executed) and are always booked; the resting order is instead cancelled by
+    // the gate re-validation below before a post-cutoff bar can trade it.
+    if (CONFIG.PAPER_TRADING) {
+      const gate = canEnter(scrip.name, latest[0]);
+      if (!gate.ok) {
+        processedSignals.add(signalId);
+        pendingEntries.delete(scrip.name);
+        saveState();
+        logAudit({ type: "EQ_TRIGGER_BLOCKED", scrip: scrip.name, dir: pend.dir, level: pend.level, reason: gate.reason, judgeBarTs: latest[0] });
+        return;
+      }
+    }
     if (!processedSignals.has(signalId)) {
       processedSignals.add(signalId);
       pendingEntries.delete(scrip.name);
@@ -644,9 +663,11 @@ async function processBar(scrip, session, candles, latest) {
       const targetHit = isLong ? bHigh >= pos.target : bLow <= pos.target;
       if (slHit) {
         const raw = isLong ? Math.min(bOpen, pos.currentSL) : Math.max(bOpen, pos.currentSL);
+        pos._exitBarTime = latest[0]; // dead-alert guard stamps the exit BAR, not the wall clock
         await closePosition(pos, session, "STOPLOSS", raw * (isLong ? 1 - slip : 1 + slip));
       } else if (targetHit) {
         const raw = isLong ? Math.min(bOpen, pos.target) : Math.max(bOpen, pos.target);
+        pos._exitBarTime = latest[0];
         await closePosition(pos, session, "TARGET", raw * (isLong ? 1 - slip : 1 + slip));
       }
     }
@@ -665,13 +686,14 @@ async function processBar(scrip, session, candles, latest) {
   const signalId = `${scrip.name}-${alert.timestamp}-${dir}`;
   if (processedSignals.has(signalId)) return;
 
-  // Engine parity (2026-07-14 audit): alerts on bars that completed while a position was open
-  // are DEAD — the engine records alerts only when flat and nulls the alert on exit; only the
-  // exit bar itself can re-qualify (as prevCandle on the next iteration). Without this, an
-  // intra-bar exit lets a mid-position alert arm and retro-fill from a bar that elapsed during
-  // the position — a trade the validated backtest structurally never contains.
+  // Engine parity (2026-07-14 audit, stamp re-cut same day): alerts on bars that completed
+  // while a position was open are DEAD — the engine records alerts only when flat and nulls the
+  // alert on exit; only the EXIT BAR itself re-qualifies (as prevCandle next iteration). The
+  // stored stamp is the exit BAR's start (bar-driven exits complete after their bar ends, so a
+  // wall-clock stamp wrongly killed the exit bar's own alert — the engine-legal stop-and-reverse
+  // re-entry). Kill strictly-older alerts only.
   const exitAt = lastExitAt[scrip.name];
-  if (exitAt && alert.timestamp + CONFIG.TIMEFRAME_MINUTES * 60 <= exitAt) {
+  if (exitAt && alert.timestamp < exitAt) {
     processedSignals.add(signalId);
     logAudit({ type: "EQ_ALERT_DURING_POSITION", scrip: scrip.name, dir, alertTimestamp: alert.timestamp, lastExitAt: exitAt });
     saveState();
