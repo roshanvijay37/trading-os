@@ -121,6 +121,9 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans
 .ifl span:last-child{font-variant-numeric:tabular-nums}
 .ibar{height:8px;background:var(--paper);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
 .ibar i{display:block;height:100%;background:linear-gradient(90deg,var(--saffron),var(--saffron-deep));border-radius:999px;transition:width .3s}
+.ibar.digi i{background:linear-gradient(90deg,#2e9e5b,#1c7a42)}
+.ksgap{margin-top:6px;font-size:12px;color:var(--ink-soft)}
+.ksgap b{color:var(--ink)}
 .ichips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .ichip{font-family:'Sora';font-size:10.5px;font-weight:700;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);padding:3px 9px;border-radius:999px;font-variant-numeric:tabular-nums}
 .ichip.warn{color:var(--down);background:var(--down-bg);border-color:rgba(194,65,12,.2)}
@@ -473,11 +476,12 @@ function renderKendra(){
   // Full form details per booth (same card as the All-parts tab: headline metrics, change
   // flags, contacts, expandable all-fields breakdown) — with day-diffs when a range is picked.
   const cm=new Map(STATE.diff.changed.map(c=>[keyOf(c.row,STATE.key),c.dmap]));
+  const G='Total EFs Digitized';
   const kendras=Object.keys(MSK_PARTS).map(msk=>{
     const parts=MSK_PARTS[msk].slice().sort((a,b)=>a-b);
-    let elect=0,dist=0;
-    parts.forEach(p=>{const r=rowByPart[p];if(r){elect+=r[E]||0;dist+=r[D]||0;}});
-    return {msk,parts,elect,dist,pct:pctOf(dist,elect)};
+    let elect=0,dist=0,digi=0;
+    parts.forEach(p=>{const r=rowByPart[p];if(r){elect+=r[E]||0;dist+=r[D]||0;digi+=r[G]||0;}});
+    return {msk,parts,elect,dist,digi,pct:pctOf(dist,elect),pctG:pctOf(digi,elect),gap:dist-digi,pctOfDist:pctOf(digi,dist)};
   }).sort((a,b)=>a.pct-b.pct);
 
   const h=kendras.map(k=>{
@@ -491,6 +495,9 @@ function renderKendra(){
       +'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></div>'
       +'<div class="ksbar"><div class="ibar"><i style="width:'+k.pct+'%"></i></div></div>'
       +'<div class="kspct">'+k.pct+'% '+I18N.L('distributed','ವಿತರಿಸಲಾಗಿದೆ')+'<span class="ksnum">'+fmt(k.dist)+' / '+fmt(k.elect)+'</span></div>'
+      +'<div class="ksbar"><div class="ibar digi"><i style="width:'+k.pctG+'%"></i></div></div>'
+      +'<div class="kspct">'+k.pctG+'% '+I18N.L('digitized','ಡಿಜಿಟೈಸ್ ಆಗಿದೆ')+'<span class="ksnum">'+fmt(k.digi)+' / '+fmt(k.elect)+'</span></div>'
+      +'<div class="ksgap">⏳ '+I18N.L('Distributed but not digitized','ವಿತರಿಸಿದರೂ ಡಿಜಿಟೈಸ್ ಆಗದವು')+': <b>'+fmt(k.gap)+'</b> · '+k.pctOfDist+'% '+I18N.L('of distributed forms digitized','ವಿತರಿಸಿದ ಫಾರ್ಮ್‌ಗಳಲ್ಲಿ ಡಿಜಿಟೈಸ್ ಆಗಿವೆ')+'</div>'
       +'</summary><div class="klist"><div class="cards">'+cards+'</div></div></details>';
   }).join('');
   el.list.innerHTML='<div class="ins">'+h+'</div>';
