@@ -470,6 +470,9 @@ function renderKendra(){
   const E='Total Elector', D='Total EFs Distributed';
   const rowByPart={}; t.rows.forEach(r=>{rowByPart[r["Part Number"]]=r;});
   const pctOf=(d,e)=>e?Math.round(d/e*1000)/10:0;
+  // Full form details per booth (same card as the All-parts tab: headline metrics, change
+  // flags, contacts, expandable all-fields breakdown) — with day-diffs when a range is picked.
+  const cm=new Map(STATE.diff.changed.map(c=>[keyOf(c.row,STATE.key),c.dmap]));
   const kendras=Object.keys(MSK_PARTS).map(msk=>{
     const parts=MSK_PARTS[msk].slice().sort((a,b)=>a-b);
     let elect=0,dist=0;
@@ -478,16 +481,17 @@ function renderKendra(){
   }).sort((a,b)=>a.pct-b.pct);
 
   const h=kendras.map(k=>{
-    const rows=k.parts.map(pn=>{
-      const r=rowByPart[pn], e=r?(r[E]||0):0, d=r?(r[D]||0):0;
-      return insRow(pn,null,'<b>'+pctOf(d,e)+'%</b> · '+fmt(d)+' / '+fmt(e));
-    });
+    const cards=k.parts.map(pn=>{
+      const r=rowByPart[pn];
+      if(!r) return '';
+      return partCard(r,{dmap:cm.get(keyOf(r,STATE.key))});
+    }).join('');
     return '<details class="ksec"><summary>'
       +'<div class="ksrow"><div class="ksname">'+esc(I18N.L(k.msk,MSK_KN[k.msk]||k.msk))+'<span class="ksn">'+k.parts.length+' '+I18N.L('booths','ಬೂತ್‌ಗಳು')+'</span></div>'
       +'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></div>'
       +'<div class="ksbar"><div class="ibar"><i style="width:'+k.pct+'%"></i></div></div>'
       +'<div class="kspct">'+k.pct+'% '+I18N.L('distributed','ವಿತರಿಸಲಾಗಿದೆ')+'<span class="ksnum">'+fmt(k.dist)+' / '+fmt(k.elect)+'</span></div>'
-      +'</summary><div class="klist">'+insList(rows)+'</div></details>';
+      +'</summary><div class="klist"><div class="cards">'+cards+'</div></div></details>';
   }).join('');
   el.list.innerHTML='<div class="ins">'+h+'</div>';
 }
