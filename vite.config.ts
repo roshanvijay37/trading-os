@@ -5,7 +5,7 @@ import { defineConfig as defineVitestConfig } from "vitest/config";
 export default defineConfig(
   defineVitestConfig({
     plugins: [react()],
-    base: "/trading-os/",
+    base: "/",
     test: {
       globals: true,
       environment: "jsdom",
